@@ -210,3 +210,4 @@ node_modules/
 files/sessions/
 *.log
 .env
+files/settings/
