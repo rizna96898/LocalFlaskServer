@@ -1,0 +1,11 @@
+current_state:
+  time: null
+  participants:
+    - 白井 結
+    - 白井 圭太
+    - 黒羽 究也
+world:
+  world_relationships:
+    - 白井 結：患者
+    - 白井 圭太：配偶者
+    - 黒羽 究也：医師

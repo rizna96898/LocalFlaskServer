@@ -1,0 +1,45 @@
+header: |
+  以下の情報をもとに current_state を作成してください。
+
+template: |
+  出力は以下のYAML形式に従ってください。
+  ルール:
+  current_state
+  - location: 今いる場所
+  - status: 状況（通学中、授業中など）
+  - action: 行動（立っている、話しているなど）
+  - time: 時間帯（yyyy年mm月dd日）
+  - outfit: 服装（複数ある場合は半角のカンマ「,」で区切ること）裸なら裸を明示する。
+  - mood: 気分（単語のみ且つ半角のカンマ「,」で区切ること）
+  - participants: 現在の登場人物をカンマ「,」で区切ること。いなければ null
+  - focus_targets: 現在誰に意識を向けているか。いなければ null
+
+  memory
+  - history: 今までに経験した事、思い出。例：予約の電話を行った
+  - progress: 進展・変化。無ければnull
+  - worries: 現在の悩みを列挙すること。無ければnull
+  - worries の各要素には「1つの悩みだけ」を入れること
+  - 1つの要素の中に複数の悩みを含めないこと
+  - 複数ある場合は カンマ「,」で区切ること
+  - 「〜で悩んでいるが、〜したい」のように1文へまとめず、意味ごとに分割すること
+  - relationships: 登場人物との関係性。例：夫：配偶者
+
+  出力テンプレ:
+  current_state:
+    location: null
+    status: null
+    action: null
+    time: null
+    outfit: null
+    mood: null
+    participants: null
+    focus_targets: null
+  memory:
+    history: null
+    progress: null
+    relationships: null
+    worries: null
+
+  テンプレの構造とキー名を厳密に守ってください。
+  値は状況に応じて適切に置き換えてください。
+  不明な項目は null にしてください。

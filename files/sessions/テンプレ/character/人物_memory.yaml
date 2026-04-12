@@ -1,0 +1,31 @@
+file_status: ファイル待機状態 ready/processing/error
+  status: ready
+current_state:
+  location: キャラがいる場所
+  status: 現在の状態
+  action:
+  - 何をしているか
+  outfit:
+  - 服装
+  mood:
+  - 気分
+  participants:
+  - キャラの現在の関係性
+  focus_targets:
+  - 誰に意識を向けているか
+memory:
+  history:
+  - 履歴
+  progress:
+  - 何をしてきたか
+  worries:
+  - 悩み
+  relationships:
+  - キャラの現状の関係性
+param_data:
+- display_name: ユーザへの好感度
+  count: 0
+- display_name: 旦那への好感度
+  count: 100
+
+所持品

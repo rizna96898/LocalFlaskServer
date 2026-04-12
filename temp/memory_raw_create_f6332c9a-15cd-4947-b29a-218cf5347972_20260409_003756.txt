@@ -1,0 +1,8 @@
+current_state:
+  time: null
+  participants: null
+world:
+  world_relationships:
+    - 黒羽 究也: 教師
+    - 白井 結: 配偶者
+    - 白井 圭太: 配偶者

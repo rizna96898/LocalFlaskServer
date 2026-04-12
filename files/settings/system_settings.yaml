@@ -1,0 +1,17 @@
+# files/settings/system_settings.yaml
+port: 5000
+default_model: "deepseek/deepseek-v3.2"          # または使いたいモデル名
+temperature: 0.85
+max_tokens: 2048
+
+# OpenRouter設定
+openrouter_api_key: "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"      # ← ここに実際のキーを入れてください（公開しないよう注意）
+openrouter_site_url: "http://127.0.0.1:5000"
+openrouter_site_name: "deepseek-v3.2 RP Backend"
+
+# その他の設定（後で追加しやすい）
+log_level: "INFO"
+enable_image_generation: true
+
+# キャラクターカードの場所（Silly Tavernのpngカードが入っているフォルダ）
+characters_dir: "E:/SillyTavernInstaller/SillyTavern-Launcher/SillyTavern/data/default-user/characters"
