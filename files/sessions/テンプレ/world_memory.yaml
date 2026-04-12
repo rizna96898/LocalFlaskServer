@@ -1,7 +1,0 @@
-file_status:　ファイル待機状態 ready/processing/error
-  status: ready
-current_state:
-  time: シナリオに書いてあればその年月日。無ければシステム日付
-  participants:かかわりのある人物
-world:
-  world_relationships:世界にいる人
