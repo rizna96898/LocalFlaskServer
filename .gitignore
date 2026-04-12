@@ -211,3 +211,4 @@ files/sessions/
 *.log
 .env
 files/settings/
+temp/

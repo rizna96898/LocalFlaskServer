@@ -90,7 +90,10 @@ class ChatOrchestrator:
             # session_idの取得
             call_body = body.copy()
             call_body["session_id"] = session_id
+
             # yamlから各種プロンプト読み込み
+            all_memories = file_utils.load_character_memories(session_id, config.SESSIONS_DIR)
+            yui_memory = all_memories.get("白井 結")
 
             # 2) 事前キャラ同期
             #    SillyTavern 側で主人公カードが更新されていたら、session/world.yamlへ反映
@@ -100,10 +103,19 @@ class ChatOrchestrator:
             #    memory.yaml の world_relation を見て、会話に関係するキャラのカードを session 配下へ同期する
             #    SillyTavern 上のキャラ情報を次の発話に反映したいので、ここで毎回実行している
             #self._sync_related_characters_from_memory(session_id)
+            character_name = "白井　結"
+            system_message = file_utils.build_character_comment_system_message(
+                session_id=session_id,
+                character_name=character_name,
+                sessions_dir=config.SESSIONS_DIR,
+                prompt_file=Path("files/prompts/character_comment_prompt.yaml"),
+            )
+
+            # print("システムプロンプト：", system_message)
 
             # 6) 応答生成
             #    ここで LLM にチャットを投げる
-            response_text = self._generate_response(session_id, messages)
+            response_text = self._generate_response(session_id, messages, system_message)
 
             last_assistant_message = string_utils.get_reserved_assistant_message(messages)
 
@@ -117,12 +129,14 @@ class ChatOrchestrator:
             # 8) 応答後の記憶更新（未実装）
             #    今回の response_text を使って progress や history を確定したい場合はここで再更新する
             #    例: self.memory_manager.update_memory(call_body, session_id, last_user_message, response_text)
-            #self.memory_manager.update_memory(
-            #    call_body,
-            #    session_id,
-            #    last_user_message,
-            #    response_text
-            #)
+            self.memory_manager.update_memory(
+                body=call_body,
+                session_id=session_id,
+                character_name=character_name,
+                last_user_content=last_user_message,
+                last_assistant_content=response_text,
+            )
+
             # 9) 新規キャラ追加（未実装）
             #    response_text や更新後 memory.yaml を見て、新しく world_relation に追加されたキャラを
             #    cards / yaml へ取り込む処理をここへ足す想定
@@ -241,7 +255,7 @@ class ChatOrchestrator:
             except Exception as e:
                 print(f"[WARN] 関連キャラ同期失敗: {character_name}: {e}")
 
-    def _generate_response(self, session_id: str, messages: list) -> str:
+    def _generate_response(self, session_id: str, messages: list, system_prompt: str) -> str:
         """最終応答生成
 
         現状:
@@ -252,24 +266,21 @@ class ChatOrchestrator:
         - memory.yaml や related characters をプロンプトへどう混ぜるか
         - response_text 生成後に事後更新をどう差し込むか
         """
-        return "テスト中だよ。頑張れ。"
-        # user_message = ""
-        # for msg in reversed(messages):
-        #     if msg.get("role") == "user":
-        #         user_message = msg.get("content", "")
-        #         break
+        user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                user_message = msg.get("content", "")
+                break
 
-        # system_prompt = self.prompt_builder.get_system_base()
+        try:
+            response_text = self.openrouter.send_message(
+                messages=[{"role": "user", "content": user_message}],
+                system_prompt=system_prompt,
+                temperature=config.TEMPERATURE,
+                max_tokens=config.MAX_TOKENS
+            )
+            return response_text
 
-        # try:
-        #     response_text = self.openrouter.send_message(
-        #         messages=[{"role": "user", "content": user_message}],
-        #         system_prompt=system_prompt,
-        #         temperature=config.TEMPERATURE,
-        #         max_tokens=config.MAX_TOKENS
-        #     )
-        #     return response_text
-
-        # except Exception as e:
-        #     print(f"[ERROR] _generate_response: {e}")
-        #     return "すみません、今ちょっと調子が悪いみたいです…"
+        except Exception as e:
+            print(f"[ERROR] _generate_response: {e}")
+            return "すみません、今ちょっと調子が悪いみたいです…"

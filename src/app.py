@@ -51,11 +51,11 @@ def chat_completions():
         allow_image = request.headers.get("X-Allow-Image", "false").lower() == "true"
 
         # デバッグログ（必要に応じて残す）
-        print("=== Request Headers ===")
-        for key, value in request.headers.items():
-            print(f"{key}: {value}")
-        print("=====================")
-        print("body全量:", body)
+        # print("=== Request Headers ===")
+        # for key, value in request.headers.items():
+        #     print(f"{key}: {value}")
+        # print("=====================")
+        # print("body全量:", body)
 
         result = orchestrator.handle_chat_completion(body, allow_image)
 

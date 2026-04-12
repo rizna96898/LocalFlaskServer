@@ -138,6 +138,19 @@ def _load_character_data(file_path):
         print(f"[CHAR LOAD ERROR] {file_path}: {e}")
         return {}
 
+def find_character_yaml_file(char_name: str, session_char_dir: Path):
+    target = string_utils._normalize_name(char_name)
+
+    for path in session_char_dir.glob("*.yaml"):
+        if path.name.endswith("_memory.yaml"):
+            continue
+
+        raw_name = path.stem
+        if string_utils._normalize_name(raw_name) == target:
+            return path
+
+    return None
+
 def find_character_memory_file(target: str, session_char_dir: Path):
     target_norm = string_utils._normalize_name(target)
 
@@ -224,3 +237,125 @@ def create_file(dir_path: str, file_name:str) -> Path:
     file_path = SESS_DIR / f"{safe}"
     file_path.touch(exist_ok=True)
     return file_path
+
+def load_character_memories(session_id: str, sessions_dir: Path) -> dict[str, dict[str, Any]]:
+    """
+    files/sessions/{session_id}/character/*_memory.yaml を読み込み、
+    {キャラ名: YAML内容dict} の形で返す。
+    """
+    character_dir = sessions_dir / session_id / "character"
+    result: dict[str, dict[str, Any]] = {}
+
+    if not character_dir.exists():
+        return result
+
+    for yaml_file in character_dir.glob("*_memory.yaml"):
+        try:
+            with yaml_file.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception as e:
+            print(f"[CHAR MEMORY LOAD ERROR] {yaml_file}: {e}")
+            continue
+        
+        
+        # 例: 白井 結_memory.yaml -> 白井 結
+        raw_name = yaml_file.stem.removesuffix("_memory")
+        char_name = string_utils._normalize_name(raw_name)
+
+        if char_name in result:
+            print(f"[CHAR MEMORY WARN] duplicate: raw={raw_name}, normalized={char_name}")
+
+        result[char_name] = data
+
+    return result
+
+def build_character_comment_system_message(
+    session_id: str,
+    character_name: str,
+    sessions_dir: Path,
+    prompt_file: Path,
+) -> str:
+    """
+    キャラ memory の current_state を読み込み、
+    character_comment_prompt.yaml のテンプレートに差し込んで
+    system_message を返す。
+
+    想定:
+      - memory file:
+          files/sessions/{session_id}/character/{キャラ名}_memory.yaml
+      - prompt file:
+          files/prompts/character_comment_prompt.yaml
+
+    prompt yaml の中身は、以下どちらかを想定:
+      1. 文字列そのもの
+      2. dict で system / prompt / template / content のいずれかを持つ
+    """
+    print("session_id", session_id)
+    print("character_name", character_name)
+    print("sessions_dir", sessions_dir)
+    memory = get_character_memory(session_id, character_name, sessions_dir)
+    if not memory:
+        raise ValueError(f"character memory not found: {character_name}")
+
+    current_state = memory.get("current_state", {}) or {}
+    current_state_text = string_utils.build_current_state_text(current_state)
+
+    template = string_utils.load_prompt_template(prompt_file)
+
+    system_message = template.format(
+        character_name=character_name,
+        character_info=current_state_text,
+    )
+
+    return system_message
+
+
+def get_character_memory(
+    session_id: str,
+    character_name: str,
+    sessions_dir: Path,
+) -> dict[str, Any] | None:
+    """
+    files/sessions/{session_id}/character/*_memory.yaml を読み込み、
+    指定キャラの memory dict を返す。
+    """
+    all_memories = load_character_memories(session_id, sessions_dir)
+    key = string_utils._normalize_name(character_name)
+    return all_memories.get(key)
+
+
+def load_character_memories(
+    session_id: str,
+    sessions_dir: Path,
+) -> dict[str, dict[str, Any]]:
+    """
+    files/sessions/{session_id}/character/*_memory.yaml を読み込み、
+    {正規化済みキャラ名: YAML内容dict} の形で返す。
+    """
+    character_memory_dir = sessions_dir / session_id / "character"
+    result: dict[str, dict[str, Any]] = {}
+
+    print("読み込み対象のyamlファイル名", character_memory_dir)
+
+    if not character_memory_dir.exists():
+        return result
+
+    for yaml_file in character_memory_dir.glob("*_memory.yaml"):
+        try:
+            with yaml_file.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception as e:
+            print(f"[CHAR MEMORY LOAD ERROR] {yaml_file}: {e}")
+            continue
+
+        raw_name = yaml_file.stem.removesuffix("_memory")
+        char_name = string_utils._normalize_name(raw_name)
+
+        if char_name in result:
+            print(
+                f"[CHAR MEMORY WARN] duplicate: raw={raw_name}, normalized={char_name}"
+            )
+
+        result[char_name] = data
+
+    return result

@@ -58,7 +58,7 @@ class OpenRouterService:
 
         payload_messages.extend(messages)
 
-        #print("送信内容：", payload_messages)
+        print("送信内容：", payload_messages)
         
         payload = {
             "model": target_model,

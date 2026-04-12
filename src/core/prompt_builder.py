@@ -70,42 +70,52 @@ class PromptBuilder:
             {"role": "user",   "content": user_content}
         ]
 
-    def update_memory_prompt(self, charactor: str, user: str, char: str, memory: Dict) -> List[Dict]:
-        """記憶更新用のプロンプト"""
+    def update_memory_prompt(
+        self,
+        body: Dict,
+        last_user_content: str,
+        last_assistant_content: str,
+        old_world_memory: Dict,
+    ) -> List[Dict]:
+        """world_memory 更新用のプロンプト"""
+
         base = self._load("memory_system.yaml")
         update = self._load("memory_update.yaml")
 
-        current_state = memory.get("current_state", {})
+        current_state = old_world_memory.get("current_state", {}) or {}
+        world = old_world_memory.get("world", {}) or {}
 
-        previous_state = "\n".join([
-            "【前回の current_state】",
-            f"action: {current_state.get('action', '不明')}",
-            f"focus_targets: {current_state.get('focus_targets', '不明')}",
-            f"location: {current_state.get('location', '不明')}",
-            f"mood: {current_state.get('mood', '不明')}",
-            f"outfit: {current_state.get('outfit', '不明')}",
-            f"participants: {current_state.get('participants', '不明')}",
-            f"status: {current_state.get('status', '不明')}",
+        previous_world = "\n".join([
+            "〖前回の world_memory〗",
             f"time: {current_state.get('time', '不明')}",
+            f"participants: {current_state.get('participants', '不明')}",
+            f"world_relationships: {world.get('world_relationships', '不明')}",
         ])
 
         conversation = "\n\n".join([
-            "【ユーザ発言】\n" + (user or ""),
-            "【アシスタント発言】\n" + (char or ""),
+            "〖ユーザ発言〗\n" + (last_user_content or ""),
+            "〖アシスタント発言〗\n" + (last_assistant_content or ""),
         ])
 
+        optional_context = self._join_sections(
+            f"名前: {body.get('name', '')}" if body.get("name") else "",
+            "説明:\n" + str(body.get("description", "")).strip() if body.get("description") else "",
+            "シナリオ:\n" + str(body.get("scenario", "")).strip() if body.get("scenario") else "",
+            "開始文:\n" + str(body.get("first_mes", "")).strip() if body.get("first_mes") else "",
+        )
+
         user_content = self._join_sections(
-            update.get("header", ""),
-            charactor,
-            previous_state,
+            update.get("world_header", ""),
+            optional_context,
+            previous_world,
             conversation,
-            update.get("template", ""),
+            update.get("world_template", ""),
             update.get("tail_template", ""),
         )
 
         return [
             {"role": "system", "content": base.get("system", "")},
-            {"role": "user",   "content": user_content}
+            {"role": "user", "content": user_content},
         ]
 
     # ======================
@@ -215,4 +225,75 @@ class PromptBuilder:
         return [
             {"role": "system", "content": base.get("system", "")},
             {"role": "user",   "content": user_content},
+        ]
+    
+    def update_character_memory_prompt(
+        self,
+        last_user_content: str,
+        last_assistant_content: str,
+        old_memory: Dict,
+        body: Dict | None = None,
+    ) -> List[Dict]:
+        """キャラクター個別 memory 更新用のプロンプト"""
+
+        base = self._load("memory_system.yaml")
+        update = self._load("memory_update.yaml")
+
+        current_state = old_memory.get("current_state", {}) or {}
+        memory = old_memory.get("memory", {}) or {}
+        owned_items = old_memory.get("owned_items", []) or []
+        param_data = old_memory.get("param_data", []) or []
+        last_contact_date = old_memory.get("last_contact_date", None)
+
+        previous_state = "\n".join([
+            "〖前回の current_state〗",
+            f"location: {current_state.get('location', '不明')}",
+            f"status: {current_state.get('status', '不明')}",
+            f"action: {current_state.get('action', '不明')}",
+            f"outfit: {current_state.get('outfit', '不明')}",
+            f"mood: {current_state.get('mood', '不明')}",
+            f"participants: {current_state.get('participants', '不明')}",
+            f"focus_targets: {current_state.get('focus_targets', '不明')}",
+            f"carried_items: {current_state.get('carried_items', '不明')}",
+            f"money: {current_state.get('money', '不明')}",
+        ])
+
+        previous_memory = "\n".join([
+            "〖前回の memory〗",
+            f"history: {memory.get('history', '不明')}",
+            f"progress: {memory.get('progress', '不明')}",
+            f"worries: {memory.get('worries', '不明')}",
+            f"relationships: {memory.get('relationships', '不明')}",
+            f"owned_items: {owned_items if owned_items else '不明'}",
+            f"param_data: {param_data if param_data else '不明'}",
+            f"last_contact_date: {last_contact_date if last_contact_date else '不明'}",
+        ])
+
+        conversation = "\n\n".join([
+            "〖ユーザ発言〗\n" + (last_user_content or ""),
+            "〖アシスタント発言〗\n" + (last_assistant_content or ""),
+        ])
+
+        optional_context = ""
+        if body:
+            optional_context = self._join_sections(
+                f"名前: {body.get('name', '')}" if body.get("name") else "",
+                "説明:\n" + str(body.get("description", "")).strip() if body.get("description") else "",
+                "シナリオ:\n" + str(body.get("scenario", "")).strip() if body.get("scenario") else "",
+                "開始文:\n" + str(body.get("first_mes", "")).strip() if body.get("first_mes") else "",
+            )
+
+        user_content = self._join_sections(
+            update.get("character_header", ""),
+            optional_context,
+            previous_state,
+            previous_memory,
+            conversation,
+            update.get("character_template", ""),
+            update.get("tail_template", ""),
+        )
+
+        return [
+            {"role": "system", "content": base.get("system", "")},
+            {"role": "user", "content": user_content},
         ]

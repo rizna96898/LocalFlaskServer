@@ -8,6 +8,9 @@ from copy import deepcopy
 from typing import Any
 import yaml
 from datetime import datetime
+from pathlib import Path
+from typing import Any
+from helpers import string_utils
 
 
 def clean_for_save(text: str) -> str:
@@ -392,3 +395,131 @@ def get_reserved_assistant_message(messages:list[str]) -> str:
         if msg.get("role") == "assistant":
             return msg.get("content", "")
     return ""
+
+def build_current_state_text(current_state: dict[str, Any]) -> str:
+    """
+    current_state のうち、会話に効きやすいものだけを文字列化する。
+    """
+    lines: list[str] = []
+
+    location = current_state.get("location")
+    if location:
+        lines.append(f"場所: {location}")
+
+    status = current_state.get("status")
+    if status:
+        lines.append(f"状態: {status}")
+
+    action = current_state.get("action") or []
+    if action:
+        action_list = [str(x) for x in action if x]
+        if action_list:
+            lines.append("行動:")
+            lines.extend(f"- {x}" for x in action_list)
+
+    outfit = current_state.get("outfit") or []
+    if outfit:
+        outfit_list = [str(x) for x in outfit if x]
+        if outfit_list:
+            lines.append("服装:")
+            lines.extend(f"- {x}" for x in outfit_list)
+
+    mood = current_state.get("mood") or []
+    if mood:
+        mood_list = [str(x) for x in mood if x]
+        if mood_list:
+            lines.append("気分:")
+            lines.extend(f"- {x}" for x in mood_list)
+
+    participants = current_state.get("participants") or []
+    if participants:
+        participant_list = [str(x) for x in participants if x]
+        if participant_list:
+            lines.append("参加者:")
+            lines.extend(f"- {x}" for x in participant_list)
+
+    focus_targets = current_state.get("focus_targets") or []
+    if focus_targets:
+        target_list = [str(x) for x in focus_targets if x]
+        if target_list:
+            lines.append("注目対象:")
+            lines.extend(f"- {x}" for x in target_list)
+
+    # 必要なら後で追加
+    # carried_items / money などは今はまだ入れない
+
+    return "\n".join(lines).strip()
+
+
+def load_prompt_template(prompt_file: Path) -> str:
+    """
+    prompt yaml からテンプレート文字列を取り出す。
+
+    対応例:
+      - YAML自体が文字列
+      - {system: "..."}
+      - {prompt: "..."}
+      - {template: "..."}
+      - {content: "..."}
+    """
+    if not prompt_file.exists():
+        raise FileNotFoundError(f"prompt file not found: {prompt_file}")
+
+    with prompt_file.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    if isinstance(data, str):
+        return data
+
+    if isinstance(data, dict):
+        for key in ("system", "prompt", "template", "content"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+
+    raise ValueError(f"invalid prompt yaml format: {prompt_file}")
+
+def _merge_memory_data(old_data, new_data):
+    if not isinstance(old_data, dict):
+        return new_data if isinstance(new_data, dict) else {}
+    if not isinstance(new_data, dict):
+        return old_data
+
+    result = dict(old_data)
+
+    for key, new_value in new_data.items():
+        old_value = result.get(key)
+
+        if isinstance(old_value, dict) and isinstance(new_value, dict):
+            result[key] = _merge_memory_data(old_value, new_value)
+
+        elif isinstance(old_value, list) and isinstance(new_value, list):
+            result[key] = _dedupe_list(old_value + new_value)
+
+        elif new_value is not None:
+            result[key] = new_value
+
+    return result
+
+
+def _dedupe_list(items: list):
+    result = []
+    seen = set()
+
+    for item in items:
+        if isinstance(item, dict):
+            # dictは簡易的にreprキーで重複除去
+            marker = repr(item)
+        else:
+            marker = str(item).strip()
+
+        if not marker:
+            continue
+
+        if marker in seen:
+            continue
+
+        seen.add(marker)
+        result.append(item)
+
+    return result
