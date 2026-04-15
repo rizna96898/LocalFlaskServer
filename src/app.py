@@ -13,14 +13,13 @@ sys.path.insert(0, str(ROOT_DIR))
 # 以下を追加
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
-print(f"[DEBUG] Root: {ROOT_DIR}")
+# print(f"[DEBUG] Root: {ROOT_DIR}")
 
 from flask import Flask, request, jsonify, Response, make_response, stream_with_context
 from flask_cors import CORS
 # importを以下に変更
 from config import config                    # src/config.py
 from core.orchestrator import ChatOrchestrator
-import time
 
 app = Flask(__name__)
 
@@ -39,12 +38,63 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
+#前処理受け口
+@app.post("/v1/chat/prepare")
+def chat_prepare():
+    print("前処理のログ")
+
+    try:
+        body = request.get_json(force=True)
+        # デバッグログ（必要に応じて残す）
+        print("=== Request Headers ===")
+        for key, value in request.headers.items():
+            print(f"{key}: {value}")
+        print("=====================")
+        print("body全量:", body)
+
+        # 前処理します
+        result = {}
+        result = orchestrator.chat_pretreatment(body)
+        return "", 200
+
+    except Exception as e:
+        print(f"[ERROR] /v1/chat/prepare: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"error": "Internal server error"}), 500
+
+#後処理受け口
+@app.post("/v1/chat/after")
+def chat_after():
+    print("後処理のログ")
+
+    try:
+        body = request.get_json(force=True)
+        # デバッグログ（必要に応じて残す）
+        # print("=== Request Headers ===")
+        # for key, value in request.headers.items():
+        #     print(f"{key}: {value}")
+        # print("=====================")
+        # print("body全量:", body)
+
+        # 前処理します
+        result = {}
+        result = orchestrator.chat_post_processing(body)
+        return "", 200
+
+    except Exception as e:
+        print(f"[ERROR] /v1/chat/after: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"error": "Internal server error"}), 500
+
+#チャット時受け口
 @app.post("/v1/chat/completions")
 def chat_completions():
     if request.method == "OPTIONS":   # 念のためここにも
         return "", 200
     # 以降は既存の処理...
-
+    # print("[APP] /v1/chat/completions start")
     """SillyTavernからのメインのチャットリクエスト（安定版）"""
     try:
         body = request.get_json(force=True)
@@ -56,9 +106,17 @@ def chat_completions():
         #     print(f"{key}: {value}")
         # print("=====================")
         # print("body全量:", body)
+        result = {}
+        if body.get("first_flag") == "first":
+            print("１回目のログ")
+            # result = orchestrator.handle_chat_completion(body, allow_image)
+            result = orchestrator.handle_mob_chat_completion(body, allow_image)
+        else:
+            print("２回目のログ")
+            result = orchestrator.handle_mob_chat_completion(body, allow_image)
+        
 
-        result = orchestrator.handle_chat_completion(body, allow_image)
-
+        # print("[APP] about to return raw result")
         # Silly Tavernが期待する形式で返す（シンプルで安定）
         return jsonify(result["response"]), result.get("status_code", 200)
 
@@ -68,6 +126,7 @@ def chat_completions():
         print(traceback.format_exc())
         return jsonify({"error": "Internal server error"}), 500
 
+#新しいチャットを始める受け口
 @app.post("/new_chat")
 def new_chat():
     """SillyTavernのNew Chat時に呼ばれる初期化処理"""
@@ -78,7 +137,7 @@ def new_chat():
         body = request.get_json(force=True)
         session_id = orchestrator.create_new_session(body)
         
-        print("body全量", body)
+        # print("body全量", body)
         return jsonify({
             "status": "ok",
             "session_id": session_id
@@ -88,7 +147,7 @@ def new_chat():
         print(f"[ERROR] /new_chat: {e}")
         return jsonify({"error": str(e)}), 500
 
-
+# 使用モデル受け口
 @app.get("/v1/models")
 def list_models():
     """SillyTavernのモデル一覧要求へのダミー応答"""
@@ -99,6 +158,7 @@ def list_models():
         ]
     })
 
+# StabilityMatrix起動確認受け口
 @app.route("/v1/chat/check_stability", methods=["GET", "POST", "OPTIONS"])
 def check_stability():
     """Stability Matrixの起動確認（Silly Tavern改造対応）"""

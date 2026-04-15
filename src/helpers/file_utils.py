@@ -3,6 +3,8 @@
 ファイル・ディレクトリ操作に関するユーティリティ
 """
 
+from __future__ import annotations
+from config import config
 from pathlib import Path
 import yaml
 from typing import Dict, Any
@@ -11,7 +13,9 @@ from pathlib import Path
 from typing import Dict
 from PIL import Image
 from helpers import string_utils
+from helpers import file_utils
 import base64
+import time
 
 def ensure_session_dir(sessions_dir: Path, session_id: str) -> Path:
     """セッションディレクトリを作成してPathを返す"""
@@ -32,9 +36,9 @@ BlockStyleDumper.add_representer(str, str_presenter)
 def save_yaml_file(file_path: Path, data: Dict[str, Any]) -> bool:
     """YAMLファイルを保存"""
     try:
-        print("save_yaml_file start");
+        # print("save_yaml_file start");
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        print(f"[DEBUG] save target = {file_path}")
+        # print(f"[DEBUG] save target = {file_path}")
 
         with open(file_path, "w", encoding="utf-8") as f:
             yaml.dump(
@@ -151,6 +155,7 @@ def find_character_yaml_file(char_name: str, session_char_dir: Path):
 
     return None
 
+# 引数のキャラに対するmemoryファイルのパスを返却
 def find_character_memory_file(target: str, session_char_dir: Path):
     target_norm = string_utils._normalize_name(target)
 
@@ -290,9 +295,9 @@ def build_character_comment_system_message(
       1. 文字列そのもの
       2. dict で system / prompt / template / content のいずれかを持つ
     """
-    print("session_id", session_id)
-    print("character_name", character_name)
-    print("sessions_dir", sessions_dir)
+    # print("session_id", session_id)
+    # print("character_name", character_name)
+    # print("sessions_dir", sessions_dir)
     memory = get_character_memory(session_id, character_name, sessions_dir)
     if not memory:
         raise ValueError(f"character memory not found: {character_name}")
@@ -335,7 +340,7 @@ def load_character_memories(
     character_memory_dir = sessions_dir / session_id / "character"
     result: dict[str, dict[str, Any]] = {}
 
-    print("読み込み対象のyamlファイル名", character_memory_dir)
+    # print("読み込み対象のyamlファイル名", character_memory_dir)
 
     if not character_memory_dir.exists():
         return result
@@ -359,3 +364,64 @@ def load_character_memories(
         result[char_name] = data
 
     return result
+
+def wait_until_session_memory_ready(
+    session_id: str,
+    timeout_sec: float = 60.0,
+    interval_sec: float = 0.5,
+) -> bool:
+    """
+    session配下の初期memory作成完了を待つ。
+
+    判定条件:
+    - world_memory.yaml が存在する
+    - file_status.status == "ready"
+    - character フォルダが存在する
+    - 必要なら *_memory.yaml が1件以上ある
+
+    戻り値:
+    - True: ready
+    - False: timeout または error
+    """
+    session_dir = config.SESSIONS_DIR / session_id
+    world_memory_file = session_dir / "world_memory.yaml"
+    character_dir = session_dir / "character"
+
+    started_at = time.monotonic()
+
+    while True:
+        if timeout_sec > 0 and (time.monotonic() - started_at) >= timeout_sec:
+            print(f"[WAIT] timeout: session_id={session_id}")
+            return False
+
+        if not world_memory_file.exists():
+            time.sleep(interval_sec)
+            continue
+
+        world_memory = file_utils.load_yaml_file(world_memory_file) or {}
+        if not isinstance(world_memory, dict):
+            time.sleep(interval_sec)
+            continue
+
+        file_status = world_memory.get("file_status", {})
+        status = file_status.get("status") if isinstance(file_status, dict) else None
+
+        if status == "error":
+            print(f"[WAIT] world_memory status=error: session_id={session_id}")
+            return False
+
+        if status != "ready":
+            time.sleep(interval_sec)
+            continue
+
+        if not character_dir.exists():
+            time.sleep(interval_sec)
+            continue
+
+        character_memory_files = list(character_dir.glob("*_memory.yaml"))
+        if not character_memory_files:
+            time.sleep(interval_sec)
+            continue
+
+        print(f"[WAIT] session ready: session_id={session_id}")
+        return True

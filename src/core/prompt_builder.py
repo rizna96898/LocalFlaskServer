@@ -10,7 +10,7 @@ import yaml
 
 from config import config
 from helpers.string_utils import normalize_newlines
-
+from helpers import file_utils
 
 class PromptBuilder:
     def __init__(self):
@@ -229,71 +229,85 @@ class PromptBuilder:
     
     def update_character_memory_prompt(
         self,
+        character_name: str,
+        description: str,
+        current_state: dict,
         last_user_content: str,
         last_assistant_content: str,
-        old_memory: Dict,
-        body: Dict | None = None,
-    ) -> List[Dict]:
-        """キャラクター個別 memory 更新用のプロンプト"""
+        old_memory: dict,
+    ):
+        prompt_data = self._load("memory_update.yaml")
 
-        base = self._load("memory_system.yaml")
-        update = self._load("memory_update.yaml")
+        character_header = prompt_data.get("character_header", "")
+        character_template = prompt_data.get("character_template", "")
+        tail_template = prompt_data.get("tail_template", "")
 
-        current_state = old_memory.get("current_state", {}) or {}
-        memory = old_memory.get("memory", {}) or {}
-        owned_items = old_memory.get("owned_items", []) or []
-        param_data = old_memory.get("param_data", []) or []
-        last_contact_date = old_memory.get("last_contact_date", None)
+        current_state_yaml = yaml.safe_dump(
+            current_state or {},
+            allow_unicode=True,
+            sort_keys=False,
+            default_flow_style=False,
+        ).strip()
 
-        previous_state = "\n".join([
-            "〖前回の current_state〗",
-            f"location: {current_state.get('location', '不明')}",
-            f"status: {current_state.get('status', '不明')}",
-            f"action: {current_state.get('action', '不明')}",
-            f"outfit: {current_state.get('outfit', '不明')}",
-            f"mood: {current_state.get('mood', '不明')}",
-            f"participants: {current_state.get('participants', '不明')}",
-            f"focus_targets: {current_state.get('focus_targets', '不明')}",
-            f"carried_items: {current_state.get('carried_items', '不明')}",
-            f"money: {current_state.get('money', '不明')}",
+        old_memory_yaml = yaml.safe_dump(
+            old_memory or {},
+            allow_unicode=True,
+            sort_keys=False,
+            default_flow_style=False,
+        ).strip()
+
+        system_parts = [
+            character_header,
+            "",
+            "【対象キャラクター】",
+            character_name,
+        ]
+
+        if description:
+            system_parts.extend([
+                "",
+                "【キャラ設定 description】",
+                description,
+            ])
+
+        if current_state_yaml:
+            system_parts.extend([
+                "",
+                "【現在状態 current_state】",
+                current_state_yaml,
+            ])
+
+        system_parts.extend([
+            "",
+            character_template,
+            "",
+            tail_template,
         ])
 
-        previous_memory = "\n".join([
-            "〖前回の memory〗",
-            f"history: {memory.get('history', '不明')}",
-            f"progress: {memory.get('progress', '不明')}",
-            f"worries: {memory.get('worries', '不明')}",
-            f"relationships: {memory.get('relationships', '不明')}",
-            f"owned_items: {owned_items if owned_items else '不明'}",
-            f"param_data: {param_data if param_data else '不明'}",
-            f"last_contact_date: {last_contact_date if last_contact_date else '不明'}",
-        ])
+        system_prompt = "\n".join(system_parts)
 
-        conversation = "\n\n".join([
-            "〖ユーザ発言〗\n" + (last_user_content or ""),
-            "〖アシスタント発言〗\n" + (last_assistant_content or ""),
-        ])
+        user_parts = [
+            "以下は既存のキャラクター記憶です。",
+            "この構造と内容を基準とし、今回の会話による変化のみを反映してください。",
+            "",
+            "既存の情報は維持し、不要な再生成や書き直しは行わないでください。",
+            "変更が必要な箇所のみ更新してください。",
+            "【既存記憶 old_memory】",
+            old_memory_yaml if old_memory_yaml else "{}",
+            "",
+            "【今回のユーザー発話】",
+            last_user_content or "",
+            "",
+            "【今回のキャラクター発話】",
+            last_assistant_content or "",
+            "",
+            "更新後の YAML のみを出力してください。",
+            "コードブロックや説明文は不要です。",
+        ]
 
-        optional_context = ""
-        if body:
-            optional_context = self._join_sections(
-                f"名前: {body.get('name', '')}" if body.get("name") else "",
-                "説明:\n" + str(body.get("description", "")).strip() if body.get("description") else "",
-                "シナリオ:\n" + str(body.get("scenario", "")).strip() if body.get("scenario") else "",
-                "開始文:\n" + str(body.get("first_mes", "")).strip() if body.get("first_mes") else "",
-            )
-
-        user_content = self._join_sections(
-            update.get("character_header", ""),
-            optional_context,
-            previous_state,
-            previous_memory,
-            conversation,
-            update.get("character_template", ""),
-            update.get("tail_template", ""),
-        )
+        user_prompt = "\n".join(user_parts)
 
         return [
-            {"role": "system", "content": base.get("system", "")},
-            {"role": "user", "content": user_content},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
         ]

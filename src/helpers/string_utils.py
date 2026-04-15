@@ -298,6 +298,15 @@ def normalize_relationship_item(text: str) -> str:
     text = re.sub(r"：\s*", "：", text)
     return text
 
+def build_characters_text(participants: list[str]) -> str:
+    lines = []
+    for p in participants:
+        if "：" in p:
+            name, role = p.split("：", 1)
+            lines.append(f"- {name} : {role}")
+        else:
+            lines.append(f"- {p}")
+    return "\n".join(lines)
 
 def normalize_world_memory_data(raw: dict[str, Any] | None) -> dict[str, Any]:
     data = deepcopy(WORLD_MEMORY_DEFAULT)
@@ -523,3 +532,43 @@ def _dedupe_list(items: list):
         result.append(item)
 
     return result
+
+def find_existing_character(message: str, participants: list[str]) -> list[str]:
+    if not message or not participants:
+        return []
+
+    result = []
+
+    for name in participants:
+        if not name:
+            continue
+
+        full_name = name.strip()
+        parts = full_name.replace("　", " ").split()
+
+        last_name = parts[0] if len(parts) >= 1 else ""
+        first_name = parts[1] if len(parts) >= 2 else ""
+
+        # フルネーム優先
+        if full_name and is_valid_hit(message, full_name):
+            result.append(full_name)
+            continue
+
+        if last_name and is_valid_hit(message, last_name):
+            result.append(full_name)
+            continue
+
+        if first_name and is_valid_hit(message, first_name):
+            result.append(full_name)
+            continue
+
+    # 重複除去（念のため）
+    return list(dict.fromkeys(result))
+
+def is_valid_hit(message: str, target: str) -> bool:
+    return (
+        message.startswith(target) or
+        f"{target}、" in message or
+        f"{target} " in message or
+        f"{target}　" in message
+    )

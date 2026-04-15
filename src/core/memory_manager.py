@@ -20,7 +20,12 @@ class MemoryManager:
     def __init__(self):
         self.prompt_builder = PromptBuilder()
         self.openrouter = OpenRouterService()
-        print("[MemoryManager] Initialized")
+        # print("[MemoryManager] Initialized")
+
+    def create_target_speakers(self, session_id: str, body:  Dict):
+        print(f"[TARGET SPEAKERS] session_id={session_id} → 発言対象確定を開始")
+        self._run_create_target_spealers(session_id, body)
+        return ""
 
     def create_initial_memory(self, body: Dict, session_id: str):
         print(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
@@ -76,6 +81,52 @@ class MemoryManager:
 
         return names
 
+    def _run_create_target_spealers(self, session_id: str, body: Dict):
+        def task():
+            try:
+                print("session_id:", session_id, type(session_id))
+                print("body:", body, type(body))
+
+                # プレイヤーの発言が誰の物かを確認するプロンプトを投げる
+                # yamlのロード
+                world_memory = file_utils.load_yaml_file(
+                    config.SESSIONS_DIR / session_id / "world_memory.yaml"
+                ) or {}
+                prompt_data = file_utils.load_yaml_file(
+                    config.PROMPTS_DIR / "character_identification.yaml"
+                ) or {}
+
+                world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])
+
+                print("current participantsの編集後文字列", world_participants)
+                print("実行プロンプト原文", prompt_data)
+                system_prompt = prompt_data["system"]
+                template_prompt = prompt_data["template"]
+
+                template_prompt = template_prompt.replace("{characters}", world_participants)
+                template_prompt = template_prompt.replace("{player_message}", body.get("message", ""))
+                
+                print("置換後プロンプト全文", template_prompt)
+
+                service = OpenRouterService()
+                
+                result = service.send_message(
+                    messages=[
+                        {"role": "user", "content": template_prompt}
+                    ],
+                    system_prompt=system_prompt
+                )
+
+                parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
+                target = parsed.get("target_speakers")
+
+                print("今回の発話対象", target)
+                
+            except Exception as e:
+                print(f"[CREATE TARGET SPEAKERS ERROR] {type(e).__name__}: {e}")
+
+        Thread(target=task, daemon=True).start()
+    
     def _run_world_memory_update_async(
         self,
         body: Dict,
@@ -154,7 +205,7 @@ class MemoryManager:
     ):
         def task():
             try:
-                print("[CHAR UPDATE] _run_character_memory_update_async start")
+                # print("[CHAR UPDATE] _run_character_memory_update_async start")
 
                 session_char_dir = config.SESSIONS_DIR / session_id / "character"
                 session_char_dir.mkdir(parents=True, exist_ok=True)
@@ -164,20 +215,30 @@ class MemoryManager:
                     print("[CHAR UPDATE] skip empty character_name")
                     return
 
-                memory_file = file_utils.find_character_memory_file(char_name, session_char_dir)
-                if not memory_file:
+                character_file_path = file_utils.find_character_yaml_file(char_name, session_char_dir)
+                if not character_file_path:
+                    print(f"[CHAR UPDATE] character file not found: {char_name}")
+                    return
+                memory_file_path = file_utils.find_character_memory_file(char_name, session_char_dir)
+                if not memory_file_path:
                     print(f"[CHAR UPDATE] memory file not found: {char_name}")
                     return
 
-                old_memory = file_utils.load_yaml_file(memory_file) or {}
+                character_file = file_utils.load_yaml_file(character_file_path) or {}
+                if not isinstance(character_file, dict):
+                    character_file = {}
+
+                old_memory = file_utils.load_yaml_file(memory_file_path) or {}
                 if not isinstance(old_memory, dict):
                     old_memory = {}
 
                 prompt_messages = self.prompt_builder.update_character_memory_prompt(
+                    character_name=char_name,
+                    description=character_file.get("description"),
+                    current_state=old_memory.get("current_state"),
                     last_user_content=last_user_content,
                     last_assistant_content=last_assistant_content,
                     old_memory=old_memory,
-                    body=body,
                 )
 
                 response_text = self.openrouter.send_message(
@@ -205,9 +266,9 @@ class MemoryManager:
                 }
 
                 merged_memory = string_utils._merge_memory_data(old_memory, new_memory)
-                file_utils.save_yaml_file(memory_file, merged_memory)
+                file_utils.save_yaml_file(memory_file_path, merged_memory)
 
-                print(f"[CHAR UPDATE] saved: {memory_file.name}")
+                print(f"[CHAR UPDATE] saved: {memory_file_path.name}")
 
             except Exception as e:
                 print(f"[CHAR UPDATE ERROR] {type(e).__name__}: {e}")
@@ -334,7 +395,7 @@ class MemoryManager:
         Thread(target=task, daemon=True).start()
 
     def _run_world_memory_create_async(self, body: Dict, session_id: str):
-        print(f"[WORLD MEMORY CREATE] start session_id={session_id}")
+        # print(f"[WORLD MEMORY CREATE] start session_id={session_id}")
 
         char_info = body.copy()
         prompt_messages = self.prompt_builder.create_memory_prompt(char_info)
@@ -367,7 +428,7 @@ class MemoryManager:
             #print(f"[WORLD] world_relation: {world_relation}")
 
             if st_char_dir.exists():
-                print(f"[WORLD] found {len(list(st_char_dir.iterdir()))} files")
+                 print(f"[WORLD] found {len(list(st_char_dir.iterdir()))} files")
                 #for f in st_char_dir.iterdir():
                     #print(f"  - {f.name}")
             else:
@@ -407,7 +468,14 @@ class MemoryManager:
                     print(f"[WORLD] {char_name} no match → create empty")
 
                     if not dst_file.exists():
-                        dst_file.write_text("", encoding="utf-8")
+                        data = {
+                            "file_status": {
+                                "status": "ready"
+                            },
+                            "last_target": None
+                        }
+
+                        file_utils.save_yaml_file(dst_file, data)
 
             #print(f"[WORLD] === character sync end ===")
 
@@ -476,8 +544,8 @@ class MemoryManager:
                         max_tokens=1500
                     )
 
-                    print(f"[CHAR MEMORY RAW] {char_name}")
-                    print(response_text)
+                    # print(f"[CHAR MEMORY RAW] {char_name}")
+                    # print(response_text)
 
                     response_text = string_utils.strip_code_block(response_text)
 

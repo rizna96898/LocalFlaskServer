@@ -14,6 +14,8 @@ world_template: |
   ルール:
   - current_state.time は yyyy年mm月dd日 形式で記述すること。不明なら null
   - current_state.participants は YAML配列で記述すること。不明なら null
+  - current_state.participants の各要素は「名前：役割」の形式にすること
+  - 役割とは、descriptionのキャラ名の左にある[]の中の文字をそのまま出力すること
   - world.world_relationships は YAML配列で記述すること。不明なら null
   - world.world_relationships の各要素は「名前：関係」の形式にすること
   - 関係性は代表的な1単語のみとすること
@@ -23,8 +25,8 @@ world_template: |
   current_state:
     time: 2025年11月28日
     participants:
-      - 白井 結
-      - 白井 圭太
+      - 白井 結：main
+      - 白井 圭太：sub
 
   world:
     world_relationships:
@@ -51,6 +53,9 @@ character_template: |
   - current_state.outfit は服装を記述すること。複数ある場合は YAML配列で記述すること。裸なら裸を明示すること。不明なら null
   - current_state.mood は感情のみを記述すること。例：不安、緊張、期待。複数ある場合は YAML配列で記述すること。不明なら null
   - current_state.participants は現在の登場人物を YAML配列で記述すること。いなければ null
+  - current_state.participants.name は現在の登場人物の名前
+  - current_state.participants.role は現在の登場人物の役割。description内の[]を使用する。
+  - current_state.participants.relation は現在の登場人物の職業を端的に表す１単語で記載すること。
   - current_state.focus_targets は現在その場で実際に意識を向けている相手のみを YAML配列で記述すること
   - まだ会っていない相手、これから会う予定の相手、場面上重要なだけの相手は含めないこと
   - 例：診察待ちで夫の隣に座って待っている場面では、focus_targets は夫のみとし、まだ会っていない医師は含めない
@@ -103,10 +108,19 @@ character_template: |
       - 緊張
       - 不安
     participants:
-      - 白井 結
-      - 白井 結の夫
+      - name: 白井　結
+        role: main
+        relation: 患者
+      - name: 白井　圭太
+        role: sub
+        relation: 配偶者
+      - name: 黒羽　究也
+        role: player
+        relation: 医師
     focus_targets:
-      - 白井 結の夫
+      - name: 白井　圭太
+        role: sub
+        relation: 配偶者
     carried_items:
       - 鍵
       - 携帯

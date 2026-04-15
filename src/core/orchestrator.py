@@ -1,9 +1,10 @@
 """
 チャット処理の全体を統括するオーケストレーター
 - 新規チャット時の初期化
-- キャラクター設定同期
-- 記憶管理（MemoryManager連携）
-- 最終応答生成
+- チャット時前処理
+- 応答作成
+- チャット時後処理
+- 画像作成
 """
 
 import uuid
@@ -11,7 +12,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Iterable
-
+from helpers import data_utils
 from config import config
 from services.openrouter_service import OpenRouterService
 
@@ -32,8 +33,9 @@ class ChatOrchestrator:
         self.openrouter = OpenRouterService()
         self.memory_manager = MemoryManager()
         self.prompt_builder = PromptBuilder()
-        print("[Orchestrator] Initialized")
+        # print("[Orchestrator] Initialized")
 
+    # ニューチャット
     def create_new_session(self, body: Dict) -> str:
         """新規チャット作成（/new_chat）"""
         session_id = body.get("session_id") or str(uuid.uuid4())
@@ -49,98 +51,156 @@ class ChatOrchestrator:
         call_body["session_id"] = session_id
 
         # 初期記憶の非同期作成
-        print(f"[NEW SESSION] session_id={session_id} → 初期記憶作成を開始")
-        self.memory_manager.create_initial_memory(call_body, session_id)
+        # print(f"[NEW SESSION] session_id={session_id} → 初期記憶作成を開始")
+        self.memory_manager.create_initial_memory(self, call_body, session_id)
 
-        print(f"[NEW SESSION] Created session: {session_id}")
+        # print(f"[NEW SESSION] Created session: {session_id}")
         return session_id
 
-    def handle_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
-        """メインのチャット処理
+    # 前処理
+    def chat_pretreatment(self, body: Dict) -> Dict:
+        print("[ORCH] chat_pretreatment start")
 
-        現在想定している大まかな流れ（ドラフト）:
-        1. チャットを受け取る
-        2. session_id を確定する
-        3. 事前の主人公キャラ設定を同期する
-        4. 事前の記憶更新を行う
-           - 世界観や関係性の変更を先に memory.yaml へ反映したい想定
-        5. memory.yaml の world_relation を見て関連キャラyamlを同期する
-        6. LLMへチャットを投げて応答を生成する
-        7. 履歴を残す（未実装）
-        8. 応答結果を踏まえて事後の記憶更新を行う（未実装）
-        9. 新規キャラがいればキャラ設定を追加する（未実装）
-
-        注意:
-        - 今の実装は「事前更新」寄りで、応答後の更新はまだ入っていない
-        - そのため、記憶や進展が1ターンずれる可能性がある
-        """
         try:
             session_id = body.get("session_id")
-            print("一応確認：", session_id);
+            print(f"[ORCH] session_id={session_id}")
+
+            # 無いはあり得ないはずなので明確にエラーにする
             if not session_id:
-                session_id = "temp_session_" + str(int(datetime.now().timestamp()))
-                print(f"[WARN] session_id missing → generated: {session_id}")
+                print(f"[ERROR] chat_pretreatment: session_id取得エラー")
+                return {
+                    "response": {
+                        "error": "session_idが何らかの理由で取れなかったので新しいチャットを開始してください。"
+                    },
+                    "status_code": 503,
+                }
+            print(type(self.memory_manager))
+            print(self.memory_manager)
+            
+            self.memory_manager.create_target_speakers(session_id, body)
+
+            return {
+                "ok": True,
+                "body": body,
+            }
+        except Exception as e:
+            print(f"[ERROR] chat_pretreatment: {e}")
+            import traceback
+            print(traceback.format_exc())
+            return {"error": "Internal server error"}, 500
+    
+    # 後処理
+    def chat_post_processing(self, body: Dict) -> Dict:
+        print("[ORCH] chat_post_processing start")
+        try:
+            session_id = body.get("session_id")
+            print(f"[ORCH] session_id={session_id}")
+
+            if not session_id:
+                print(f"[ERROR] chat_post_processing: session_id取得エラー")
+                return {
+                    "response": {
+                        "error": "session_idが何らかの理由で取れなかったので新しいチャットを開始してください。"
+                    },
+                    "status_code": 503,
+                }
+
+            # 履歴ファイルをロードする。
+            # directory_full_path = config.SESSIONS_DIR / session_id
+            # history = file_utils.load_history(directory_full_path)
+
+            # 世界メモリー更新（モブ含め登場人物が増えた場合に必要）
+
+            # キャラメモリー更新（履歴見て発話したキャラ且つキャラカード有だけ）
+            return {
+                "ok": True,
+                #"history": history,
+                "history": None,
+            }
+        except Exception as e:
+            print(f"[ERROR] chat_post_processing: {e}")
+            import traceback
+            print(traceback.format_exc())
+            return {"error": "Internal server error"}, 500
+    
+    # 多分トータルのチャットハンドラーが必要になる（と思ってる）
+
+    # メインプレイヤーチャット（予定）
+    def handle_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
+        try:
+            session_id = body.get("session_id")
+            # print(f"[ORCH] session_id={session_id}")
 
             # 履歴ファイルをロードする。
             directory_full_path = config.SESSIONS_DIR / session_id
             history = file_utils.load_history(directory_full_path)
-            # 今回のユーザ発言を取得する
-            messages = body.get("messages", [])
-            last_user_message = string_utils.get_reversed_user_message(messages)
+
             # session_idの取得
             call_body = body.copy()
             call_body["session_id"] = session_id
 
-            # yamlから各種プロンプト読み込み
-            all_memories = file_utils.load_character_memories(session_id, config.SESSIONS_DIR)
-            yui_memory = all_memories.get("白井 結")
+            # TODO
+            # 返信が壊れないようにメモリを作る必要あり
 
-            # 2) 事前キャラ同期
-            #    SillyTavern 側で主人公カードが更新されていたら、session/world.yamlへ反映
-            self._sync_character_if_changed(session_id, body)
+            # print("システムプロンプト：", system_message)
+            # 今回のユーザ発言を取得する
+            messages = body.get("messages", [])
+            last_user_message = string_utils.get_reversed_user_message(messages)
 
-            # 5) 関連キャラ同期 こっちはまだ必要な気はする。ただしキャラ説明から
-            #    memory.yaml の world_relation を見て、会話に関係するキャラのカードを session 配下へ同期する
-            #    SillyTavern 上のキャラ情報を次の発話に反映したいので、ここで毎回実行している
-            #self._sync_related_characters_from_memory(session_id)
+            # 誰向けの発言か。
             character_name = "白井　結"
+
+            # print("[ORCH] before main reply generation")
+            # 6) 応答生成
+            #    ここで LLM にチャットを投げる
+            # キャラ名と情報を渡しているが足りない
             system_message = file_utils.build_character_comment_system_message(
                 session_id=session_id,
                 character_name=character_name,
                 sessions_dir=config.SESSIONS_DIR,
-                prompt_file=Path("files/prompts/character_comment_prompt.yaml"),
+                prompt_file=Path(config.PROMPTS_DIR + "/character_comment_prompt.yaml"),
             )
-
-            # print("システムプロンプト：", system_message)
-
-            # 6) 応答生成
-            #    ここで LLM にチャットを投げる
             response_text = self._generate_response(session_id, messages, system_message)
 
             last_assistant_message = string_utils.get_reserved_assistant_message(messages)
 
-            # 7) 履歴保存（未実装）
+            # キャラ_memoryを読み込む
+            memory_file = config.SESSIONS_DIR / session_id / "character"
+            memory_path = file_utils.find_character_memory_file(character_name, memory_file)
+            print("load target", memory_path)
+
+            character_memory_data = file_utils.load_yaml_file(memory_path)
+            
+            print("load character memory. focus_targets", character_memory_data["current_state"]["focus_targets"])
+
+            forcus_target = character_memory_data["current_state"]["focus_targets"]
+            participants = character_memory_data.get("participants", [])
+            target_speakers = []
+
+            call_target_text = string_utils.find_existing_character(last_user_message, participants)
+
+            # 1. 参加者が1人ならその人
+            if len(forcus_target) == 1:
+                target_speakers = forcus_target
+            else:
+                # 2. ２名以上forcus_targetに存在する場合や
+                #    引っかからない、新規モブの場合、LLMに通信して判別する。
+                print("TODO: ask target judge LLM")
+
+            #    TODO
+            #    発言者のキャラ名を保持する必要が出た気がする
             #    ここで chat log を session 単位で保存する想定
             #    例: logs/chat_history.jsonl, latest_response.txt など
-            history.append({"t": time.time(), "role": "user", "content": last_user_message})
-            history.append({"t": time.time(), "role": "assistant", "content": response_text})
+            history.append({"t": time.time(), "speaker": "player", "role": "user", "content": last_user_message})
+            history.append({"t": time.time(), "speaker": "白井　結","role": "assistant", "content": response_text})
             file_utils.save_history(directory_full_path, history)
 
-            # 8) 応答後の記憶更新（未実装）
-            #    今回の response_text を使って progress や history を確定したい場合はここで再更新する
-            #    例: self.memory_manager.update_memory(call_body, session_id, last_user_message, response_text)
-            self.memory_manager.update_memory(
-                body=call_body,
-                session_id=session_id,
-                character_name=character_name,
-                last_user_content=last_user_message,
-                last_assistant_content=response_text,
-            )
-
-            # 9) 新規キャラ追加（未実装）
-            #    response_text や更新後 memory.yaml を見て、新しく world_relation に追加されたキャラを
-            #    cards / yaml へ取り込む処理をここへ足す想定
-
+            print("次の発言者予定", target_speakers)
+            # TODO
+            # 今回の返信内容でプレイヤー以外への問いかけを判別
+            # とりあえずはaiに名前を付けさせるように出来ればそれで引っかかったやつを作る
+            # カードに無い名前をどう判別するか悩む
+            # group_countに振ったキャラの数を入れる
             return {
                 "response": {
                     "id": f"chatcmpl-{session_id[:8]}",
@@ -150,12 +210,14 @@ class ChatOrchestrator:
                     "choices": [{
                         "index": 0,
                         "message": {"role": "assistant"
-                                    , "name": "白井　結"
-                                    , "original_avatar": "白井　結.png"
-                                    , "force_avatar": "白井　結.png"
+                                    , "name": character_name
+                                    , "original_avatar": character_name + ".png"
+                                    , "force_avatar": character_name + ".png"
                                     , "content": response_text},
                         "finish_reason": "stop",
-                        "group_count": 0
+                        # ↓会話対象
+                        "target_speakers": target_speakers,
+                        "remaining_speakers": target_speakers,
                     }],
                     "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
                 },
@@ -168,8 +230,43 @@ class ChatOrchestrator:
             print(traceback.format_exc())
             return {"error": "Internal server error"}, 500
 
+    # サブキャラクターチャット（予定）
+    def handle_mob_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
+        print("[ORCH] handle_mob_chat_completion start")
+        session_id = body.get("session_id")
+        print(f"[ORCH] session_id={session_id}")
+
+        if not session_id:
+            print(f"[WARN] session_id missing → generated: {session_id}")
+
+        # TODO
+        # mob同士の会話をどうするか悩む（多分発生しないか、禁止が良さげ）
+        # mobの履歴も一応持つ（名前を付ければ判別できるから）
+
+        return {
+            "response": {
+                "id": f"chatcmpl-{session_id[:8]}",
+                "object": "chat.completion",
+                "created": int(datetime.now().timestamp()),
+                "model": body.get("model", config.DEFAULT_MODEL),
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant"
+                                , "name": "白井　圭太"
+                                , "original_avatar": "白井　圭太.png"
+                                , "force_avatar": "白井　圭太.png"
+                                , "content": "二人目の発言だよ"},
+                    "finish_reason": "stop",
+                    # ↓会話対象
+                    "group_count": 1
+                }],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            },
+            "status_code": 200
+        }
+
     def _sync_character_if_changed(self, session_id: str, body: Dict):
-        print("sync character if changed start")
+        # print("sync character if changed start")
         """SillyTavernから来たメインキャラクター情報を session の world.yaml に同期
 
         役割:
@@ -229,7 +326,7 @@ class ChatOrchestrator:
         output_dir = config.SESSIONS_DIR / session_id / "characters"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"[WORLD_RELATION] session_id={session_id} → {related_names}")
+        # print(f"[WORLD_RELATION] session_id={session_id} → {related_names}")
 
         for character_name in related_names:
             try:

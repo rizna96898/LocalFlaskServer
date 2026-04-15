@@ -79,7 +79,7 @@ class OpenRouterService:
             response.raise_for_status()
 
             data = response.json()
-            print("[OPENROUTER RAW JSON]", data)
+            #print("[OPENROUTER RAW JSON]", data)
 
             if "choices" not in data:
                 raise Exception(f"OpenRouter response missing 'choices': {data}")
