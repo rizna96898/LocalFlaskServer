@@ -52,7 +52,7 @@ class ChatOrchestrator:
 
         # 初期記憶の非同期作成
         # print(f"[NEW SESSION] session_id={session_id} → 初期記憶作成を開始")
-        self.memory_manager.create_initial_memory(self, call_body, session_id)
+        self.memory_manager.create_initial_memory(call_body, session_id)
 
         # print(f"[NEW SESSION] Created session: {session_id}")
         return session_id

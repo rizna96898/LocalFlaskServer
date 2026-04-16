@@ -84,8 +84,8 @@ class MemoryManager:
     def _run_create_target_spealers(self, session_id: str, body: Dict):
         def task():
             try:
-                print("session_id:", session_id, type(session_id))
-                print("body:", body, type(body))
+                # print("session_id:", session_id, type(session_id))
+                # print("body:", body, type(body))
 
                 # プレイヤーの発言が誰の物かを確認するプロンプトを投げる
                 # yamlのロード
@@ -121,7 +121,25 @@ class MemoryManager:
                 target = parsed.get("target_speakers")
 
                 print("今回の発話対象", target)
-                
+
+                name = body.get("player")
+                player_name = name.split(": ", 1)[1].split("：", 1)[0]
+
+                print("player_name", player_name)
+                character_path = Path(config.SESSIONS_DIR / session_id / "character")
+
+                player_path = file_utils._find_character_file(player_name, character_path)
+
+                print("player_path", player_path)
+
+                player_obj = file_utils.load_yaml_file(player_path)
+
+                player_obj["last_target"] = target
+
+                file_utils.save_yaml_file(player_path, player_obj)
+
+                print(f"[CREATE TARGET SPEAKERS UPDATE] ")
+
             except Exception as e:
                 print(f"[CREATE TARGET SPEAKERS ERROR] {type(e).__name__}: {e}")
 

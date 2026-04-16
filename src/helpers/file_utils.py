@@ -243,37 +243,6 @@ def create_file(dir_path: str, file_name:str) -> Path:
     file_path.touch(exist_ok=True)
     return file_path
 
-def load_character_memories(session_id: str, sessions_dir: Path) -> dict[str, dict[str, Any]]:
-    """
-    files/sessions/{session_id}/character/*_memory.yaml を読み込み、
-    {キャラ名: YAML内容dict} の形で返す。
-    """
-    character_dir = sessions_dir / session_id / "character"
-    result: dict[str, dict[str, Any]] = {}
-
-    if not character_dir.exists():
-        return result
-
-    for yaml_file in character_dir.glob("*_memory.yaml"):
-        try:
-            with yaml_file.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-        except Exception as e:
-            print(f"[CHAR MEMORY LOAD ERROR] {yaml_file}: {e}")
-            continue
-        
-        
-        # 例: 白井 結_memory.yaml -> 白井 結
-        raw_name = yaml_file.stem.removesuffix("_memory")
-        char_name = string_utils._normalize_name(raw_name)
-
-        if char_name in result:
-            print(f"[CHAR MEMORY WARN] duplicate: raw={raw_name}, normalized={char_name}")
-
-        result[char_name] = data
-
-    return result
-
 def build_character_comment_system_message(
     session_id: str,
     character_name: str,

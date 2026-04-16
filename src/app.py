@@ -46,15 +46,17 @@ def chat_prepare():
     try:
         body = request.get_json(force=True)
         # デバッグログ（必要に応じて残す）
-        print("=== Request Headers ===")
-        for key, value in request.headers.items():
-            print(f"{key}: {value}")
-        print("=====================")
-        print("body全量:", body)
+        # print("=== Request Headers ===")
+        # for key, value in request.headers.items():
+        #     print(f"{key}: {value}")
+        # print("=====================")
+        # print("body全量:", body)
 
         # 前処理します
-        result = {}
-        result = orchestrator.chat_pretreatment(body)
+        # TODO 1文字は恐らく判別出来ないから何もしない
+        if len(body.get("message")) > 1:
+            result = {}
+            result = orchestrator.chat_pretreatment(body)
         return "", 200
 
     except Exception as e:
@@ -109,8 +111,8 @@ def chat_completions():
         result = {}
         if body.get("first_flag") == "first":
             print("１回目のログ")
-            # result = orchestrator.handle_chat_completion(body, allow_image)
-            result = orchestrator.handle_mob_chat_completion(body, allow_image)
+            result = orchestrator.handle_chat_completion(body, allow_image)
+            # result = orchestrator.handle_mob_chat_completion(body, allow_image)
         else:
             print("２回目のログ")
             result = orchestrator.handle_mob_chat_completion(body, allow_image)
