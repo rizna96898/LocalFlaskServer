@@ -66,39 +66,51 @@ class ChatOrchestrator:
             session_id = body.get("session_id")
             print(f"[ORCH] session_id={session_id}")
 
-            # 無いはあり得ないはずなので明確にエラーにする
             if not session_id:
-                print(f"[ERROR] chat_pretreatment: session_id取得エラー")
+                print("[ERROR] chat_pretreatment: session_id取得エラー")
                 return {
                     "response": {
                         "error": "session_idが何らかの理由で取れなかったので新しいチャットを開始してください。"
                     },
                     "status_code": 503,
                 }
-            print(type(self.memory_manager))
-            print(self.memory_manager)
-            
+
+            file_utils.mark_prepare_processing(session_id, "prepare")
+
             self.memory_manager.create_target_speakers(session_id, body)
+
+            file_utils.mark_prepare_ready(session_id, "prepare")
 
             return {
                 "ok": True,
                 "body": body,
             }
+
         except Exception as e:
             print(f"[ERROR] chat_pretreatment: {e}")
             import traceback
             print(traceback.format_exc())
+
+            if session_id:
+                file_utils.mark_prepare_error(
+                    session_id,
+                    complete_stage="prepare",
+                    error_stage="prepare",
+                    error_message=f"{type(e).__name__}: {e}",
+                )
+
             return {"error": "Internal server error"}, 500
     
     # 後処理
     def chat_post_processing(self, body: Dict) -> Dict:
         print("[ORCH] chat_post_processing start")
+
         try:
             session_id = body.get("session_id")
             print(f"[ORCH] session_id={session_id}")
 
             if not session_id:
-                print(f"[ERROR] chat_post_processing: session_id取得エラー")
+                print("[ERROR] chat_post_processing: session_id取得エラー")
                 return {
                     "response": {
                         "error": "session_idが何らかの理由で取れなかったので新しいチャットを開始してください。"
@@ -106,22 +118,32 @@ class ChatOrchestrator:
                     "status_code": 503,
                 }
 
-            # 履歴ファイルをロードする。
-            # directory_full_path = config.SESSIONS_DIR / session_id
-            # history = file_utils.load_history(directory_full_path)
+            file_utils.mark_prepare_processing(session_id, "after")
 
-            # 世界メモリー更新（モブ含め登場人物が増えた場合に必要）
+            # TODO:
+            # 世界メモリー更新
+            # キャラメモリー更新
 
-            # キャラメモリー更新（履歴見て発話したキャラ且つキャラカード有だけ）
+            file_utils.mark_prepare_ready(session_id, "after")
+
             return {
                 "ok": True,
-                #"history": history,
                 "history": None,
             }
+
         except Exception as e:
             print(f"[ERROR] chat_post_processing: {e}")
             import traceback
             print(traceback.format_exc())
+
+            if session_id:
+                file_utils.mark_prepare_error(
+                    session_id,
+                    complete_stage="after",
+                    error_stage="after",
+                    error_message=f"{type(e).__name__}: {e}",
+                )
+
             return {"error": "Internal server error"}, 500
     
     # 多分トータルのチャットハンドラーが必要になる（と思ってる）
@@ -130,7 +152,14 @@ class ChatOrchestrator:
     def handle_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
         try:
             session_id = body.get("session_id")
-            # print(f"[ORCH] session_id={session_id}")
+
+            if not session_id:
+                return {
+                    "response": {"error": "session_idがありません。"},
+                    "status_code": 503,
+                }
+
+            file_utils.mark_prepare_processing(session_id, "main_chat")
 
             # 履歴ファイルをロードする。
             directory_full_path = config.SESSIONS_DIR / session_id
@@ -202,7 +231,7 @@ class ChatOrchestrator:
             # とりあえずはaiに名前を付けさせるように出来ればそれで引っかかったやつを作る
             # カードに無い名前をどう判別するか悩む
             # group_countに振ったキャラの数を入れる
-            return {
+            result = {
                 "response": {
                     "id": f"chatcmpl-{session_id[:8]}",
                     "object": "chat.completion",
@@ -224,47 +253,85 @@ class ChatOrchestrator:
                 },
                 "status_code": 200
             }
+        
+            file_utils.mark_prepare_ready(session_id, "main_chat")
+            return result
 
         except Exception as e:
             print(f"[ERROR] handle_chat_completion: {e}")
             import traceback
             print(traceback.format_exc())
-            return {"error": "Internal server error"}, 500
+
+            if session_id:
+                file_utils.mark_prepare_error(
+                    session_id,
+                    complete_stage="main_chat",
+                    error_stage="main_chat",
+                    error_message=f"{type(e).__name__}: {e}",
+                )
+
+            return {
+                "response": {"error": "Internal server error"},
+                "status_code": 500,
+            }
 
     # サブキャラクターチャット（予定）
     def handle_mob_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
         print("[ORCH] handle_mob_chat_completion start")
+
         session_id = body.get("session_id")
         print(f"[ORCH] session_id={session_id}")
 
-        if not session_id:
-            print(f"[WARN] session_id missing → generated: {session_id}")
+        try:
+            if not session_id:
+                return {
+                    "response": {"error": "session_idがありません。"},
+                    "status_code": 503,
+                }
 
-        # TODO
-        # mob同士の会話をどうするか悩む（多分発生しないか、禁止が良さげ）
-        # mobの履歴も一応持つ（名前を付ければ判別できるから）
+            file_utils.mark_prepare_processing(session_id, "main_chat")
+            # TODO
+            # mob同士の会話をどうするか悩む（多分発生しないか、禁止が良さげ）
+            # mobの履歴も一応持つ（名前を付ければ判別できるから）
 
-        return {
-            "response": {
-                "id": f"chatcmpl-{session_id[:8]}",
-                "object": "chat.completion",
-                "created": int(datetime.now().timestamp()),
-                "model": body.get("model", config.DEFAULT_MODEL),
-                "choices": [{
-                    "index": 0,
-                    "message": {"role": "assistant"
-                                , "name": "白井　圭太"
-                                , "original_avatar": "白井　圭太.png"
-                                , "force_avatar": "白井　圭太.png"
-                                , "content": "二人目の発言だよ"},
-                    "finish_reason": "stop",
-                    # ↓会話対象
-                    "group_count": 1
-                }],
-                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-            },
-            "status_code": 200
-        }
+            return {
+                "response": {
+                    "id": f"chatcmpl-{session_id[:8]}",
+                    "object": "chat.completion",
+                    "created": int(datetime.now().timestamp()),
+                    "model": body.get("model", config.DEFAULT_MODEL),
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant"
+                                    , "name": "白井　圭太"
+                                    , "original_avatar": "白井　圭太.png"
+                                    , "force_avatar": "白井　圭太.png"
+                                    , "content": "二人目の発言だよ"},
+                        "finish_reason": "stop",
+                        # ↓会話対象
+                        "group_count": 1
+                    }],
+                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                },
+                "status_code": 200
+            }
+        except Exception as e:
+            print(f"[ERROR] handle_mob_chat_completion: {e}")
+            import traceback
+            print(traceback.format_exc())
+
+            if session_id:
+                file_utils.mark_prepare_error(
+                    session_id,
+                    complete_stage="main_chat",
+                    error_stage="main_chat",
+                    error_message=f"{type(e).__name__}: {e}",
+                )
+
+            return {
+                "response": {"error": "Internal server error"},
+                "status_code": 500,
+            }
 
     def _sync_character_if_changed(self, session_id: str, body: Dict):
         print("_sync_character_if_changed start")

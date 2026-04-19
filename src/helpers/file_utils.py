@@ -26,40 +26,6 @@ def ensure_session_dir(sessions_dir: Path, session_id: str) -> Path:
 def get_prepare_status_file(session_id: str) -> Path:
     return config.SESSIONS_DIR / session_id / "prepare_status.yaml"
 
-def create_prepare_status(session_id: str) -> bool:
-    data = {
-        "status": "processing",          # processing / ready / error
-        "complete_stage": "new_chat",   # new_chat / prepare / chat / after
-        "error_stage": None,            # world / character / player など
-        "error_message": None,
-    }
-    return save_yaml_file(get_prepare_status_file(session_id), data)
-
-def update_prepare_status(
-    session_id: str,
-    *,
-    status: str | None = None,
-    complete_stage: str | None = None,
-    error_stage: str | None = None,
-    error_message: str | None = None,
-) -> bool:
-    file_path = get_prepare_status_file(session_id)
-    current = load_yaml_file(file_path) or {}
-
-    if not isinstance(current, dict):
-        current = {}
-
-    if status is not None:
-        current["status"] = status
-    if complete_stage is not None:
-        current["complete_stage"] = complete_stage
-    if error_stage is not None:
-        current["error_stage"] = error_stage
-    if error_message is not None:
-        current["error_message"] = error_message
-
-    return save_yaml_file(file_path, current)
-
 def mark_prepare_processing(session_id: str, complete_stage: str = "new_chat") -> bool:
     return update_prepare_status(
         session_id,
@@ -396,80 +362,88 @@ def load_character_memories(
 
     return result
 
-def wait_until_session_memory_ready(
-    session_id: str,
-    timeout_sec: float = 60.0,
-    interval_sec: float = 0.5,
-) -> bool:
-    """
-    session配下の初期memory作成完了を待つ。
+# def wait_until_session_memory_ready(
+#     session_id: str,
+#     timeout_sec: float = 60.0,
+#     interval_sec: float = 0.5,
+# ) -> bool:
+#     """
+#     session配下の初期memory作成完了を待つ。
 
-    判定条件:
-    - world_memory.yaml が存在する
-    - file_status.status == "ready"
-    - character フォルダが存在する
-    - 必要なら *_memory.yaml が1件以上ある
+#     判定条件:
+#     - world_memory.yaml が存在する
+#     - file_status.status == "ready"
+#     - character フォルダが存在する
+#     - 必要なら *_memory.yaml が1件以上ある
 
-    戻り値:
-    - True: ready
-    - False: timeout または error
-    """
-    session_dir = config.SESSIONS_DIR / session_id
-    world_memory_file = session_dir / "world_memory.yaml"
-    character_dir = session_dir / "character"
+#     戻り値:
+#     - True: ready
+#     - False: timeout または error
+#     """
+#     session_dir = config.SESSIONS_DIR / session_id
+#     world_memory_file = session_dir / "world_memory.yaml"
+#     character_dir = session_dir / "character"
 
-    started_at = time.monotonic()
+#     started_at = time.monotonic()
 
-    while True:
-        if timeout_sec > 0 and (time.monotonic() - started_at) >= timeout_sec:
-            print(f"[WAIT] timeout: session_id={session_id}")
-            return False
+#     while True:
+#         if timeout_sec > 0 and (time.monotonic() - started_at) >= timeout_sec:
+#             print(f"[WAIT] timeout: session_id={session_id}")
+#             return False
 
-        if not world_memory_file.exists():
-            time.sleep(interval_sec)
-            continue
+#         if not world_memory_file.exists():
+#             time.sleep(interval_sec)
+#             continue
 
-        world_memory = file_utils.load_yaml_file(world_memory_file) or {}
-        if not isinstance(world_memory, dict):
-            time.sleep(interval_sec)
-            continue
+#         world_memory = file_utils.load_yaml_file(world_memory_file) or {}
+#         if not isinstance(world_memory, dict):
+#             time.sleep(interval_sec)
+#             continue
 
-        file_status = world_memory.get("file_status", {})
-        status = file_status.get("status") if isinstance(file_status, dict) else None
+#         file_status = world_memory.get("file_status", {})
+#         status = file_status.get("status") if isinstance(file_status, dict) else None
 
-        if status == "error":
-            print(f"[WAIT] world_memory status=error: session_id={session_id}")
-            return False
+#         if status == "error":
+#             print(f"[WAIT] world_memory status=error: session_id={session_id}")
+#             return False
 
-        if status != "ready":
-            time.sleep(interval_sec)
-            continue
+#         if status != "ready":
+#             time.sleep(interval_sec)
+#             continue
 
-        if not character_dir.exists():
-            time.sleep(interval_sec)
-            continue
+#         if not character_dir.exists():
+#             time.sleep(interval_sec)
+#             continue
 
-        character_memory_files = list(character_dir.glob("*_memory.yaml"))
-        if not character_memory_files:
-            time.sleep(interval_sec)
-            continue
+#         character_memory_files = list(character_dir.glob("*_memory.yaml"))
+#         if not character_memory_files:
+#             time.sleep(interval_sec)
+#             continue
 
-        print(f"[WAIT] session ready: session_id={session_id}")
-        return True
+#         print(f"[WAIT] session ready: session_id={session_id}")
+#         return True
 
 def get_prepare_status_path(session_id: str) -> Path:
     return config.SESSIONS_DIR / session_id / "prepare_status.yaml"
 
-def create_prepare_status(session_id: str) -> None:
-    save_yaml_file(
+
+def load_prepare_status(session_id: str) -> dict[str, Any]:
+    path = get_prepare_status_path(session_id)
+    data = load_yaml_file(path) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def create_prepare_status(session_id: str) -> bool:
+    return save_yaml_file(
         get_prepare_status_path(session_id),
         {
             "status": "processing",
-            "complete_stage": "new_chat",
+            "complete_stage": "new_chat",   # new_chat / prepare / main_chat / after
             "error_stage": None,
             "error_message": None,
         },
     )
+
 
 def update_prepare_status(
     session_id: str,
@@ -478,9 +452,10 @@ def update_prepare_status(
     complete_stage: str | None = None,
     error_stage: str | None = None,
     error_message: str | None = None,
-) -> None:
+) -> bool:
     path = get_prepare_status_path(session_id)
     data = load_yaml_file(path) or {}
+
     if not isinstance(data, dict):
         data = {}
 
@@ -493,7 +468,81 @@ def update_prepare_status(
     if error_message is not None:
         data["error_message"] = error_message
 
-    save_yaml_file(path, data)
+    return save_yaml_file(path, data)
+
+
+def mark_prepare_processing(session_id: str, complete_stage: str) -> bool:
+    return update_prepare_status(
+        session_id,
+        status="processing",
+        complete_stage=complete_stage,
+        error_stage=None,
+        error_message=None,
+    )
+
+
+def mark_prepare_ready(session_id: str, complete_stage: str) -> bool:
+    return update_prepare_status(
+        session_id,
+        status="ready",
+        complete_stage=complete_stage,
+        error_stage=None,
+        error_message=None,
+    )
+
+
+def mark_prepare_error(
+    session_id: str,
+    *,
+    complete_stage: str,
+    error_stage: str,
+    error_message: str,
+) -> bool:
+    return update_prepare_status(
+        session_id,
+        status="error",
+        complete_stage=complete_stage,
+        error_stage=error_stage,
+        error_message=error_message,
+    )
+
+
+def wait_until_prepare_status(
+    session_id: str,
+    *,
+    target_stage: str,
+    timeout_sec: float = 60.0,
+    interval_sec: float = 0.2,
+) -> bool:
+    """
+    prepare_status.yaml が target_stage / ready になるまで待つ
+    error なら False
+    timeout でも False
+    """
+    started_at = time.monotonic()
+
+    while True:
+        if timeout_sec > 0 and (time.monotonic() - started_at) >= timeout_sec:
+            print(f"[WAIT] prepare_status timeout: session_id={session_id}, target_stage={target_stage}")
+            return False
+
+        data = load_prepare_status(session_id)
+        if not data:
+            time.sleep(interval_sec)
+            continue
+
+        status = data.get("status")
+        complete_stage = data.get("complete_stage")
+
+        if status == "error":
+            print(f"[WAIT] prepare_status error: session_id={session_id}, data={data}")
+            return False
+
+        if status == "ready" and complete_stage == target_stage:
+            print(f"[WAIT] prepare_status ready: session_id={session_id}, target_stage={target_stage}")
+            return True
+
+        time.sleep(interval_sec)
 
 class BlockStyleDumper(yaml.SafeDumper):
     pass
