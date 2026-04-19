@@ -72,32 +72,33 @@ class OpenRouterService:
         try:
             print(f"[OPENROUTER] send_message start: model={target_model}, started_at={started_at}")
 
-            print(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
+            # print(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
             response = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=self.headers,
                 json=payload,
                 timeout=(10, 90)   # connect timeout, read timeout
             )
-            print(f"[OPENROUTER] requests.post end: elapsed={time.time() - started_at:.2f}s")
+            # print(f"[OPENROUTER] requests.post end: elapsed={time.time() - started_at:.2f}s")
+            print(f"[OPENROUTER] send_message end: model={target_model}, ended_at={time.time()}")
 
-            print(f"[OPENROUTER] raise_for_status start: elapsed={time.time() - started_at:.2f}s, status={response.status_code}")
+            # print(f"[OPENROUTER] raise_for_status start: elapsed={time.time() - started_at:.2f}s, status={response.status_code}")
             response.raise_for_status()
-            print(f"[OPENROUTER] raise_for_status end: elapsed={time.time() - started_at:.2f}s")
+            # print(f"[OPENROUTER] raise_for_status end: elapsed={time.time() - started_at:.2f}s")
 
-            print(f"[OPENROUTER] response.json start: elapsed={time.time() - started_at:.2f}s")
+            # print(f"[OPENROUTER] response.json start: elapsed={time.time() - started_at:.2f}s")
             data = response.json()
-            print(f"[OPENROUTER] response.json end: elapsed={time.time() - started_at:.2f}s")
+            # print(f"[OPENROUTER] response.json end: elapsed={time.time() - started_at:.2f}s")
 
             if "choices" not in data:
                 raise Exception(f"OpenRouter response missing 'choices': {data}")
 
-            print(f"[OPENROUTER] content extract start: elapsed={time.time() - started_at:.2f}s")
+            # print(f"[OPENROUTER] content extract start: elapsed={time.time() - started_at:.2f}s")
             content = data["choices"][0]["message"]["content"]
-            print(f"[OPENROUTER] content extract end: elapsed={time.time() - started_at:.2f}s")
+            # print(f"[OPENROUTER] content extract end: elapsed={time.time() - started_at:.2f}s")
 
             result = content.strip()
-            print(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
+            # print(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
 
             return result
 
@@ -124,7 +125,7 @@ class OpenRouterService:
             raise
 
         finally:
-            print(f"[OPENROUTER] send_message end: elapsed={time.time() - started_at:.2f}s")
+            print(f"[OPENROUTER] send_message end")
 
 
     def send_with_system(self, messages: List[Dict], system_prompt: str, **kwargs) -> str:

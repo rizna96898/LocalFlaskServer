@@ -420,17 +420,17 @@ class MemoryManager:
             session_char_dir = config.SESSIONS_DIR / session_id / "character"
             session_char_dir.mkdir(parents=True, exist_ok=True)
 
-            #print(f"[WORLD] === character sync start ===")
+            print(f"[WORLD] === character sync start ===")
             print(f"[WORLD] CHAR DIR: {st_char_dir}")
             print(f"[WORLD] SESSION DIR: {session_char_dir}")
             #print(f"[WORLD] world_relation: {world_relation}")
 
-            if st_char_dir.exists():
-                 print(f"[WORLD] found {len(list(st_char_dir.iterdir()))} files")
+            # if st_char_dir.exists():
+                #  print(f"[WORLD] found {len(list(st_char_dir.iterdir()))} files")
                 #for f in st_char_dir.iterdir():
                     #print(f"  - {f.name}")
-            else:
-                print("[ERROR] ST character dir not found")
+            # else:
+                # print("[ERROR] ST character dir not found")
 
             for name in world_relation:
                 #print(f"\n[WORLD] ---- processing: {name} ----")
@@ -472,7 +472,7 @@ class MemoryManager:
 
                         file_utils.save_yaml_file(dst_file, data)
 
-            #print(f"[WORLD] === character sync end ===")
+            print(f"[WORLD] === character sync end ===")
 
         except Exception as e:
             print(f"[WORLD ERROR] {e}")
@@ -514,7 +514,7 @@ class MemoryManager:
         mes_example: str = "",
     ):
         print("_run_character_memory_create_sync start")
-        print(f"[CHAR MEMORY] relation_names = {relation_names}")
+        # print(f"[CHAR MEMORY] relation_names = {relation_names}")
 
         session_char_dir = config.SESSIONS_DIR / session_id / "character"
         session_char_dir.mkdir(parents=True, exist_ok=True)
@@ -522,21 +522,21 @@ class MemoryManager:
         done: set[str] = set()
 
         for name in relation_names:
-            print(f"[CHAR MEMORY] loop start: {name!r}")
+            # print(f"[CHAR MEMORY] loop start: {name!r}")
             try:
                 if not isinstance(name, str):
                     print(f"[CHAR MEMORY] skip not str: {name!r}")
                     continue
 
                 char_name = name.strip()
-                print(f"[CHAR MEMORY] normalized: {char_name!r}")
+                # print(f"[CHAR MEMORY] normalized: {char_name!r}")
 
                 if not char_name:
                     print("[CHAR MEMORY] skip empty")
                     continue
 
                 if char_name in done:
-                    print(f"[CHAR MEMORY] skip duplicate: {char_name}")
+                    # print(f"[CHAR MEMORY] skip duplicate: {char_name}")
                     continue
 
                 done.add(char_name)
@@ -545,46 +545,46 @@ class MemoryManager:
                     print(f"[CHAR MEMORY] skip mob: {char_name}")
                     continue
 
-                print(f"[CHAR MEMORY] card exists: {char_name}")
+                # print(f"[CHAR MEMORY] card exists: {char_name}")
 
                 char_file = session_char_dir / f"{char_name}.yaml"
-                print(f"[CHAR MEMORY] char_file: {char_file}")
+                # print(f"[CHAR MEMORY] char_file: {char_file}")
 
                 if not char_file.exists():
                     print(f"[CHAR MEMORY] skip missing session yaml: {char_file}")
                     continue
 
                 memory_file = session_char_dir / f"{char_name}_memory.yaml"
-                print(f"[CHAR MEMORY] memory_file: {memory_file}")
+                # print(f"[CHAR MEMORY] memory_file: {memory_file}")
 
                 if memory_file.exists():
                     print(f"[CHAR MEMORY] skip exists: {memory_file.name}")
                     continue
 
-                print(f"[CHAR MEMORY] load yaml start: {char_name}")
+                # print(f"[CHAR MEMORY] load yaml start: {char_name}")
                 char_data = file_utils.load_yaml_file(char_file) or {}
-                print(f"[CHAR MEMORY] load yaml end: {char_name}")
+                # print(f"[CHAR MEMORY] load yaml end: {char_name}")
 
-                print(f"[CHAR MEMORY] prompt build start: {char_name}")
+                # print(f"[CHAR MEMORY] prompt build start: {char_name}")
                 prompt_messages = self.prompt_builder.create_character_memory_prompt(
                     char_data,
                     description,
                     scenario,
                     first_mes,
                 )
-                print(f"[CHAR MEMORY] prompt build end: {char_name}")
+                # print(f"[CHAR MEMORY] prompt build end: {char_name}")
 
-                print(f"[CHAR MEMORY] send_message start: {char_name}")
+                # print(f"[CHAR MEMORY] send_message start: {char_name}")
                 response_text = self.openrouter.send_message(
                     messages=prompt_messages,
                     temperature=0.7,
                     max_tokens=1500
                 )
 
-                print(f"[CHAR MEMORY] parse start: {char_name}")
+                # print(f"[CHAR MEMORY] parse start: {char_name}")
                 response_text = string_utils.strip_code_block(response_text)
                 parsed_yaml = yaml.safe_load(response_text) or {}
-                print(f"[CHAR MEMORY] parse end: {char_name}")
+                # print(f"[CHAR MEMORY] parse end: {char_name}")
 
                 result = {
                     "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
@@ -592,21 +592,22 @@ class MemoryManager:
                     "owned_items": parsed_yaml.get("owned_items", []) if isinstance(parsed_yaml.get("owned_items"), list) else [],
                 }
 
-                print(f"[CHAR MEMORY] save start: {memory_file}")
+                # print(f"[CHAR MEMORY] save start: {memory_file}")
                 saved = file_utils.save_yaml_file(memory_file, result)
-                print(f"[CHAR MEMORY] save result: {saved}")
+                # print(f"[CHAR MEMORY] save result: {saved}")
 
                 if not saved:
                     raise RuntimeError(f"character memory save failed: {memory_file}")
 
-                print(f"[CHAR MEMORY] saved: {memory_file.name}")
-                print(f"[CHAR MEMORY] exists after save: {memory_file.exists()}")
+                # print(f"[CHAR MEMORY] saved: {memory_file.name}")
+                # print(f"[CHAR MEMORY] exists after save: {memory_file.exists()}")
 
-                print(f"[CHAR MEMORY] send_message end: {char_name}")
+                # print(f"[CHAR MEMORY] send_message end: {char_name}")
             except Exception as e:
                 print(f"[CHAR MEMORY ERROR] {type(e).__name__}: {e}")
                 import traceback
                 print(traceback.format_exc())
                 raise
 
+        print("セッションキャラディレクトリ", session_char_dir);
         print("_run_character_memory_create_sync end")
