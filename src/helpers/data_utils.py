@@ -59,7 +59,7 @@ def merge_character_data(current: Dict[str, Any], new_data: Dict[str, Any]) -> D
 
     return merged
 
-def wait_world_ready(session_id: str, timeout_sec=30, interval_sec=0.5):
+def wait_world_ready(session_id: str, timeout_sec=0, interval_sec=0.5):
     world_file = config.SESSIONS_DIR / session_id / "world_memory.yaml"
     # print(f"[WAIT] start session_id={session_id}")
     # print(f"[WAIT] target={world_file}")

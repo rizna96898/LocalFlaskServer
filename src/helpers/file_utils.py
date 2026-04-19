@@ -438,9 +438,11 @@ def create_prepare_status(session_id: str) -> bool:
         get_prepare_status_path(session_id),
         {
             "status": "processing",
-            "complete_stage": "new_chat",   # new_chat / prepare / main_chat / after
+            "complete_stage": "new_chat",   # new_chat / prepare / main_chat / mob_chat / after
             "error_stage": None,
             "error_message": None,
+            "needs_mob_chat": False,
+            "mob_count": 0,
         },
     )
 
@@ -452,6 +454,8 @@ def update_prepare_status(
     complete_stage: str | None = None,
     error_stage: str | None = None,
     error_message: str | None = None,
+    needs_mob_chat: bool | None = None,
+    mob_count: int | None = None,
 ) -> bool:
     path = get_prepare_status_path(session_id)
     data = load_yaml_file(path) or {}
@@ -467,6 +471,10 @@ def update_prepare_status(
         data["error_stage"] = error_stage
     if error_message is not None:
         data["error_message"] = error_message
+    if needs_mob_chat is not None:
+        data["needs_mob_chat"] = needs_mob_chat
+    if mob_count is not None:
+        data["mob_count"] = mob_count
 
     return save_yaml_file(path, data)
 
@@ -506,27 +514,64 @@ def mark_prepare_error(
         error_message=error_message,
     )
 
+def is_prepare_status_ready(session_id: str, expected_stage: str) -> bool:
+    data = load_prepare_status(session_id)
+    if not isinstance(data, dict):
+        return False
+
+    return (
+        data.get("status") == "ready"
+        and data.get("complete_stage") == expected_stage
+    )
+
+def can_start_prepare(session_id: str) -> bool:
+    data = load_prepare_status(session_id)
+    if not isinstance(data, dict):
+        return False
+
+    return (
+        data.get("status") == "ready"
+        and data.get("complete_stage") in ("new_chat", "after")
+    )
+
+
+def can_start_main_chat(session_id: str) -> bool:
+    return is_prepare_status_ready(session_id, "prepare")
+
+
+def can_start_after(session_id: str) -> bool:
+    return is_prepare_status_ready(session_id, "main_chat")
+
+def get_needs_mob_chat(session_id: str) -> bool:
+    data = load_prepare_status(session_id)
+    return bool(data.get("needs_mob_chat", False)) if isinstance(data, dict) else False
+
+
+def get_mob_count(session_id: str) -> int:
+    data = load_prepare_status(session_id)
+    if not isinstance(data, dict):
+        return 0
+
+    value = data.get("mob_count", 0)
+    try:
+        return int(value)
+    except Exception:
+        return 0
 
 def wait_until_prepare_status(
     session_id: str,
     *,
     target_stage: str,
-    timeout_sec: float = 60.0,
     interval_sec: float = 0.2,
 ) -> bool:
     """
     prepare_status.yaml が target_stage / ready になるまで待つ
     error なら False
-    timeout でも False
+    timeout なし
     """
-    started_at = time.monotonic()
-
     while True:
-        if timeout_sec > 0 and (time.monotonic() - started_at) >= timeout_sec:
-            print(f"[WAIT] prepare_status timeout: session_id={session_id}, target_stage={target_stage}")
-            return False
-
         data = load_prepare_status(session_id)
+
         if not data:
             time.sleep(interval_sec)
             continue
@@ -543,7 +588,7 @@ def wait_until_prepare_status(
             return True
 
         time.sleep(interval_sec)
-
+        
 class BlockStyleDumper(yaml.SafeDumper):
     pass
 BlockStyleDumper.add_representer(str, str_presenter)

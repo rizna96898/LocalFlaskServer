@@ -96,62 +96,54 @@ def chat_after():
 def chat_completions():
     if request.method == "OPTIONS":
         return "", 200
-    
-    # print("[APP] /v1/chat/completions start")
-    """SillyTavernからのメインのチャットリクエスト（安定版）"""
+
     try:
         body = request.get_json(force=True)
         allow_image = request.headers.get("X-Allow-Image", "false").lower() == "true"
         session_id = body.get("session_id")
 
-        # デバッグログ（必要に応じて残す）
-        # print("=== Request Headers ===")
-        # for key, value in request.headers.items():
-        #     print(f"{key}: {value}")
-        # print("=====================")
-        # print("body全量:", body)
-        
         result = {}
 
         if body.get("first_flag") == "first":
             print("１回目のログ")
 
-            # new_chat の完了待ち
-            if session_id:
-                ok = file_utils.wait_until_prepare_status(
-                    session_id,
-                    target_stage="new_chat",
-                    timeout_sec=60.0,
-                    interval_sec=0.2,
-                )
-                if not ok:
-                    return jsonify({
-                        "error": "new_chat の初期化が完了していません。prepare_status.yaml を確認してください。"
-                    }), 503
-
-            print("１回目のログ")
-            result = orchestrator.handle_chat_completion(body, allow_image)
-            # result = orchestrator.handle_mob_chat_completion(body, allow_image)
-
-        else:
-            print("２回目のログ")
-
-            # 必要なら prepare 完了待ち
             if session_id:
                 ok = file_utils.wait_until_prepare_status(
                     session_id,
                     target_stage="prepare",
-                    timeout_sec=10.0,
                     interval_sec=0.2,
                 )
                 if not ok:
                     return jsonify({
-                        "error": "prepare が完了していません。prepare_status.yaml を確認してください。"
-                    }), 503
+                        "error": "prepare が error で終了しました。prepare_status.yaml を確認してください。"
+                    }), 500
+
+            result = orchestrator.handle_chat_completion(body, allow_image)
+
+        else:
+            print("２回目のログ")
+
+            if session_id:
+                # 必要ならデバッグ確認用
+                prepare_status = file_utils.load_prepare_status(session_id) or {}
+                print(
+                    f"[APP] mob_chat start: "
+                    f"needs_mob_chat={prepare_status.get('needs_mob_chat')}, "
+                    f"mob_count={prepare_status.get('mob_count')}"
+                )
+
+                ok = file_utils.wait_until_prepare_status(
+                    session_id,
+                    target_stage="main_chat",
+                    interval_sec=0.2,
+                )
+                if not ok:
+                    return jsonify({
+                        "error": "main_chat が error で終了しました。prepare_status.yaml を確認してください。"
+                    }), 500
 
             result = orchestrator.handle_mob_chat_completion(body, allow_image)
 
-        # Silly Tavernが期待する形式で返す（シンプルで安定）
         return jsonify(result["response"]), result.get("status_code", 200)
 
     except Exception as e:

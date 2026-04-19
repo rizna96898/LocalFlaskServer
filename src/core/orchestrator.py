@@ -62,8 +62,9 @@ class ChatOrchestrator:
     def chat_pretreatment(self, body: Dict) -> Dict:
         print("[ORCH] chat_pretreatment start")
 
+        session_id = body.get("session_id")
+
         try:
-            session_id = body.get("session_id")
             print(f"[ORCH] session_id={session_id}")
 
             if not session_id:
@@ -79,7 +80,28 @@ class ChatOrchestrator:
 
             self.memory_manager.create_target_speakers(session_id, body)
 
-            file_utils.mark_prepare_ready(session_id, "prepare")
+            # ここは実データの持ち方に合わせて調整
+            mob_count = 0
+
+            target_speakers = body.get("target_speakers")
+            if isinstance(target_speakers, list):
+                # プレイヤーとメインキャラを除いた人数をモブ数にしたいならここで調整
+                mob_count = len(target_speakers)
+
+            elif isinstance(body.get("mob_count"), int):
+                mob_count = int(body.get("mob_count"))
+
+            needs_mob_chat = mob_count > 0
+
+            file_utils.update_prepare_status(
+                session_id,
+                status="ready",
+                complete_stage="prepare",
+                error_stage=None,
+                error_message=None,
+                needs_mob_chat=needs_mob_chat,
+                mob_count=mob_count,
+            )
 
             return {
                 "ok": True,
@@ -105,8 +127,9 @@ class ChatOrchestrator:
     def chat_post_processing(self, body: Dict) -> Dict:
         print("[ORCH] chat_post_processing start")
 
+        session_id = body.get("session_id")
+
         try:
-            session_id = body.get("session_id")
             print(f"[ORCH] session_id={session_id}")
 
             if not session_id:
@@ -118,11 +141,26 @@ class ChatOrchestrator:
                     "status_code": 503,
                 }
 
+            needs_mob_chat = file_utils.get_needs_mob_chat(session_id)
+            wait_stage = "mob_chat" if needs_mob_chat else "main_chat"
+
+            ok = file_utils.wait_until_prepare_status(
+                session_id,
+                target_stage=wait_stage,
+                interval_sec=0.2,
+            )
+            if not ok:
+                return {
+                    "response": {"error": f"{wait_stage} が error で終了しました。"},
+                    "status_code": 500,
+                }
+
             file_utils.mark_prepare_processing(session_id, "after")
 
             # TODO:
-            # 世界メモリー更新
-            # キャラメモリー更新
+            # 履歴作成
+            # world_memory 更新
+            # character_memory 更新
 
             file_utils.mark_prepare_ready(session_id, "after")
 
@@ -150,13 +188,24 @@ class ChatOrchestrator:
 
     # メインプレイヤーチャット（予定）
     def handle_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
-        try:
-            session_id = body.get("session_id")
+        session_id = body.get("session_id")
 
+        try:
             if not session_id:
                 return {
                     "response": {"error": "session_idがありません。"},
                     "status_code": 503,
+                }
+
+            ok = file_utils.wait_until_prepare_status(
+                session_id,
+                target_stage="prepare",
+                interval_sec=0.2,
+            )
+            if not ok:
+                return {
+                    "response": {"error": "prepare が error で終了しました。"},
+                    "status_code": 500,
                 }
 
             file_utils.mark_prepare_processing(session_id, "main_chat")
@@ -188,8 +237,9 @@ class ChatOrchestrator:
                 session_id=session_id,
                 character_name=character_name,
                 sessions_dir=config.SESSIONS_DIR,
-                prompt_file=Path(config.PROMPTS_DIR + "/character_comment_prompt.yaml"),
+                prompt_file = config.PROMPTS_DIR / "character_comment_prompt.yaml"
             )
+
             response_text = self._generate_response(session_id, messages, system_message)
 
             last_assistant_message = string_utils.get_reserved_assistant_message(messages)
@@ -254,8 +304,20 @@ class ChatOrchestrator:
                 "status_code": 200
             }
         
+            file_utils.update_prepare_status(
+                session_id,
+                status="ready",
+                complete_stage="main_chat",
+                error_stage=None,
+                error_message=None,
+            )
+
             file_utils.mark_prepare_ready(session_id, "main_chat")
-            return result
+
+            return {
+                "response": result,
+                "status_code": 200,
+            }
 
         except Exception as e:
             print(f"[ERROR] handle_chat_completion: {e}")
@@ -289,12 +351,23 @@ class ChatOrchestrator:
                     "status_code": 503,
                 }
 
-            file_utils.mark_prepare_processing(session_id, "main_chat")
+            ok = file_utils.wait_until_prepare_status(
+                session_id,
+                target_stage="main_chat",
+                interval_sec=0.2,
+            )
+            if not ok:
+                return {
+                    "response": {"error": "main_chat が error で終了しました。"},
+                    "status_code": 500,
+                }
+
+            file_utils.mark_prepare_processing(session_id, "mob_chat")
             # TODO
             # mob同士の会話をどうするか悩む（多分発生しないか、禁止が良さげ）
             # mobの履歴も一応持つ（名前を付ければ判別できるから）
 
-            return {
+            result = {
                 "response": {
                     "id": f"chatcmpl-{session_id[:8]}",
                     "object": "chat.completion",
@@ -315,6 +388,14 @@ class ChatOrchestrator:
                 },
                 "status_code": 200
             }
+        
+            file_utils.mark_prepare_ready(session_id, "mob_chat")
+
+            return {
+                "response": result,
+                "status_code": 200,
+            }
+
         except Exception as e:
             print(f"[ERROR] handle_mob_chat_completion: {e}")
             import traceback
@@ -323,8 +404,8 @@ class ChatOrchestrator:
             if session_id:
                 file_utils.mark_prepare_error(
                     session_id,
-                    complete_stage="main_chat",
-                    error_stage="main_chat",
+                    complete_stage="mob_chat",
+                    error_stage="mob_chat",
                     error_message=f"{type(e).__name__}: {e}",
                 )
 
