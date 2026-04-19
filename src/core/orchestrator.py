@@ -251,24 +251,35 @@ class ChatOrchestrator:
 
             character_memory_data = file_utils.load_yaml_file(memory_path)
             
+            # ここが変だよ日本人
+            # 今回の発言で話しかけたかどうか判定しないと駄目かな？
+            # その場にいるからと言って話しかけたかどうかは中身を見ないといけない
             print("load character memory. focus_targets", character_memory_data["current_state"]["focus_targets"])
 
             forcus_target = character_memory_data["current_state"]["focus_targets"]
             participants = character_memory_data.get("participants", [])
 
-            # 本チャット後の「次の発言者予定」
+            # 本チャット後の「次話者候補」
             next_speakers = []
 
             call_target_text = string_utils.find_existing_character(last_user_message, participants)
 
             # 1. focus_targets が1人なら、その人を次話者候補にする
             if len(forcus_target) == 1:
-                next_speakers = forcus_target
+                # name配列だけ持つ
+                next_speakers = [
+                    str(item.get("name")).strip()
+                    for item in forcus_target
+                    if isinstance(item, dict) and item.get("name")
+                ]
 
             else:
                 # 2. ２名以上 focus_targets に存在する場合や、
                 #    引っかからない / 新規モブの場合は後でLLM判定
                 print("TODO: ask target judge LLM")
+
+            needs_mob_chat = len(next_speakers) > 0
+            mob_count = len(next_speakers)
 
             # 履歴保存
             history.append({
@@ -286,9 +297,7 @@ class ChatOrchestrator:
             file_utils.save_history(directory_full_path, history)
 
             print("次の発言者予定", next_speakers)
-
-            needs_mob_chat = len(next_speakers) > 0
-            mob_count = len(next_speakers)
+            print("フラグ", needs_mob_chat)
 
             result = {
                 "response": {
@@ -306,7 +315,7 @@ class ChatOrchestrator:
                             "content": response_text
                         },
                         "finish_reason": "stop",
-                        # 次の発言者候補
+                        # ↓ 次話者情報
                         "target_speakers": next_speakers,
                         "remaining_speakers": next_speakers,
                         "needs_mob_chat": needs_mob_chat,
@@ -329,6 +338,7 @@ class ChatOrchestrator:
                 error_message=None,
                 needs_mob_chat=needs_mob_chat,
                 mob_count=mob_count,
+                next_speakers=next_speakers,
             )
 
             return result
@@ -389,26 +399,32 @@ class ChatOrchestrator:
                     "model": body.get("model", config.DEFAULT_MODEL),
                     "choices": [{
                         "index": 0,
-                        "message": {"role": "assistant"
-                                    , "name": "白井　圭太"
-                                    , "original_avatar": "白井　圭太.png"
-                                    , "force_avatar": "白井　圭太.png"
-                                    , "content": "二人目の発言だよ"},
+                        "message": {
+                            "role": "assistant",
+                            "name": "白井　圭太",
+                            "original_avatar": "白井　圭太.png",
+                            "force_avatar": "白井　圭太.png",
+                            "content": "二人目の発言だよ",
+                        },
                         "finish_reason": "stop",
-                        # ↓会話対象
-                        "group_count": 1
+                        # ↓ 次話者情報
+                        "target_speakers": "",
+                        "remaining_speakers": "",
+                        "needs_mob_chat": False,
+                        "mob_count": 0,
                     }],
-                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                    "usage": {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0
+                    }
                 },
                 "status_code": 200
             }
         
             file_utils.mark_prepare_ready(session_id, "mob_chat")
 
-            return {
-                "response": result,
-                "status_code": 200,
-            }
+            return result
 
         except Exception as e:
             print(f"[ERROR] handle_mob_chat_completion: {e}")

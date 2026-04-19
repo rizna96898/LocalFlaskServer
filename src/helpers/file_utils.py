@@ -443,7 +443,7 @@ def create_prepare_status(session_id: str) -> bool:
             "error_message": None,
             "needs_mob_chat": False,
             "mob_count": 0,
-            "next_speakers": None,
+            "next_speakers": [],
         },
     )
 
@@ -457,6 +457,7 @@ def update_prepare_status(
     error_message: str | None = None,
     needs_mob_chat: bool | None = None,
     mob_count: int | None = None,
+    next_speakers: list | None = None,   # ← 追加
 ) -> bool:
     path = get_prepare_status_path(session_id)
     data = load_yaml_file(path) or {}
@@ -466,16 +467,29 @@ def update_prepare_status(
 
     if status is not None:
         data["status"] = status
+
     if complete_stage is not None:
         data["complete_stage"] = complete_stage
+
     if error_stage is not None:
         data["error_stage"] = error_stage
+
     if error_message is not None:
         data["error_message"] = error_message
+
     if needs_mob_chat is not None:
         data["needs_mob_chat"] = needs_mob_chat
+
     if mob_count is not None:
         data["mob_count"] = mob_count
+
+    if next_speakers is not None:
+        # 念のため安全に文字列化＆空要素除去
+        data["next_speakers"] = [
+            str(x).strip()
+            for x in next_speakers
+            if x
+        ]
 
     return save_yaml_file(path, data)
 
