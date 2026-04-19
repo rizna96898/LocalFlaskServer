@@ -255,32 +255,41 @@ class ChatOrchestrator:
 
             forcus_target = character_memory_data["current_state"]["focus_targets"]
             participants = character_memory_data.get("participants", [])
-            target_speakers = []
+
+            # 本チャット後の「次の発言者予定」
+            next_speakers = []
 
             call_target_text = string_utils.find_existing_character(last_user_message, participants)
 
-            # 1. 参加者が1人ならその人
+            # 1. focus_targets が1人なら、その人を次話者候補にする
             if len(forcus_target) == 1:
-                target_speakers = forcus_target
+                next_speakers = forcus_target
+
             else:
-                # 2. ２名以上forcus_targetに存在する場合や
-                #    引っかからない、新規モブの場合、LLMに通信して判別する。
+                # 2. ２名以上 focus_targets に存在する場合や、
+                #    引っかからない / 新規モブの場合は後でLLM判定
                 print("TODO: ask target judge LLM")
 
-            #    TODO
-            #    発言者のキャラ名を保持する必要が出た気がする
-            #    ここで chat log を session 単位で保存する想定
-            #    例: logs/chat_history.jsonl, latest_response.txt など
-            history.append({"t": time.time(), "speaker": "player", "role": "user", "content": last_user_message})
-            history.append({"t": time.time(), "speaker": "白井　結","role": "assistant", "content": response_text})
+            # 履歴保存
+            history.append({
+                "t": time.time(),
+                "speaker": "player",
+                "role": "user",
+                "content": last_user_message
+            })
+            history.append({
+                "t": time.time(),
+                "speaker": "白井 結",
+                "role": "assistant",
+                "content": response_text
+            })
             file_utils.save_history(directory_full_path, history)
 
-            print("次の発言者予定", target_speakers)
-            # TODO
-            # 今回の返信内容でプレイヤー以外への問いかけを判別
-            # とりあえずはaiに名前を付けさせるように出来ればそれで引っかかったやつを作る
-            # カードに無い名前をどう判別するか悩む
-            # group_countに振ったキャラの数を入れる
+            print("次の発言者予定", next_speakers)
+
+            needs_mob_chat = len(next_speakers) > 0
+            mob_count = len(next_speakers)
+
             result = {
                 "response": {
                     "id": f"chatcmpl-{session_id[:8]}",
@@ -289,35 +298,40 @@ class ChatOrchestrator:
                     "model": body.get("model", config.DEFAULT_MODEL),
                     "choices": [{
                         "index": 0,
-                        "message": {"role": "assistant"
-                                    , "name": character_name
-                                    , "original_avatar": character_name + ".png"
-                                    , "force_avatar": character_name + ".png"
-                                    , "content": response_text},
+                        "message": {
+                            "role": "assistant",
+                            "name": character_name,
+                            "original_avatar": character_name + ".png",
+                            "force_avatar": character_name + ".png",
+                            "content": response_text
+                        },
                         "finish_reason": "stop",
-                        # ↓会話対象
-                        "target_speakers": target_speakers,
-                        "remaining_speakers": target_speakers,
+                        # 次の発言者候補
+                        "target_speakers": next_speakers,
+                        "remaining_speakers": next_speakers,
+                        "needs_mob_chat": needs_mob_chat,
+                        "mob_count": mob_count,
                     }],
-                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                    "usage": {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0
+                    }
                 },
                 "status_code": 200
             }
-        
+
             file_utils.update_prepare_status(
                 session_id,
                 status="ready",
                 complete_stage="main_chat",
                 error_stage=None,
                 error_message=None,
+                needs_mob_chat=needs_mob_chat,
+                mob_count=mob_count,
             )
 
-            file_utils.mark_prepare_ready(session_id, "main_chat")
-
-            return {
-                "response": result,
-                "status_code": 200,
-            }
+            return result
 
         except Exception as e:
             print(f"[ERROR] handle_chat_completion: {e}")

@@ -324,9 +324,31 @@ class MemoryManager:
                         world_relationships = []
                     elif isinstance(world_relationships_raw, list):
                         world_relationships = []
+
                         for item in world_relationships_raw:
-                            if isinstance(item, str) and item.strip():
-                                world_relationships.append(string_utils.normalize_relationship_item(item))
+                            if isinstance(item, str):
+                                item = item.strip()
+                                if item:
+                                    world_relationships.append(
+                                        string_utils.normalize_relationship_item(item)
+                                    )
+
+                            elif isinstance(item, dict):
+                                for name, role in item.items():
+                                    name = str(name).strip() if name is not None else ""
+                                    role = str(role).strip() if role is not None else ""
+
+                                    if not name:
+                                        continue
+
+                                    if role:
+                                        text = f"{name}：{role}"
+                                    else:
+                                        text = name
+
+                                    world_relationships.append(
+                                        string_utils.normalize_relationship_item(text)
+                                    )
                     elif isinstance(world_relationships_raw, str):
                         world_relationships = []
                         for line in world_relationships_raw.splitlines():

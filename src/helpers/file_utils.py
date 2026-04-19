@@ -443,6 +443,7 @@ def create_prepare_status(session_id: str) -> bool:
             "error_message": None,
             "needs_mob_chat": False,
             "mob_count": 0,
+            "next_speakers": None,
         },
     )
 
