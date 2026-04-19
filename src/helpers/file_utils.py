@@ -23,15 +23,79 @@ def ensure_session_dir(sessions_dir: Path, session_id: str) -> Path:
     session_dir.mkdir(parents=True, exist_ok=True)
     return session_dir
 
-class BlockStyleDumper(yaml.SafeDumper):
-    pass
+def get_prepare_status_file(session_id: str) -> Path:
+    return config.SESSIONS_DIR / session_id / "prepare_status.yaml"
+
+def create_prepare_status(session_id: str) -> bool:
+    data = {
+        "status": "processing",          # processing / ready / error
+        "complete_stage": "new_chat",   # new_chat / prepare / chat / after
+        "error_stage": None,            # world / character / player など
+        "error_message": None,
+    }
+    return save_yaml_file(get_prepare_status_file(session_id), data)
+
+def update_prepare_status(
+    session_id: str,
+    *,
+    status: str | None = None,
+    complete_stage: str | None = None,
+    error_stage: str | None = None,
+    error_message: str | None = None,
+) -> bool:
+    file_path = get_prepare_status_file(session_id)
+    current = load_yaml_file(file_path) or {}
+
+    if not isinstance(current, dict):
+        current = {}
+
+    if status is not None:
+        current["status"] = status
+    if complete_stage is not None:
+        current["complete_stage"] = complete_stage
+    if error_stage is not None:
+        current["error_stage"] = error_stage
+    if error_message is not None:
+        current["error_message"] = error_message
+
+    return save_yaml_file(file_path, current)
+
+def mark_prepare_processing(session_id: str, complete_stage: str = "new_chat") -> bool:
+    return update_prepare_status(
+        session_id,
+        status="processing",
+        complete_stage=complete_stage,
+        error_stage=None,
+        error_message=None,
+    )
+
+def mark_prepare_ready(session_id: str, complete_stage: str = "new_chat") -> bool:
+    return update_prepare_status(
+        session_id,
+        status="ready",
+        complete_stage=complete_stage,
+        error_stage=None,
+        error_message=None,
+    )
+
+def mark_prepare_error(
+    session_id: str,
+    error_stage: str,
+    error_message: str,
+    complete_stage: str = "new_chat",
+) -> bool:
+    return update_prepare_status(
+        session_id,
+        status="error",
+        complete_stage=complete_stage,
+        error_stage=error_stage,
+        error_message=error_message,
+    )
 
 def str_presenter(dumper, data):
     if "\n" in data:
         return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
     return dumper.represent_scalar("tag:yaml.org,2002:str", data)
-
-BlockStyleDumper.add_representer(str, str_presenter)
 
 def save_yaml_file(file_path: Path, data: Dict[str, Any]) -> bool:
     """YAMLファイルを保存"""
@@ -283,7 +347,6 @@ def build_character_comment_system_message(
 
     return system_message
 
-
 def get_character_memory(
     session_id: str,
     character_name: str,
@@ -296,7 +359,6 @@ def get_character_memory(
     all_memories = load_character_memories(session_id, sessions_dir)
     key = string_utils._normalize_name(character_name)
     return all_memories.get(key)
-
 
 def load_character_memories(
     session_id: str,
@@ -394,3 +456,45 @@ def wait_until_session_memory_ready(
 
         print(f"[WAIT] session ready: session_id={session_id}")
         return True
+
+def get_prepare_status_path(session_id: str) -> Path:
+    return config.SESSIONS_DIR / session_id / "prepare_status.yaml"
+
+def create_prepare_status(session_id: str) -> None:
+    save_yaml_file(
+        get_prepare_status_path(session_id),
+        {
+            "status": "processing",
+            "complete_stage": "new_chat",
+            "error_stage": None,
+            "error_message": None,
+        },
+    )
+
+def update_prepare_status(
+    session_id: str,
+    *,
+    status: str | None = None,
+    complete_stage: str | None = None,
+    error_stage: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    path = get_prepare_status_path(session_id)
+    data = load_yaml_file(path) or {}
+    if not isinstance(data, dict):
+        data = {}
+
+    if status is not None:
+        data["status"] = status
+    if complete_stage is not None:
+        data["complete_stage"] = complete_stage
+    if error_stage is not None:
+        data["error_stage"] = error_stage
+    if error_message is not None:
+        data["error_message"] = error_message
+
+    save_yaml_file(path, data)
+
+class BlockStyleDumper(yaml.SafeDumper):
+    pass
+BlockStyleDumper.add_representer(str, str_presenter)

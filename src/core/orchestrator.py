@@ -37,11 +37,14 @@ class ChatOrchestrator:
 
     # ニューチャット
     def create_new_session(self, body: Dict) -> str:
-        """新規チャット作成（/new_chat）"""
+        # """新規チャット作成（/new_chat）"""
         session_id = body.get("session_id") or str(uuid.uuid4())
 
         # セッションディレクトリ作成
         file_utils.ensure_session_dir(config.SESSIONS_DIR, session_id)
+
+        # ニューチャット用ステータス作成
+        file_utils.create_prepare_status(session_id)
 
         # キャラクター設定の同期
         self._sync_character_if_changed(session_id, body)
@@ -51,10 +54,8 @@ class ChatOrchestrator:
         call_body["session_id"] = session_id
 
         # 初期記憶の非同期作成
-        # print(f"[NEW SESSION] session_id={session_id} → 初期記憶作成を開始")
         self.memory_manager.create_initial_memory(call_body, session_id)
 
-        # print(f"[NEW SESSION] Created session: {session_id}")
         return session_id
 
     # 前処理
@@ -266,13 +267,14 @@ class ChatOrchestrator:
         }
 
     def _sync_character_if_changed(self, session_id: str, body: Dict):
-        # print("sync character if changed start")
+        print("_sync_character_if_changed start")
         """SillyTavernから来たメインキャラクター情報を session の world.yaml に同期
 
         役割:
         - 主人公 / メインキャラの最新カード情報を session 側へ持ってくる
         - ここは world_relation の関連キャラ同期とは別枠
         """
+        
         character_file = config.SESSIONS_DIR / session_id / "world.yaml"
         # print(f"[DEBUG] load target = {character_file}")
         current = file_utils.load_yaml_file(character_file) or {}
@@ -297,6 +299,7 @@ class ChatOrchestrator:
                 print(f"[CHARACTER] Updated for session {session_id}")
             else:
                 print(f"[WARN] Failed to update character.yaml for {session_id}")
+        print("_sync_character_if_changed end")
 
     def _sync_related_characters_from_memory(self, session_id: str):
         """

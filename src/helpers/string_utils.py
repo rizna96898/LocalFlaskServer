@@ -172,9 +172,6 @@ def _normalize_name(name: str) -> str:
 
 
 WORLD_MEMORY_DEFAULT = {
-    "file_status": {
-        "status": None,
-    },
     "current_state": {
         "time": None,
         "participants": [],

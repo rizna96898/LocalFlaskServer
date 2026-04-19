@@ -29,6 +29,9 @@ class MemoryManager:
 
     def create_initial_memory(self, body: Dict, session_id: str):
         print(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
+
+        file_utils.mark_prepare_processing(session_id, "new_chat")
+
         self._run_memory_async(body, session_id, "create", "", "")
 
     def update_memory(
@@ -154,6 +157,7 @@ class MemoryManager:
     ):
         def task():
             try:
+                print("_run_world_memory_update_async start")
                 world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
                 old_world_memory = file_utils.load_yaml_file(world_memory_path) or {}
                 if not isinstance(old_world_memory, dict):
@@ -182,7 +186,6 @@ class MemoryManager:
                     parsed_yaml = {}
 
                 new_world_data = {
-                    "file_status": {"status": "ready"},
                     "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
                     "world": parsed_yaml.get("world", {}) if isinstance(parsed_yaml.get("world"), dict) else {},
                 }
@@ -207,7 +210,7 @@ class MemoryManager:
 
                 file_utils.save_yaml_file(world_memory_path, merged_world)
                 print(f"[WORLD UPDATE] saved: {world_memory_path}")
-
+                print("_run_world_memory_update_async end")
             except Exception as e:
                 print(f"[WORLD UPDATE ERROR] {type(e).__name__}: {e}")
 
@@ -275,7 +278,6 @@ class MemoryManager:
                     parsed_yaml = {}
 
                 new_memory = {
-                    "file_status": {"status": "ready"},
                     "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
                     "memory": parsed_yaml.get("memory", {}) if isinstance(parsed_yaml.get("memory"), dict) else {},
                     "owned_items": parsed_yaml.get("owned_items", []) if isinstance(parsed_yaml.get("owned_items"), list) else [],
@@ -295,125 +297,103 @@ class MemoryManager:
         
     def _run_memory_async(self, body: Dict, session_id: str, operation: str, user: str, char: str):
         def task():
+            current_stage = "world"
+
             try:
                 print(f"[MEMORY] {operation}処理を実行中... session_id={session_id}")
 
                 if operation == "create":
+                    current_stage = "world"
                     prompt_messages = self.prompt_builder.create_memory_prompt(body)
-                elif operation == "update":
-                    world_memory = file_utils.load_yaml_file(
-                        config.SESSIONS_DIR / session_id / "world_memory.yaml"
-                    ) or {}
-                    prompt_messages = self.prompt_builder.update_memory_prompt(
-                        body, user, char, world_memory
+
+                    response_text = self.openrouter.send_message(
+                        messages=prompt_messages,
+                        temperature=0.7,
+                        max_tokens=1500,
                     )
-                else:
-                    raise ValueError(f"Unknown operation: {operation}")
+                    response_text = string_utils.strip_code_block(response_text)
 
-                response_text = self.openrouter.send_message(
-                    messages=prompt_messages,
-                    temperature=0.7,
-                    max_tokens=1500,
-                )
-
-                response_text = string_utils.strip_code_block(response_text)
-
-                import datetime
-                temp_dir = Path("temp")
-                temp_dir.mkdir(exist_ok=True)
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                temp_file = temp_dir / f"memory_raw_{operation}_{session_id}_{timestamp}.txt"
-
-                with open(temp_file, "w", encoding="utf-8") as f:
-                    f.write(response_text)
-
-                with open(temp_file, "r", encoding="utf-8") as f:
-                    raw_text = f.read()
-
-                try:
-                    parsed_yaml = yaml.safe_load(raw_text) or {}
+                    parsed_yaml = yaml.safe_load(response_text) or {}
                     if not isinstance(parsed_yaml, dict):
                         parsed_yaml = {}
-                except Exception as e:
-                    print(f"[MEMORY] YAML parse failed: {e}")
-                    parsed_yaml = {}
 
-                world_data = parsed_yaml.get("world", {}) if isinstance(parsed_yaml.get("world"), dict) else {}
-                world_relationships_raw = world_data.get("world_relationships", [])
+                    world_data = parsed_yaml.get("world", {}) if isinstance(parsed_yaml.get("world"), dict) else {}
+                    world_relationships_raw = world_data.get("world_relationships", [])
 
-                if world_relationships_raw is None:
-                    world_relationships = []
-                elif isinstance(world_relationships_raw, list):
-                    world_relationships = []
-                    for item in world_relationships_raw:
-                        if isinstance(item, str) and item.strip():
-                            world_relationships.append(string_utils.normalize_relationship_item(item))
-                elif isinstance(world_relationships_raw, str):
-                    world_relationships = []
-                    for line in world_relationships_raw.splitlines():
-                        line = line.strip()
-                        if not line:
-                            continue
-                        if line.startswith("-"):
-                            line = line.lstrip("-").strip()
-                        if line:
-                            world_relationships.append(string_utils.normalize_relationship_item(line))
-                else:
-                    world_relationships = []
+                    if world_relationships_raw is None:
+                        world_relationships = []
+                    elif isinstance(world_relationships_raw, list):
+                        world_relationships = []
+                        for item in world_relationships_raw:
+                            if isinstance(item, str) and item.strip():
+                                world_relationships.append(string_utils.normalize_relationship_item(item))
+                    elif isinstance(world_relationships_raw, str):
+                        world_relationships = []
+                        for line in world_relationships_raw.splitlines():
+                            line = line.strip()
+                            if not line:
+                                continue
+                            if line.startswith("-"):
+                                line = line.lstrip("-").strip()
+                            if line:
+                                world_relationships.append(string_utils.normalize_relationship_item(line))
+                    else:
+                        world_relationships = []
 
-                res_memory = {
-                    "file_status": {"status": "ready"},
-                    "current_state": parsed_yaml.get("current_state", {}),
-                    "world": {
-                        "world_relationships": world_relationships
+                    if not world_relationships:
+                        print(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
+                        print(f"[WORLD ERROR] parsed_yaml: {parsed_yaml!r}")
+                        print(f"[WORLD ERROR] world_relationships_raw: {world_relationships_raw!r}")
+                        raise ValueError("world_relationships is empty")
+
+                    res_memory = {
+                        "current_state": parsed_yaml.get("current_state", {}),
+                        "world": {
+                            "world_relationships": world_relationships
+                        }
                     }
-                }
 
-                world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
-                normalized_memory = string_utils.normalize_summary_data(res_memory)
-                file_utils.save_yaml_file(world_memory_path, normalized_memory)
+                    world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
+                    normalized_memory = string_utils.normalize_summary_data(res_memory)
+                    saved = file_utils.save_yaml_file(world_memory_path, normalized_memory)
+                    if not saved:
+                        raise RuntimeError(f"world memory save failed: {world_memory_path}")
 
-                relation_names = self._extract_relationship_names(world_relationships)
-                self._sync_session_character_files(session_id, relation_names)
+                    relation_names = self._extract_relationship_names(world_relationships)
+                    self._sync_session_character_files(session_id, relation_names)
 
-                if operation == "create":
-                    self._run_character_memory_create_async(
+                    current_stage = "character"
+                    self._run_character_memory_create_sync(
                         session_id,
                         relation_names,
                         body.get("description", ""),
                         body.get("scenario", ""),
                         body.get("first_mes", ""),
-                        body.get("mes_example", "")
+                        body.get("mes_example", ""),
                     )
+
+                    file_utils.mark_prepare_ready(session_id, "new_chat")
+
                 elif operation == "update":
-                    self._run_character_memory_update_async(
-                        body,
-                        session_id,
-                        relation_names[0],
-                        user,
-                        char
-                    )
-                else:
-                    raise ValueError(...)
+                    # 既存update処理
+                    pass
 
             except Exception as e:
                 print(f"[MEMORY LOGIC ERROR] {type(e).__name__}: {e}")
-                traceback.print_exc()
+                import traceback
+                print(traceback.format_exc())
 
-                error_memory = {
-                    "file_status": {"status": "error"},
-                    "current_state": {"time": None, "participants": []},
-                    "world": {"world_relationships": []},
-                }
-                file_utils.save_yaml_file(
-                    config.SESSIONS_DIR / session_id / "world_memory.yaml",
-                    error_memory
+                file_utils.mark_prepare_error(
+                    session_id,
+                    error_stage=current_stage,
+                    error_message=f"{type(e).__name__}: {e}",
+                    complete_stage="new_chat",
                 )
 
         Thread(target=task, daemon=True).start()
 
     def _run_world_memory_create_async(self, body: Dict, session_id: str):
-        # print(f"[WORLD MEMORY CREATE] start session_id={session_id}")
+        print(f"[WORLD MEMORY CREATE] _run_world_memory_create_async start")
 
         char_info = body.copy()
         prompt_messages = self.prompt_builder.create_memory_prompt(char_info)
@@ -487,9 +467,6 @@ class MemoryManager:
 
                     if not dst_file.exists():
                         data = {
-                            "file_status": {
-                                "status": "ready"
-                            },
                             "last_target": None
                         }
 
@@ -516,98 +493,120 @@ class MemoryManager:
         mes_example: str = "",
     ):
         def task():
-            session_char_dir = config.SESSIONS_DIR / session_id / "character"
-            session_char_dir.mkdir(parents=True, exist_ok=True)
-
-            done: set[str] = set()
-
-            for name in relation_names:
-                try:
-                    if not isinstance(name, str):
-                        continue
-
-                    char_name = name.strip()
-                    if not char_name or char_name in done:
-                        continue
-                    done.add(char_name)
-
-                    if not self._has_source_character_card(char_name):
-                        print(f"[CHAR MEMORY] skip mob: {char_name}")
-                        continue
-
-                    char_file = session_char_dir / f"{char_name}.yaml"
-                    if not char_file.exists():
-                        print(f"[CHAR MEMORY] skip missing session yaml: {char_file}")
-                        continue
-
-                    memory_file = session_char_dir / f"{char_name}_memory.yaml"
-                    if memory_file.exists():
-                        print(f"[CHAR MEMORY] skip exists: {memory_file.name}")
-                        continue
-
-                    char_data = file_utils.load_yaml_file(char_file) or {}
-                    if not isinstance(char_data, dict):
-                        print(f"[CHAR MEMORY] skip invalid yaml: {char_file.name}")
-                        continue
-
-                    if not char_data.get("name") and not char_data.get("description"):
-                        print(f"[CHAR MEMORY] skip empty card: {char_file.name}")
-                        continue
-
-                    prompt_messages = self.prompt_builder.create_character_memory_prompt(char_data, description, scenario, first_mes)
-
-                    response_text = self.openrouter.send_message(
-                        messages=prompt_messages,
-                        temperature=0.7,
-                        max_tokens=1500
-                    )
-
-                    # print(f"[CHAR MEMORY RAW] {char_name}")
-                    # print(response_text)
-
-                    response_text = string_utils.strip_code_block(response_text)
-
-                    import datetime
-                    temp_dir = Path("temp")
-                    temp_dir.mkdir(exist_ok=True)
-                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    temp_file = temp_dir / f"character_memory_raw_{session_id}_{char_name}_{timestamp}.txt"
-
-                    with open(temp_file, "w", encoding="utf-8") as f:
-                        f.write(response_text)
-
-                    try:
-                        parsed_yaml = yaml.safe_load(response_text) or {}
-                        if not isinstance(parsed_yaml, dict):
-                            parsed_yaml = {}
-                    except Exception as e:
-                        print(f"[CHAR MEMORY] YAML parse failed: {char_name}: {e}")
-                        parsed_yaml = {}
-
-                    result = {
-                        "file_status": {"status": "ready"},
-                        "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
-                        "memory": parsed_yaml.get("memory", {}) if isinstance(parsed_yaml.get("memory"), dict) else {},
-                        "owned_items": parsed_yaml.get("owned_items", []) if isinstance(parsed_yaml.get("owned_items"), list) else [],
-                    }
-
-                    file_utils.save_yaml_file(memory_file, result)
-
-                    dynamic_list = string_utils.extract_dynamic_params_from_mes_example(mes_example)
-                    
-                    dynamic_list = [
-                        d for d in dynamic_list
-                        if isinstance(d, dict) and d.get("target")
-                    ]
-
-                    if dynamic_list:
-                        file_utils.apply_dynamic_params_to_characters(session_id, dynamic_list)
-                    
-                    print(f"[CHAR MEMORY] saved directory: {session_char_dir}")
-                    print(f"[CHAR MEMORY] saved: {memory_file.name}")
-                
-
-                except Exception as e:
-                    print(f"[CHAR MEMORY ERROR] {type(e).__name__}: {e}")
+            self._run_character_memory_create_sync(
+                session_id=session_id,
+                relation_names=relation_names,
+                description=description,
+                scenario=scenario,
+                first_mes=first_mes,
+                mes_example=mes_example,
+            )
 
         Thread(target=task, daemon=True).start()
+
+    def _run_character_memory_create_sync(
+        self,
+        session_id: str,
+        relation_names: list[str],
+        description: str = "",
+        scenario: str = "",
+        first_mes: str = "",
+        mes_example: str = "",
+    ):
+        print("_run_character_memory_create_sync start")
+        print(f"[CHAR MEMORY] relation_names = {relation_names}")
+
+        session_char_dir = config.SESSIONS_DIR / session_id / "character"
+        session_char_dir.mkdir(parents=True, exist_ok=True)
+
+        done: set[str] = set()
+
+        for name in relation_names:
+            print(f"[CHAR MEMORY] loop start: {name!r}")
+            try:
+                if not isinstance(name, str):
+                    print(f"[CHAR MEMORY] skip not str: {name!r}")
+                    continue
+
+                char_name = name.strip()
+                print(f"[CHAR MEMORY] normalized: {char_name!r}")
+
+                if not char_name:
+                    print("[CHAR MEMORY] skip empty")
+                    continue
+
+                if char_name in done:
+                    print(f"[CHAR MEMORY] skip duplicate: {char_name}")
+                    continue
+
+                done.add(char_name)
+
+                if not self._has_source_character_card(char_name):
+                    print(f"[CHAR MEMORY] skip mob: {char_name}")
+                    continue
+
+                print(f"[CHAR MEMORY] card exists: {char_name}")
+
+                char_file = session_char_dir / f"{char_name}.yaml"
+                print(f"[CHAR MEMORY] char_file: {char_file}")
+
+                if not char_file.exists():
+                    print(f"[CHAR MEMORY] skip missing session yaml: {char_file}")
+                    continue
+
+                memory_file = session_char_dir / f"{char_name}_memory.yaml"
+                print(f"[CHAR MEMORY] memory_file: {memory_file}")
+
+                if memory_file.exists():
+                    print(f"[CHAR MEMORY] skip exists: {memory_file.name}")
+                    continue
+
+                print(f"[CHAR MEMORY] load yaml start: {char_name}")
+                char_data = file_utils.load_yaml_file(char_file) or {}
+                print(f"[CHAR MEMORY] load yaml end: {char_name}")
+
+                print(f"[CHAR MEMORY] prompt build start: {char_name}")
+                prompt_messages = self.prompt_builder.create_character_memory_prompt(
+                    char_data,
+                    description,
+                    scenario,
+                    first_mes,
+                )
+                print(f"[CHAR MEMORY] prompt build end: {char_name}")
+
+                print(f"[CHAR MEMORY] send_message start: {char_name}")
+                response_text = self.openrouter.send_message(
+                    messages=prompt_messages,
+                    temperature=0.7,
+                    max_tokens=1500
+                )
+
+                print(f"[CHAR MEMORY] parse start: {char_name}")
+                response_text = string_utils.strip_code_block(response_text)
+                parsed_yaml = yaml.safe_load(response_text) or {}
+                print(f"[CHAR MEMORY] parse end: {char_name}")
+
+                result = {
+                    "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
+                    "memory": parsed_yaml.get("memory", {}) if isinstance(parsed_yaml.get("memory"), dict) else {},
+                    "owned_items": parsed_yaml.get("owned_items", []) if isinstance(parsed_yaml.get("owned_items"), list) else [],
+                }
+
+                print(f"[CHAR MEMORY] save start: {memory_file}")
+                saved = file_utils.save_yaml_file(memory_file, result)
+                print(f"[CHAR MEMORY] save result: {saved}")
+
+                if not saved:
+                    raise RuntimeError(f"character memory save failed: {memory_file}")
+
+                print(f"[CHAR MEMORY] saved: {memory_file.name}")
+                print(f"[CHAR MEMORY] exists after save: {memory_file.exists()}")
+
+                print(f"[CHAR MEMORY] send_message end: {char_name}")
+            except Exception as e:
+                print(f"[CHAR MEMORY ERROR] {type(e).__name__}: {e}")
+                import traceback
+                print(traceback.format_exc())
+                raise
+
+        print("_run_character_memory_create_sync end")

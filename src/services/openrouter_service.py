@@ -5,6 +5,7 @@ OpenRouterとの通信を専門に扱うサービスクラス
 """
 
 import requests
+import time
 from typing import List, Dict, Any, Optional
 
 from config import config
@@ -58,8 +59,6 @@ class OpenRouterService:
 
         payload_messages.extend(messages)
 
-        # print("送信内容：", payload_messages)
-        
         payload = {
             "model": target_model,
             "messages": payload_messages,
@@ -68,43 +67,65 @@ class OpenRouterService:
             **kwargs
         }
 
+        started_at = time.time()
+
         try:
+            print(f"[OPENROUTER] send_message start: model={target_model}, started_at={started_at}")
+
+            print(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
             response = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=self.headers,
                 json=payload,
-                timeout=90
+                timeout=(10, 90)   # connect timeout, read timeout
             )
-            
-            response.raise_for_status()
+            print(f"[OPENROUTER] requests.post end: elapsed={time.time() - started_at:.2f}s")
 
+            print(f"[OPENROUTER] raise_for_status start: elapsed={time.time() - started_at:.2f}s, status={response.status_code}")
+            response.raise_for_status()
+            print(f"[OPENROUTER] raise_for_status end: elapsed={time.time() - started_at:.2f}s")
+
+            print(f"[OPENROUTER] response.json start: elapsed={time.time() - started_at:.2f}s")
             data = response.json()
-            #print("[OPENROUTER RAW JSON]", data)
+            print(f"[OPENROUTER] response.json end: elapsed={time.time() - started_at:.2f}s")
 
             if "choices" not in data:
                 raise Exception(f"OpenRouter response missing 'choices': {data}")
-            
+
+            print(f"[OPENROUTER] content extract start: elapsed={time.time() - started_at:.2f}s")
             content = data["choices"][0]["message"]["content"]
+            print(f"[OPENROUTER] content extract end: elapsed={time.time() - started_at:.2f}s")
 
-            # 簡単なログ出力
-            #usage = data.get("usage", {})
-            #print(f"[OpenRouter] Model: {target_model} | Prompt: {usage.get('prompt_tokens')} | Completion: {usage.get('completion_tokens')}")
+            result = content.strip()
+            print(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
 
-            return content.strip()
+            return result
+
+        except requests.exceptions.Timeout as e:
+            print(f"[OPENROUTER TIMEOUT] elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
+            raise
 
         except requests.exceptions.RequestException as e:
-            print(f"[ERROR] OpenRouter API request failed: {e}")
-            if hasattr(e, 'response') and e.response is not None:
+            print(f"[ERROR] OpenRouter API request failed: elapsed={time.time() - started_at:.2f}s: {e}")
+            if hasattr(e, "response") and e.response is not None:
                 print(f"Status Code: {e.response.status_code}")
                 try:
                     print(f"Response: {e.response.json()}")
-                except:
+                except Exception:
                     print(f"Response text: {e.response.text}")
             raise
 
         except (KeyError, IndexError, TypeError) as e:
-            print(f"[ERROR] Failed to parse OpenRouter response: {e}")
+            print(f"[ERROR] Failed to parse OpenRouter response: elapsed={time.time() - started_at:.2f}s: {e}")
             raise Exception(f"OpenRouter response parsing error: {e}")
+
+        except Exception as e:
+            print(f"[ERROR] Unexpected error in send_message: elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
+            raise
+
+        finally:
+            print(f"[OPENROUTER] send_message end: elapsed={time.time() - started_at:.2f}s")
+
 
     def send_with_system(self, messages: List[Dict], system_prompt: str, **kwargs) -> str:
         """system_promptを明確に指定したいとき用の便利メソッド"""
