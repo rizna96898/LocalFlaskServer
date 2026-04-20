@@ -15,6 +15,7 @@ from helpers import string_utils
 from helpers import file_utils
 from services.openrouter_service import OpenRouterService
 import traceback
+import asyncio
 
 class MemoryManager:
     def __init__(self):
@@ -382,7 +383,11 @@ class MemoryManager:
                         raise RuntimeError(f"world memory save failed: {world_memory_path}")
 
                     relation_names = self._extract_relationship_names(world_relationships)
-                    self._sync_session_character_files(session_id, relation_names)
+                    self._sync_session_character_files(
+                        session_id=session_id,
+                        world_relation=relation_names,
+                        world_memory_path=world_memory_path,
+                    )
 
                     current_stage = "character"
                     self._run_character_memory_create_sync(
@@ -436,7 +441,7 @@ class MemoryManager:
         # 必要ならここで関連キャラの初期memory生成
         # self._run_character_memory_create_async(...)
         
-    def _sync_session_character_files(self, session_id: str, world_relation: list):
+    def _sync_session_character_files(self, session_id: str, world_relation: list, world_memory_path: Path):
         try:
             st_char_dir = Path(config.CHARACTERS_DIR)
             session_char_dir = config.SESSIONS_DIR / session_id / "character"
@@ -493,6 +498,104 @@ class MemoryManager:
                         }
 
                         file_utils.save_yaml_file(dst_file, data)
+            # --- ここから sub の詳細生成 ---
+            world_memory = file_utils.load_yaml_file(world_memory_path) or {}
+            current_state = world_memory.get("current_state", {}) if isinstance(world_memory, dict) else {}
+            participants = current_state.get("participants", []) if isinstance(current_state, dict) else []
+            world_block = world_memory.get("world", {}) if isinstance(world_memory, dict) else {}
+            world_relationships = world_block.get("world_relationships", []) if isinstance(world_block, dict) else []
+
+            prompt_data = file_utils.load_yaml_file(
+                config.PROMPTS_DIR / "sub_character_prompt.yaml"
+            ) or {}
+
+            sub_template = prompt_data.get("sub_template", "")
+            tail_template = prompt_data.get("tail_template", "")
+
+            for participant in participants:
+                if not isinstance(participant, str):
+                    continue
+
+                text = participant.strip()
+                if not text:
+                    continue
+
+                if "：" in text:
+                    sub_name, role = text.split("：", 1)
+                elif ":" in text:
+                    sub_name, role = text.split(":", 1)
+                else:
+                    continue
+
+                sub_name = sub_name.strip()
+                role = role.strip()
+
+                if role != "sub":
+                    continue
+
+                character_file = session_char_dir / f"{sub_name}.yaml"
+                if not character_file.exists():
+                    print(f"[SUB] skip missing shell: {character_file}")
+                    continue
+
+                base_data = file_utils.load_yaml_file(character_file) or {}
+                if not isinstance(base_data, dict):
+                    base_data = {}
+
+                prompt_text = sub_template.format(
+                    name=sub_name,
+                    world_scenario=world_memory.get("scenario", ""),
+                    world_relationships="\n".join(world_relationships) if isinstance(world_relationships, list) else "",
+                )
+                if tail_template:
+                    prompt_text = prompt_text + "\n" + tail_template
+
+                result_text = self.openrouter.send_message(
+                    messages=[{"role": "user", "content": prompt_text}],
+                    temperature=0.7,
+                    max_tokens=1500,
+                )
+
+                response_text = string_utils.strip_code_block(result_text)
+
+                try:
+                    parsed_yaml = yaml.safe_load(response_text) or {}
+                    if not isinstance(parsed_yaml, dict):
+                        parsed_yaml = {}
+                except Exception as e:
+                    print(f"[SUB] YAML parse failed: {sub_name}: {e}")
+                    parsed_yaml = {}
+
+                base_profile = parsed_yaml.get("base_profile", {}) if isinstance(parsed_yaml.get("base_profile"), dict) else {}
+                personality = parsed_yaml.get("personality", {}) if isinstance(parsed_yaml.get("personality"), dict) else {}
+                attitude = parsed_yaml.get("attitude", {}) if isinstance(parsed_yaml.get("attitude"), dict) else {}
+                current_state_data = parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {}
+
+                if "base_profile" not in base_data or not isinstance(base_data.get("base_profile"), dict):
+                    base_data["base_profile"] = {"name": sub_name}
+                if "personality" not in base_data or not isinstance(base_data.get("personality"), dict):
+                    base_data["personality"] = {}
+                if "attitude" not in base_data or not isinstance(base_data.get("attitude"), dict):
+                    base_data["attitude"] = {}
+                if "current_state" not in base_data or not isinstance(base_data.get("current_state"), dict):
+                    base_data["current_state"] = {}
+
+                base_data["base_profile"]["name"] = sub_name
+                base_data["base_profile"]["role"] = base_profile.get("role")
+                base_data["base_profile"]["relation_to_main"] = base_profile.get("relation_to_main")
+
+                base_data["personality"]["base_traits"] = personality.get("base_traits", []) if isinstance(personality.get("base_traits"), list) else []
+                base_data["personality"]["speech_style"] = personality.get("speech_style")
+
+                base_data["attitude"]["to_main"] = attitude.get("to_main")
+                base_data["attitude"]["to_player"] = attitude.get("to_player")
+
+                base_data["current_state"]["emotion"] = current_state_data.get("emotion")
+                if "last_target" not in base_data["current_state"]:
+                    base_data["current_state"]["last_target"] = None
+
+                file_utils.save_yaml_file(character_file, base_data)
+                print(f"[SUB] saved yaml: {character_file}")
 
             print(f"[WORLD] === character sync end ===")
 
