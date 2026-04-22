@@ -172,6 +172,7 @@ def _normalize_name(name: str) -> str:
 
 
 WORLD_MEMORY_DEFAULT = {
+    "player_name": "",
     "current_state": {
         "time": None,
         "participants": [],
@@ -305,11 +306,13 @@ def build_characters_text(participants: list[str]) -> str:
             lines.append(f"- {p}")
     return "\n".join(lines)
 
-def normalize_world_memory_data(raw: dict[str, Any] | None) -> dict[str, Any]:
+def normalize_world_memory_data(player_name: str, raw: dict[str, Any] | None) -> dict[str, Any]:
     data = deepcopy(WORLD_MEMORY_DEFAULT)
 
     if not isinstance(raw, dict):
         return data
+
+    data["player_name"] = player_name
 
     file_status = raw.get("file_status")
     if isinstance(file_status, dict):
@@ -569,3 +572,12 @@ def is_valid_hit(message: str, target: str) -> bool:
         f"{target} " in message or
         f"{target}　" in message
     )
+
+def get_player_name(text: str) -> str:
+
+    match = re.search(r"\[player\]:\s*([^：\[]+)", text)
+
+    if match:
+        player_name = match.group(1).strip()
+
+    return player_name

@@ -197,6 +197,7 @@ class ChatOrchestrator:
                     "status_code": 503,
                 }
 
+            # 更新管理ファイルのステータスチェック
             ok = file_utils.wait_until_prepare_status(
                 session_id,
                 target_stage="prepare",
@@ -207,12 +208,15 @@ class ChatOrchestrator:
                     "response": {"error": "prepare が error で終了しました。"},
                     "status_code": 500,
                 }
-
             file_utils.mark_prepare_processing(session_id, "main_chat")
 
             # 履歴ファイルをロードする。
             directory_full_path = config.SESSIONS_DIR / session_id
             history = file_utils.load_history(directory_full_path)
+
+            # world.yaml を読み込む（日付用）
+            world_file = config.SESSIONS_DIR / session_id / "world_memory.yaml"
+            world_data = file_utils.load_yaml_file(world_file) or {}
 
             # session_idの取得
             call_body = body.copy()
@@ -226,8 +230,16 @@ class ChatOrchestrator:
             messages = body.get("messages", [])
             last_user_message = string_utils.get_reversed_user_message(messages)
 
+            player_name = world_data["player_name"]
+            print("プレイヤー名：", player_name)
+            # メインプレイヤーのyamlを読み込む
+            memory_file = config.SESSIONS_DIR / session_id / "character"
+            player_path = file_utils.find_character_memory_file(player_name, memory_file)
+            player_data = file_utils.load_yaml_file(player_path) or {}
+
             # 誰向けの発言か。
-            character_name = "白井　結"
+            character_name = player_data["last_target"]
+            print("誰向けの発言か", character_name) 
 
             # print("[ORCH] before main reply generation")
             # 6) 応答生成
@@ -242,14 +254,45 @@ class ChatOrchestrator:
 
             response_text = self._generate_response(session_id, messages, system_message)
 
-            last_assistant_message = string_utils.get_reserved_assistant_message(messages)
-
             # キャラ_memoryを読み込む
-            memory_file = config.SESSIONS_DIR / session_id / "character"
             memory_path = file_utils.find_character_memory_file(character_name, memory_file)
             print("load target", memory_path)
+            character_memory_data = file_utils.load_yaml_file(memory_path) or {}
 
-            character_memory_data = file_utils.load_yaml_file(memory_path)
+            # 日付取得
+            world_time = ""
+            current_state = world_data.get("current_state", {})
+            if isinstance(current_state, dict):
+                world_time = str(current_state.get("time", "")).strip()
+
+            # parameter取得
+            parameter_lines = []
+            parameter_list = character_memory_data.get("parameter", [])
+            if isinstance(parameter_list, list):
+                for item in parameter_list:
+                    if not isinstance(item, dict):
+                        continue
+
+                    display_name = str(item.get("display_name", "")).strip()
+                    count = item.get("count", 0)
+
+                    if not display_name:
+                        continue
+
+                    parameter_lines.append(f"{display_name}：{count}")
+
+            # 表示用本文を組み立て
+            display_parts = []
+
+            if world_time:
+                display_parts.append(f"（{world_time}）")
+
+            display_parts.append(response_text)
+
+            if parameter_lines:
+                display_parts.append("\n".join(parameter_lines))
+
+            display_text = "\n".join(display_parts)
             
             # ここが変だよ日本人
             # 今回の発言で話しかけたかどうか判定しないと駄目かな？
@@ -290,7 +333,7 @@ class ChatOrchestrator:
             })
             history.append({
                 "t": time.time(),
-                "speaker": "白井 結",
+                "speaker": character_name,
                 "role": "assistant",
                 "content": response_text
             })
@@ -312,7 +355,7 @@ class ChatOrchestrator:
                             "name": character_name,
                             "original_avatar": character_name + ".png",
                             "force_avatar": character_name + ".png",
-                            "content": response_text
+                            "content": display_text
                         },
                         "finish_reason": "stop",
                         # ↓ 次話者情報

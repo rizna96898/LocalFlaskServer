@@ -70,53 +70,53 @@ class PromptBuilder:
             {"role": "user",   "content": user_content}
         ]
 
-    def update_memory_prompt(
-        self,
-        body: Dict,
-        last_user_content: str,
-        last_assistant_content: str,
-        old_world_memory: Dict,
-    ) -> List[Dict]:
-        """world_memory 更新用のプロンプト"""
+    # def update_memory_prompt(
+    #     self,
+    #     body: Dict,
+    #     last_user_content: str,
+    #     last_assistant_content: str,
+    #     old_world_memory: Dict,
+    # ) -> List[Dict]:
+    #     """world_memory 更新用のプロンプト"""
 
-        base = self._load("memory_system.yaml")
-        update = self._load("memory_update.yaml")
+    #     base = self._load("memory_system.yaml")
+    #     update = self._load("memory_update.yaml")
 
-        current_state = old_world_memory.get("current_state", {}) or {}
-        world = old_world_memory.get("world", {}) or {}
+    #     current_state = old_world_memory.get("current_state", {}) or {}
+    #     world = old_world_memory.get("world", {}) or {}
 
-        previous_world = "\n".join([
-            "〖前回の world_memory〗",
-            f"time: {current_state.get('time', '不明')}",
-            f"participants: {current_state.get('participants', '不明')}",
-            f"world_relationships: {world.get('world_relationships', '不明')}",
-        ])
+    #     previous_world = "\n".join([
+    #         "〖前回の world_memory〗",
+    #         f"time: {current_state.get('time', '不明')}",
+    #         f"participants: {current_state.get('participants', '不明')}",
+    #         f"world_relationships: {world.get('world_relationships', '不明')}",
+    #     ])
 
-        conversation = "\n\n".join([
-            "〖ユーザ発言〗\n" + (last_user_content or ""),
-            "〖アシスタント発言〗\n" + (last_assistant_content or ""),
-        ])
+    #     conversation = "\n\n".join([
+    #         "〖ユーザ発言〗\n" + (last_user_content or ""),
+    #         "〖アシスタント発言〗\n" + (last_assistant_content or ""),
+    #     ])
 
-        optional_context = self._join_sections(
-            f"名前: {body.get('name', '')}" if body.get("name") else "",
-            "説明:\n" + str(body.get("description", "")).strip() if body.get("description") else "",
-            "シナリオ:\n" + str(body.get("scenario", "")).strip() if body.get("scenario") else "",
-            "開始文:\n" + str(body.get("first_mes", "")).strip() if body.get("first_mes") else "",
-        )
+    #     optional_context = self._join_sections(
+    #         f"名前: {body.get('name', '')}" if body.get("name") else "",
+    #         "説明:\n" + str(body.get("description", "")).strip() if body.get("description") else "",
+    #         "シナリオ:\n" + str(body.get("scenario", "")).strip() if body.get("scenario") else "",
+    #         "開始文:\n" + str(body.get("first_mes", "")).strip() if body.get("first_mes") else "",
+    #     )
 
-        user_content = self._join_sections(
-            update.get("world_header", ""),
-            optional_context,
-            previous_world,
-            conversation,
-            update.get("world_template", ""),
-            update.get("tail_template", ""),
-        )
+    #     user_content = self._join_sections(
+    #         update.get("world_header", ""),
+    #         optional_context,
+    #         previous_world,
+    #         conversation,
+    #         update.get("world_template", ""),
+    #         update.get("tail_template", ""),
+    #     )
 
-        return [
-            {"role": "system", "content": base.get("system", "")},
-            {"role": "user", "content": user_content},
-        ]
+    #     return [
+    #         {"role": "system", "content": base.get("system", "")},
+    #         {"role": "user", "content": user_content},
+    #     ]
 
     # ======================
     # 基本システムプロンプト

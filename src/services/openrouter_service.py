@@ -96,7 +96,10 @@ class OpenRouterService:
             # print(f"[OPENROUTER] content extract start: elapsed={time.time() - started_at:.2f}s")
             content = data["choices"][0]["message"]["content"]
             # print(f"[OPENROUTER] content extract end: elapsed={time.time() - started_at:.2f}s")
-
+            
+            if content is None:
+                raise ValueError("OpenRouter returned None content")
+            
             result = content.strip()
             # print(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
 
