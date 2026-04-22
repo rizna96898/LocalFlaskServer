@@ -198,7 +198,7 @@ def find_character_memory_file(target: str, session_char_dir: Path):
 
     return None
 
-def _find_character_file(char_name: str, st_char_dir: Path) -> Path | None:
+def find_character_file(char_name: str, st_char_dir: Path) -> Path | None:
     """スペース無視＋部分一致でキャラカードを探す"""
     target = string_utils._normalize_name(char_name)
 

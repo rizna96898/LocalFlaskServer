@@ -92,14 +92,26 @@ class OpenRouterService:
 
             if "choices" not in data:
                 raise Exception(f"OpenRouter response missing 'choices': {data}")
-
+            
             # print(f"[OPENROUTER] content extract start: elapsed={time.time() - started_at:.2f}s")
-            content = data["choices"][0]["message"]["content"]
-            # print(f"[OPENROUTER] content extract end: elapsed={time.time() - started_at:.2f}s")
             
+            choices = data.get("choices") or []
+            choice0 = choices[0] if choices else {}
+            message0 = choice0.get("message", {}) if isinstance(choice0, dict) else {}
+            content = message0.get("content") if isinstance(message0, dict) else None
+
             if content is None:
-                raise ValueError("OpenRouter returned None content")
-            
+                raise ValueError(
+                    "[OpenRouter] content is None | "
+                    f"model={model} | "
+                    f"finish_reason={choice0.get('finish_reason') if isinstance(choice0, dict) else None} | "
+                    f"message_keys={list(message0.keys()) if isinstance(message0, dict) else None} | "
+                    f"choice_keys={list(choice0.keys()) if isinstance(choice0, dict) else None} | "
+                    f"response={data!r}"
+                )
+
+            # print(f"[OPENROUTER] content extract end: elapsed={time.time() - started_at:.2f}s")
+
             result = content.strip()
             # print(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
 

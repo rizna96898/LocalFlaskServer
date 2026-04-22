@@ -233,8 +233,8 @@ class ChatOrchestrator:
             player_name = world_data["player_name"]
             print("プレイヤー名：", player_name)
             # メインプレイヤーのyamlを読み込む
-            memory_file = config.SESSIONS_DIR / session_id / "character"
-            player_path = file_utils.find_character_memory_file(player_name, memory_file)
+            char_file = config.SESSIONS_DIR / session_id / "character"
+            player_path = file_utils.find_character_file(player_name, char_file)
             player_data = file_utils.load_yaml_file(player_path) or {}
 
             # 誰向けの発言か。
@@ -255,6 +255,7 @@ class ChatOrchestrator:
             response_text = self._generate_response(session_id, messages, system_message)
 
             # キャラ_memoryを読み込む
+            memory_file = config.SESSIONS_DIR / session_id / "character"
             memory_path = file_utils.find_character_memory_file(character_name, memory_file)
             print("load target", memory_path)
             character_memory_data = file_utils.load_yaml_file(memory_path) or {}

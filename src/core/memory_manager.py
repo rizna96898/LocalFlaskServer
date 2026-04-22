@@ -132,7 +132,7 @@ class MemoryManager:
                 print("player_name", player_name)
                 character_path = Path(config.SESSIONS_DIR / session_id / "character")
 
-                player_path = file_utils._find_character_file(player_name, character_path)
+                player_path = file_utils.find_character_file(player_name, character_path)
 
                 print("player_path", player_path)
 
@@ -474,7 +474,7 @@ class MemoryManager:
 
                 dst_file = session_char_dir / f"{char_name}.yaml"
 
-                found_file = file_utils._find_character_file(char_name, st_char_dir)
+                found_file = file_utils.find_character_file(char_name, st_char_dir)
 
                 #print(f"[WORLD] search result: {found_file}")
 
@@ -607,7 +607,7 @@ class MemoryManager:
         st_char_dir = Path(config.CHARACTERS_DIR)
         if not st_char_dir.exists():
             return False
-        return file_utils._find_character_file(char_name, st_char_dir) is not None
+        return file_utils.find_character_file(char_name, st_char_dir) is not None
     
     def _run_character_memory_create_async(
         self,
@@ -700,7 +700,7 @@ class MemoryManager:
                 )
                 # print(f"[CHAR MEMORY] prompt build end: {char_name}")
 
-                # print(f"[CHAR MEMORY] send_message start: {prompt_messages}")
+                print(f"[CHAR MEMORY] ここで投げようとして結果落ちてるっぽい")
                 response_text = self.openrouter.send_message(
                     messages=prompt_messages,
                     temperature=0.7,
