@@ -321,10 +321,22 @@ def get_character_memory(
     """
     files/sessions/{session_id}/character/*_memory.yaml を読み込み、
     指定キャラの memory dict を返す。
+    完全一致 → 部分一致 の順で探す。
     """
     all_memories = load_character_memories(session_id, sessions_dir)
     key = string_utils._normalize_name(character_name)
-    return all_memories.get(key)
+
+    # まず完全一致
+    memory = all_memories.get(key)
+    if memory is not None:
+        return memory
+
+    # 次に部分一致
+    for name, data in all_memories.items():
+        if key and (key in name or name in key):
+            return data
+
+    return None
 
 def load_character_memories(
     session_id: str,

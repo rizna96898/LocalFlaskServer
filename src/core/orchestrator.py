@@ -9,6 +9,7 @@
 
 import uuid
 import time
+import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Iterable
@@ -79,29 +80,6 @@ class ChatOrchestrator:
             file_utils.mark_prepare_processing(session_id, "prepare")
 
             self.memory_manager.create_target_speakers(session_id, body)
-
-            # ここは実データの持ち方に合わせて調整
-            mob_count = 0
-
-            target_speakers = body.get("target_speakers")
-            if isinstance(target_speakers, list):
-                # プレイヤーとメインキャラを除いた人数をモブ数にしたいならここで調整
-                mob_count = len(target_speakers)
-
-            elif isinstance(body.get("mob_count"), int):
-                mob_count = int(body.get("mob_count"))
-
-            needs_mob_chat = mob_count > 0
-
-            file_utils.update_prepare_status(
-                session_id,
-                status="ready",
-                complete_stage="prepare",
-                error_stage=None,
-                error_message=None,
-                needs_mob_chat=needs_mob_chat,
-                mob_count=mob_count,
-            )
 
             return {
                 "ok": True,
@@ -232,6 +210,7 @@ class ChatOrchestrator:
 
             player_name = world_data["player_name"]
             print("プレイヤー名：", player_name)
+
             # メインプレイヤーのyamlを読み込む
             char_file = config.SESSIONS_DIR / session_id / "character"
             player_path = file_utils.find_character_file(player_name, char_file)
@@ -240,6 +219,13 @@ class ChatOrchestrator:
             # 誰向けの発言か。
             character_name = player_data["last_target"]
             print("誰向けの発言か", character_name) 
+
+            
+            # 日付取得
+            world_time = ""
+            current_state = world_data.get("current_state", {})
+            if isinstance(current_state, dict):
+                world_time = str(current_state.get("time", "")).strip()
 
             # print("[ORCH] before main reply generation")
             # 6) 応答生成
@@ -254,17 +240,49 @@ class ChatOrchestrator:
 
             response_text = self._generate_response(session_id, messages, system_message)
 
+            # 今回の発言がプレイヤーに向けられた物かどうか判別
+            # yamlのロード
+            prompt_data = file_utils.load_yaml_file(
+                config.PROMPTS_DIR / "character_identification.yaml"
+            ) or {}
+
+            world_participants = string_utils.build_characters_text(world_data["current_state"]["participants"])
+
+            print("current participantsの編集後文字列", world_participants)
+            print("実行プロンプト原文", prompt_data)
+            system_prompt = prompt_data["system"]
+            template_prompt = prompt_data["template"]
+
+            template_prompt = template_prompt.replace("{characters}", world_participants)
+            template_prompt = template_prompt.replace("{player_message}", response_text)
+            
+            print("置換後プロンプト全文", template_prompt)
+
+            service = OpenRouterService()
+            
+            result = service.send_message(
+                messages=[
+                    {"role": "user", "content": template_prompt}
+                ],
+                system_prompt=system_prompt
+            )
+
+            parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
+            
+            target_text = parsed.get("target_speakers")
+
+            print("今回の結の発話対象：", target_text)
+
+            # キャラファイルを読み込む
+            caracter_path = file_utils.find_character_file(character_name, char_file)
+            caracter_data = file_utils.load_yaml_file(caracter_path) or {}
+            caracter_full_name = caracter_data["name"]
+
             # キャラ_memoryを読み込む
             memory_file = config.SESSIONS_DIR / session_id / "character"
-            memory_path = file_utils.find_character_memory_file(character_name, memory_file)
+            memory_path = file_utils.find_character_memory_file(caracter_full_name, memory_file)
             print("load target", memory_path)
             character_memory_data = file_utils.load_yaml_file(memory_path) or {}
-
-            # 日付取得
-            world_time = ""
-            current_state = world_data.get("current_state", {})
-            if isinstance(current_state, dict):
-                world_time = str(current_state.get("time", "")).strip()
 
             # parameter取得
             parameter_lines = []
@@ -334,7 +352,7 @@ class ChatOrchestrator:
             })
             history.append({
                 "t": time.time(),
-                "speaker": character_name,
+                "speaker": caracter_full_name,
                 "role": "assistant",
                 "content": response_text
             })
@@ -353,9 +371,9 @@ class ChatOrchestrator:
                         "index": 0,
                         "message": {
                             "role": "assistant",
-                            "name": character_name,
-                            "original_avatar": character_name + ".png",
-                            "force_avatar": character_name + ".png",
+                            "name": caracter_full_name,
+                            "original_avatar": caracter_full_name + ".png",
+                            "force_avatar": caracter_full_name + ".png",
                             "content": display_text
                         },
                         "finish_reason": "stop",

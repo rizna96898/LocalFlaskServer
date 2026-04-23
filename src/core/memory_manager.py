@@ -103,7 +103,7 @@ class MemoryManager:
                 world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])
 
                 print("current participantsの編集後文字列", world_participants)
-                print("実行プロンプト原文", prompt_data)
+                # print("実行プロンプト原文", prompt_data)
                 system_prompt = prompt_data["system"]
                 template_prompt = prompt_data["template"]
 
@@ -141,6 +141,28 @@ class MemoryManager:
                 player_obj["last_target"] = target
 
                 file_utils.save_yaml_file(player_path, player_obj)
+
+                # ここは実データの持ち方に合わせて調整
+                mob_count = 0
+
+                if isinstance(target, list):
+                    # プレイヤーとメインキャラを除いた人数をモブ数にしたいならここで調整
+                    mob_count = len(target)
+
+                elif isinstance(body.get("mob_count"), int):
+                    mob_count = int(body.get("mob_count"))
+
+                needs_mob_chat = mob_count > 0
+
+                file_utils.update_prepare_status(
+                    session_id,
+                    status="ready",
+                    complete_stage="prepare",
+                    error_stage=None,
+                    error_message=None,
+                    needs_mob_chat=needs_mob_chat,
+                    mob_count=mob_count,
+                )
 
                 print(f"[CREATE TARGET SPEAKERS UPDATE] ")
 

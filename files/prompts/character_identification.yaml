@@ -36,3 +36,9 @@ template: |
 
   今回のユーザのセリフ
   {player_message}
+
+speaker_template: |
+  以下の情報をもとに YAML を作成してください。
+
+  今回のセリフ
+  {player_message}
