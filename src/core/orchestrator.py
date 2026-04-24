@@ -210,7 +210,7 @@ class ChatOrchestrator:
             # 今回のユーザ発言を取得する
             messages = body.get("messages", [])
             last_user_message = string_utils.get_reversed_user_message(messages)
-
+            print("[MAIN] 今回のユーザ発言", last_user_message)
             player_name = world_data["player_name"]
             print("プレイヤー名：", player_name)
 
@@ -251,7 +251,7 @@ class ChatOrchestrator:
             # character_identificationになって
             # 今回のプレイヤー発言と、モデル返答を渡すようにする
             prompt_data = file_utils.load_yaml_file(
-                config.PROMPTS_DIR / "player_identification.yaml"
+                config.PROMPTS_DIR / "character_identification.yaml"
             ) or {}
 
             world_participants = string_utils.build_characters_text(world_data["current_state"]["participants"])
@@ -262,8 +262,9 @@ class ChatOrchestrator:
             template_prompt = prompt_data["template"]
 
             template_prompt = template_prompt.replace("{characters}", world_participants)
-            template_prompt = template_prompt.replace("{player_message}", response_text)
-            
+            template_prompt = template_prompt.replace("{player_message}", last_user_message)
+            template_prompt = template_prompt.replace("{player_answer}", response_text)
+
             print("置換後プロンプト全文", template_prompt)
 
             service = OpenRouterService()
@@ -273,6 +274,7 @@ class ChatOrchestrator:
                     {"role": "user", "content": template_prompt}
                 ],
                 system_prompt=system_prompt
+
             )
 
             parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
