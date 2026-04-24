@@ -195,6 +195,9 @@ class ChatOrchestrator:
             # world.yaml を読み込む（日付用）
             world_file = config.SESSIONS_DIR / session_id / "world_memory.yaml"
             world_data = file_utils.load_yaml_file(world_file) or {}
+            print("[LOAD] world:", world_file)
+            print("[DATA] world:", world_data)
+            print("[WORLD]", world_data.get("current_state"))
 
             # session_idの取得
             call_body = body.copy()
@@ -215,6 +218,9 @@ class ChatOrchestrator:
             char_file = config.SESSIONS_DIR / session_id / "character"
             player_path = file_utils.find_character_file(player_name, char_file)
             player_data = file_utils.load_yaml_file(player_path) or {}
+            print("[LOAD] player:", player_path)
+            print("[DATA] player:", player_data)
+            print("[PLAYER]", player_data.get("current_state"))
 
             # 誰向けの発言か。
             character_name = player_data["last_target"]
@@ -242,8 +248,10 @@ class ChatOrchestrator:
 
             # 今回の発言がプレイヤーに向けられた物かどうか判別
             # yamlのロード
+            # character_identificationになって
+            # 今回のプレイヤー発言と、モデル返答を渡すようにする
             prompt_data = file_utils.load_yaml_file(
-                config.PROMPTS_DIR / "character_identification.yaml"
+                config.PROMPTS_DIR / "player_identification.yaml"
             ) or {}
 
             world_participants = string_utils.build_characters_text(world_data["current_state"]["participants"])
@@ -269,9 +277,17 @@ class ChatOrchestrator:
 
             parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
             
+            # フルネームで帰ってこないかもしれないけど、一旦OK
             target_text = parsed.get("target_speakers")
 
             print("今回の結の発話対象：", target_text)
+
+            # playerに会話を渡さないフラグ
+            needs_mob_chat = bool(target_text)
+            # 将来的には要らない（複数会話の場合でも話者が判ってればそっちで判別できるはずなので無駄に太らす事は無い
+            mob_count = 0
+            if needs_mob_chat:
+                mob_count = 1
 
             # キャラファイルを読み込む
             caracter_path = file_utils.find_character_file(character_name, char_file)
@@ -316,32 +332,32 @@ class ChatOrchestrator:
             # ここが変だよ日本人
             # 今回の発言で話しかけたかどうか判定しないと駄目かな？
             # その場にいるからと言って話しかけたかどうかは中身を見ないといけない
-            print("load character memory. focus_targets", character_memory_data["current_state"]["focus_targets"])
+            # print("load character memory. focus_targets", character_memory_data["current_state"]["focus_targets"])
 
-            forcus_target = character_memory_data["current_state"]["focus_targets"]
-            participants = character_memory_data.get("participants", [])
+            # forcus_target = character_memory_data["current_state"]["focus_targets"]
+            # participants = character_memory_data.get("participants", [])
 
-            # 本チャット後の「次話者候補」
-            next_speakers = []
+            # # 本チャット後の「次話者候補」
+            # next_speakers = []
 
-            call_target_text = string_utils.find_existing_character(last_user_message, participants)
+            # call_target_text = string_utils.find_existing_character(last_user_message, participants)
 
-            # 1. focus_targets が1人なら、その人を次話者候補にする
-            if len(forcus_target) == 1:
-                # name配列だけ持つ
-                next_speakers = [
-                    str(item.get("name")).strip()
-                    for item in forcus_target
-                    if isinstance(item, dict) and item.get("name")
-                ]
+            # # 1. focus_targets が1人なら、その人を次話者候補にする
+            # if len(forcus_target) == 1:
+            #     # name配列だけ持つ
+            #     next_speakers = [
+            #         str(item.get("name")).strip()
+            #         for item in forcus_target
+            #         if isinstance(item, dict) and item.get("name")
+            #     ]
 
-            else:
-                # 2. ２名以上 focus_targets に存在する場合や、
-                #    引っかからない / 新規モブの場合は後でLLM判定
-                print("TODO: ask target judge LLM")
+            # else:
+            #     # 2. ２名以上 focus_targets に存在する場合や、
+            #     #    引っかからない / 新規モブの場合は後でLLM判定
+            #     print("TODO: ask target judge LLM")
 
-            needs_mob_chat = len(next_speakers) > 0
-            mob_count = len(next_speakers)
+            # needs_mob_chat = len(next_speakers) > 0
+            # mob_count = len(next_speakers)
 
             # 履歴保存
             history.append({
@@ -358,7 +374,7 @@ class ChatOrchestrator:
             })
             file_utils.save_history(directory_full_path, history)
 
-            print("次の発言者予定", next_speakers)
+            print("次の発言者予定", target_text)
             print("フラグ", needs_mob_chat)
 
             result = {
@@ -378,8 +394,8 @@ class ChatOrchestrator:
                         },
                         "finish_reason": "stop",
                         # ↓ 次話者情報
-                        "target_speakers": next_speakers,
-                        "remaining_speakers": next_speakers,
+                        "target_speakers": target_text,
+                        "remaining_speakers": target_text,
                         "needs_mob_chat": needs_mob_chat,
                         "mob_count": mob_count,
                     }],
@@ -391,6 +407,12 @@ class ChatOrchestrator:
                 },
                 "status_code": 200
             }
+
+            next_speakers = []
+            if isinstance(target_text, list):
+                next_speakers = target_text
+            elif target_text:
+                next_speakers = [target_text]
 
             file_utils.update_prepare_status(
                 session_id,

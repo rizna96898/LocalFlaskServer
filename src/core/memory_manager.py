@@ -97,7 +97,7 @@ class MemoryManager:
                     config.SESSIONS_DIR / session_id / "world_memory.yaml"
                 ) or {}
                 prompt_data = file_utils.load_yaml_file(
-                    config.PROMPTS_DIR / "character_identification.yaml"
+                    config.PROMPTS_DIR / "player_identification.yaml"
                 ) or {}
 
                 world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])
@@ -401,7 +401,13 @@ class MemoryManager:
                     world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
                     player_name = string_utils.get_player_name(body.get("description"))
                     normalized_memory = string_utils.normalize_summary_data(player_name, res_memory)
+
+                    print("[DEBUG] parsed_yaml.current_state =", parsed_yaml.get("current_state"))
+                    print("[DEBUG] res_memory.current_state =", res_memory.get("current_state"))
+                    print("[DEBUG] normalized_memory.current_state =", normalized_memory.get("current_state"))
+                    print("[DEBUG] world_memory_path =", world_memory_path)
                     saved = file_utils.save_yaml_file(world_memory_path, normalized_memory)
+                    
                     if not saved:
                         raise RuntimeError(f"world memory save failed: {world_memory_path}")
 
