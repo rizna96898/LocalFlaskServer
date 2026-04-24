@@ -165,256 +165,315 @@ class ChatOrchestrator:
     # 多分トータルのチャットハンドラーが必要になる（と思ってる）
 
     # メインプレイヤーチャット（予定）
+    # def handle_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
+    #     session_id = body.get("session_id")
+
+    #     try:
+    #         if not session_id:
+    #             return {
+    #                 "response": {"error": "session_idがありません。"},
+    #                 "status_code": 503,
+    #             }
+
+    #         # 更新管理ファイルのステータスチェック
+    #         ok = file_utils.wait_until_prepare_status(
+    #             session_id,
+    #             target_stage="prepare",
+    #             interval_sec=0.2,
+    #         )
+    #         if not ok:
+    #             return {
+    #                 "response": {"error": "prepare が error で終了しました。"},
+    #                 "status_code": 500,
+    #             }
+    #         file_utils.mark_prepare_processing(session_id, "main_chat")
+
+    #         # 履歴ファイルをロードする。
+    #         directory_full_path = config.SESSIONS_DIR / session_id
+    #         history = file_utils.load_history(directory_full_path)
+
+    #         # world.yaml を読み込む（日付用）
+    #         world_file = config.SESSIONS_DIR / session_id / "world_memory.yaml"
+    #         world_data = file_utils.load_yaml_file(world_file) or {}
+    #         print("[LOAD] world:", world_file)
+    #         print("[DATA] world:", world_data)
+    #         print("[WORLD]", world_data.get("current_state"))
+
+    #         # session_idの取得
+    #         call_body = body.copy()
+    #         call_body["session_id"] = session_id
+
+    #         # TODO
+    #         # 返信が壊れないようにメモリを作る必要あり
+
+    #         # print("システムプロンプト：", system_message)
+    #         # 今回のユーザ発言を取得する
+    #         messages = body.get("messages", [])
+    #         last_user_message = string_utils.get_reversed_user_message(messages)
+    #         print("[MAIN] 今回のユーザ発言", last_user_message)
+    #         player_name = world_data["player_name"]
+    #         print("プレイヤー名：", player_name)
+
+    #         # メインプレイヤーのyamlを読み込む
+    #         char_file = config.SESSIONS_DIR / session_id / "character"
+    #         player_path = file_utils.find_character_file(player_name, char_file)
+    #         player_data = file_utils.load_yaml_file(player_path) or {}
+    #         print("[LOAD] player:", player_path)
+    #         print("[DATA] player:", player_data)
+    #         print("[PLAYER]", player_data.get("current_state"))
+
+    #         # 誰向けの発言か。
+    #         character_name = player_data["last_target"]
+    #         print("誰向けの発言か", character_name) 
+
+            
+    #         # 日付取得
+    #         world_time = ""
+    #         current_state = world_data.get("current_state", {})
+    #         if isinstance(current_state, dict):
+    #             world_time = str(current_state.get("time", "")).strip()
+
+    #         # print("[ORCH] before main reply generation")
+    #         # 6) 応答生成
+    #         #    ここで LLM にチャットを投げる
+    #         # キャラ名と情報を渡しているが足りない
+    #         system_message = file_utils.build_character_comment_system_message(
+    #             session_id=session_id,
+    #             character_name=character_name,
+    #             sessions_dir=config.SESSIONS_DIR,
+    #             prompt_file = config.PROMPTS_DIR / "character_comment_prompt.yaml"
+    #         )
+
+    #         response_text = self._generate_response(session_id, messages, system_message)
+
+    #         # 今回の発言がプレイヤーに向けられた物かどうか判別
+    #         # yamlのロード
+    #         # character_identificationになって
+    #         # 今回のプレイヤー発言と、モデル返答を渡すようにする
+    #         prompt_data = file_utils.load_yaml_file(
+    #             config.PROMPTS_DIR / "character_identification.yaml"
+    #         ) or {}
+
+    #         world_participants = string_utils.build_characters_text(world_data["current_state"]["participants"])
+
+    #         print("current participantsの編集後文字列", world_participants)
+    #         print("実行プロンプト原文", prompt_data)
+    #         system_prompt = prompt_data["system"]
+    #         template_prompt = prompt_data["template"]
+
+    #         template_prompt = template_prompt.replace("{characters}", world_participants)
+    #         template_prompt = template_prompt.replace("{player_message}", last_user_message)
+    #         template_prompt = template_prompt.replace("{player_answer}", response_text)
+
+    #         print("置換後プロンプト全文", template_prompt)
+
+    #         service = OpenRouterService()
+            
+    #         result = service.send_message(
+    #             messages=[
+    #                 {"role": "user", "content": template_prompt}
+    #             ],
+    #             system_prompt=system_prompt
+
+    #         )
+
+    #         parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
+            
+    #         # フルネームで帰ってこないかもしれないけど、一旦OK
+    #         target_text = parsed.get("target_speakers")
+
+    #         print("今回の結の発話対象：", target_text)
+
+    #         # playerに会話を渡さないフラグ
+    #         needs_mob_chat = bool(target_text)
+    #         # 将来的には要らない（複数会話の場合でも話者が判ってればそっちで判別できるはずなので無駄に太らす事は無い
+    #         mob_count = 0
+    #         if needs_mob_chat:
+    #             mob_count = 1
+
+    #         # キャラファイルを読み込む
+    #         caracter_path = file_utils.find_character_file(character_name, char_file)
+    #         caracter_data = file_utils.load_yaml_file(caracter_path) or {}
+    #         caracter_full_name = caracter_data["name"]
+
+    #         # キャラ_memoryを読み込む
+    #         memory_file = config.SESSIONS_DIR / session_id / "character"
+    #         memory_path = file_utils.find_character_memory_file(caracter_full_name, memory_file)
+    #         print("load target", memory_path)
+    #         character_memory_data = file_utils.load_yaml_file(memory_path) or {}
+
+    #         # parameter取得
+    #         parameter_lines = []
+    #         parameter_list = character_memory_data.get("parameter", [])
+    #         if isinstance(parameter_list, list):
+    #             for item in parameter_list:
+    #                 if not isinstance(item, dict):
+    #                     continue
+
+    #                 display_name = str(item.get("display_name", "")).strip()
+    #                 count = item.get("count", 0)
+
+    #                 if not display_name:
+    #                     continue
+
+    #                 parameter_lines.append(f"{display_name}：{count}")
+
+    #         # 表示用本文を組み立て
+    #         display_parts = []
+
+    #         if world_time:
+    #             display_parts.append(f"（{world_time}）")
+
+    #         display_parts.append(response_text)
+
+    #         if parameter_lines:
+    #             display_parts.append("\n".join(parameter_lines))
+
+    #         display_text = "\n".join(display_parts)
+            
+    #         # ここが変だよ日本人
+    #         # 今回の発言で話しかけたかどうか判定しないと駄目かな？
+    #         # その場にいるからと言って話しかけたかどうかは中身を見ないといけない
+
+    #         # 履歴保存
+    #         history.append({
+    #             "t": time.time(),
+    #             "speaker": "player",
+    #             "role": "user",
+    #             "content": last_user_message
+    #         })
+    #         history.append({
+    #             "t": time.time(),
+    #             "speaker": caracter_full_name,
+    #             "role": "assistant",
+    #             "content": response_text
+    #         })
+    #         file_utils.save_history(directory_full_path, history)
+
+    #         print("次の発言者予定", target_text)
+    #         print("フラグ", needs_mob_chat)
+
+    #         result = {
+    #             "response": {
+    #                 "id": f"chatcmpl-{session_id[:8]}",
+    #                 "object": "chat.completion",
+    #                 "created": int(datetime.now().timestamp()),
+    #                 "model": body.get("model", config.DEFAULT_MODEL),
+    #                 "choices": [{
+    #                     "index": 0,
+    #                     "message": {
+    #                         "role": "assistant",
+    #                         "name": caracter_full_name,
+    #                         "original_avatar": caracter_full_name + ".png",
+    #                         "force_avatar": caracter_full_name + ".png",
+    #                         "content": display_text
+    #                     },
+    #                     "finish_reason": "stop",
+    #                     # ↓ 次話者情報
+    #                     "target_speakers": target_text,
+    #                     "remaining_speakers": target_text,
+    #                     "needs_mob_chat": needs_mob_chat,
+    #                     "mob_count": mob_count,
+    #                 }],
+    #                 "usage": {
+    #                     "prompt_tokens": 0,
+    #                     "completion_tokens": 0,
+    #                     "total_tokens": 0
+    #                 }
+    #             },
+    #             "status_code": 200
+    #         }
+
+    #         next_speakers = []
+    #         if isinstance(target_text, list):
+    #             next_speakers = target_text
+    #         elif target_text:
+    #             next_speakers = [target_text]
+
+    #         file_utils.update_prepare_status(
+    #             session_id,
+    #             status="ready",
+    #             complete_stage="main_chat",
+    #             error_stage=None,
+    #             error_message=None,
+    #             needs_mob_chat=needs_mob_chat,
+    #             mob_count=mob_count,
+    #             next_speakers=next_speakers,
+    #         )
+
+    #         return result
+
+    #     except Exception as e:
+    #         print(f"[ERROR] handle_chat_completion: {e}")
+    #         import traceback
+    #         print(traceback.format_exc())
+
+    #         if session_id:
+    #             file_utils.mark_prepare_error(
+    #                 session_id,
+    #                 complete_stage="main_chat",
+    #                 error_stage="main_chat",
+    #                 error_message=f"{type(e).__name__}: {e}",
+    #             )
+
+    #         return {
+    #             "response": {"error": "Internal server error"},
+    #             "status_code": 500,
+    #         }
+
     def handle_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
         session_id = body.get("session_id")
 
         try:
             if not session_id:
-                return {
-                    "response": {"error": "session_idがありません。"},
-                    "status_code": 503,
-                }
+                return _error_response("session_idがありません。", 503)
 
-            # 更新管理ファイルのステータスチェック
-            ok = file_utils.wait_until_prepare_status(
-                session_id,
-                target_stage="prepare",
-                interval_sec=0.2,
-            )
-            if not ok:
-                return {
-                    "response": {"error": "prepare が error で終了しました。"},
-                    "status_code": 500,
-                }
             file_utils.mark_prepare_processing(session_id, "main_chat")
 
-            # 履歴ファイルをロードする。
-            directory_full_path = config.SESSIONS_DIR / session_id
-            history = file_utils.load_history(directory_full_path)
+            context = _load_main_chat_context(session_id, body)
 
-            # world.yaml を読み込む（日付用）
-            world_file = config.SESSIONS_DIR / session_id / "world_memory.yaml"
-            world_data = file_utils.load_yaml_file(world_file) or {}
-            print("[LOAD] world:", world_file)
-            print("[DATA] world:", world_data)
-            print("[WORLD]", world_data.get("current_state"))
-
-            # session_idの取得
-            call_body = body.copy()
-            call_body["session_id"] = session_id
-
-            # TODO
-            # 返信が壊れないようにメモリを作る必要あり
-
-            # print("システムプロンプト：", system_message)
-            # 今回のユーザ発言を取得する
-            messages = body.get("messages", [])
-            last_user_message = string_utils.get_reversed_user_message(messages)
-            print("[MAIN] 今回のユーザ発言", last_user_message)
-            player_name = world_data["player_name"]
-            print("プレイヤー名：", player_name)
-
-            # メインプレイヤーのyamlを読み込む
-            char_file = config.SESSIONS_DIR / session_id / "character"
-            player_path = file_utils.find_character_file(player_name, char_file)
-            player_data = file_utils.load_yaml_file(player_path) or {}
-            print("[LOAD] player:", player_path)
-            print("[DATA] player:", player_data)
-            print("[PLAYER]", player_data.get("current_state"))
-
-            # 誰向けの発言か。
-            character_name = player_data["last_target"]
-            print("誰向けの発言か", character_name) 
-
-            
-            # 日付取得
-            world_time = ""
-            current_state = world_data.get("current_state", {})
-            if isinstance(current_state, dict):
-                world_time = str(current_state.get("time", "")).strip()
-
-            # print("[ORCH] before main reply generation")
-            # 6) 応答生成
-            #    ここで LLM にチャットを投げる
-            # キャラ名と情報を渡しているが足りない
-            system_message = file_utils.build_character_comment_system_message(
+            response_text = self._generate_response(
                 session_id=session_id,
-                character_name=character_name,
-                sessions_dir=config.SESSIONS_DIR,
-                prompt_file = config.PROMPTS_DIR / "character_comment_prompt.yaml"
+                messages=context["messages"],
+                system_prompt=context["system_message"],
             )
 
-            response_text = self._generate_response(session_id, messages, system_message)
-
-            # 今回の発言がプレイヤーに向けられた物かどうか判別
-            # yamlのロード
-            # character_identificationになって
-            # 今回のプレイヤー発言と、モデル返答を渡すようにする
-            prompt_data = file_utils.load_yaml_file(
-                config.PROMPTS_DIR / "character_identification.yaml"
-            ) or {}
-
-            world_participants = string_utils.build_characters_text(world_data["current_state"]["participants"])
-
-            print("current participantsの編集後文字列", world_participants)
-            print("実行プロンプト原文", prompt_data)
-            system_prompt = prompt_data["system"]
-            template_prompt = prompt_data["template"]
-
-            template_prompt = template_prompt.replace("{characters}", world_participants)
-            template_prompt = template_prompt.replace("{player_message}", last_user_message)
-            template_prompt = template_prompt.replace("{player_answer}", response_text)
-
-            print("置換後プロンプト全文", template_prompt)
-
-            service = OpenRouterService()
-            
-            result = service.send_message(
-                messages=[
-                    {"role": "user", "content": template_prompt}
-                ],
-                system_prompt=system_prompt
-
+            target_speakers = _judge_reply_target_speakers(
+                world_data=context["world_data"],
+                messages=context["messages"],
+                response_text=response_text,
             )
 
-            parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
-            
-            # フルネームで帰ってこないかもしれないけど、一旦OK
-            target_text = parsed.get("target_speakers")
+            # next_speakers = _decide_next_speakers(
+            #     user_message=context["last_user_message"],
+            #     character_memory_data=context["character_memory_data"],
+            # )
 
-            print("今回の結の発話対象：", target_text)
+            needs_mob_chat = len(target_speakers) > 0
+            mob_count = len(target_speakers)
 
-            # playerに会話を渡さないフラグ
-            needs_mob_chat = bool(target_text)
-            # 将来的には要らない（複数会話の場合でも話者が判ってればそっちで判別できるはずなので無駄に太らす事は無い
-            mob_count = 0
-            if needs_mob_chat:
-                mob_count = 1
+            _append_chat_history(
+                session_id=session_id,
+                speaker_name=context["character_full_name"],
+                user_message=context["last_user_message"],
+                assistant_message=response_text,
+            )
 
-            # キャラファイルを読み込む
-            caracter_path = file_utils.find_character_file(character_name, char_file)
-            caracter_data = file_utils.load_yaml_file(caracter_path) or {}
-            caracter_full_name = caracter_data["name"]
+            display_text = _build_display_text(
+                world_time=context["world_time"],
+                response_text=response_text,
+                character_memory_data=context["character_memory_data"],
+            )
 
-            # キャラ_memoryを読み込む
-            memory_file = config.SESSIONS_DIR / session_id / "character"
-            memory_path = file_utils.find_character_memory_file(caracter_full_name, memory_file)
-            print("load target", memory_path)
-            character_memory_data = file_utils.load_yaml_file(memory_path) or {}
-
-            # parameter取得
-            parameter_lines = []
-            parameter_list = character_memory_data.get("parameter", [])
-            if isinstance(parameter_list, list):
-                for item in parameter_list:
-                    if not isinstance(item, dict):
-                        continue
-
-                    display_name = str(item.get("display_name", "")).strip()
-                    count = item.get("count", 0)
-
-                    if not display_name:
-                        continue
-
-                    parameter_lines.append(f"{display_name}：{count}")
-
-            # 表示用本文を組み立て
-            display_parts = []
-
-            if world_time:
-                display_parts.append(f"（{world_time}）")
-
-            display_parts.append(response_text)
-
-            if parameter_lines:
-                display_parts.append("\n".join(parameter_lines))
-
-            display_text = "\n".join(display_parts)
-            
-            # ここが変だよ日本人
-            # 今回の発言で話しかけたかどうか判定しないと駄目かな？
-            # その場にいるからと言って話しかけたかどうかは中身を見ないといけない
-            # print("load character memory. focus_targets", character_memory_data["current_state"]["focus_targets"])
-
-            # forcus_target = character_memory_data["current_state"]["focus_targets"]
-            # participants = character_memory_data.get("participants", [])
-
-            # # 本チャット後の「次話者候補」
-            # next_speakers = []
-
-            # call_target_text = string_utils.find_existing_character(last_user_message, participants)
-
-            # # 1. focus_targets が1人なら、その人を次話者候補にする
-            # if len(forcus_target) == 1:
-            #     # name配列だけ持つ
-            #     next_speakers = [
-            #         str(item.get("name")).strip()
-            #         for item in forcus_target
-            #         if isinstance(item, dict) and item.get("name")
-            #     ]
-
-            # else:
-            #     # 2. ２名以上 focus_targets に存在する場合や、
-            #     #    引っかからない / 新規モブの場合は後でLLM判定
-            #     print("TODO: ask target judge LLM")
-
-            # needs_mob_chat = len(next_speakers) > 0
-            # mob_count = len(next_speakers)
-
-            # 履歴保存
-            history.append({
-                "t": time.time(),
-                "speaker": "player",
-                "role": "user",
-                "content": last_user_message
-            })
-            history.append({
-                "t": time.time(),
-                "speaker": caracter_full_name,
-                "role": "assistant",
-                "content": response_text
-            })
-            file_utils.save_history(directory_full_path, history)
-
-            print("次の発言者予定", target_text)
-            print("フラグ", needs_mob_chat)
-
-            result = {
-                "response": {
-                    "id": f"chatcmpl-{session_id[:8]}",
-                    "object": "chat.completion",
-                    "created": int(datetime.now().timestamp()),
-                    "model": body.get("model", config.DEFAULT_MODEL),
-                    "choices": [{
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "name": caracter_full_name,
-                            "original_avatar": caracter_full_name + ".png",
-                            "force_avatar": caracter_full_name + ".png",
-                            "content": display_text
-                        },
-                        "finish_reason": "stop",
-                        # ↓ 次話者情報
-                        "target_speakers": target_text,
-                        "remaining_speakers": target_text,
-                        "needs_mob_chat": needs_mob_chat,
-                        "mob_count": mob_count,
-                    }],
-                    "usage": {
-                        "prompt_tokens": 0,
-                        "completion_tokens": 0,
-                        "total_tokens": 0
-                    }
-                },
-                "status_code": 200
-            }
-
-            next_speakers = []
-            if isinstance(target_text, list):
-                next_speakers = target_text
-            elif target_text:
-                next_speakers = [target_text]
+            result = _build_chat_completion_response(
+                session_id=session_id,
+                body=body,
+                character_name=context["character_full_name"],
+                content=display_text,
+                next_speakers=target_speakers,
+                needs_mob_chat=needs_mob_chat,
+                mob_count=mob_count,
+            )
 
             file_utils.update_prepare_status(
                 session_id,
@@ -424,7 +483,7 @@ class ChatOrchestrator:
                 error_message=None,
                 needs_mob_chat=needs_mob_chat,
                 mob_count=mob_count,
-                next_speakers=next_speakers,
+                next_speakers=target_speakers,
             )
 
             return result
@@ -442,11 +501,8 @@ class ChatOrchestrator:
                     error_message=f"{type(e).__name__}: {e}",
                 )
 
-            return {
-                "response": {"error": "Internal server error"},
-                "status_code": 500,
-            }
-
+            return _error_response("Internal server error", 500)
+        
     # サブキャラクターチャット（予定）
     def handle_mob_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
         print("[ORCH] handle_mob_chat_completion start")
@@ -648,3 +704,229 @@ class ChatOrchestrator:
         except Exception as e:
             print(f"[ERROR] _generate_response: {e}")
             return "すみません、今ちょっと調子が悪いみたいです…"
+
+def _error_response(message: str, status_code: int) -> Dict:
+    return {
+        "response": {"error": message},
+        "status_code": status_code,
+    }
+
+
+def _load_main_chat_context(session_id: str, body: Dict) -> Dict:
+    session_dir = config.SESSIONS_DIR / session_id
+    char_dir = session_dir / "character"
+
+    messages = body.get("messages", [])
+    last_user_message = string_utils.get_reversed_user_message(messages)
+
+    world_file = session_dir / "world_memory.yaml"
+    world_data = file_utils.load_yaml_file(world_file) or {}
+
+    player_name = world_data.get("player_name")
+    print("プレイヤー名：", player_name)
+
+    player_path = file_utils.find_character_file(player_name, char_dir)
+    player_data = file_utils.load_yaml_file(player_path) or {}
+
+    character_name = player_data.get("last_target")
+    print("誰向けの発言か", character_name)
+
+    world_time = _get_world_time(world_data)
+
+    system_message = file_utils.build_character_comment_system_message(
+        session_id=session_id,
+        character_name=character_name,
+        sessions_dir=config.SESSIONS_DIR,
+        prompt_file=config.PROMPTS_DIR / "character_comment_prompt.yaml",
+    )
+
+    character_path = file_utils.find_character_file(character_name, char_dir)
+    character_data = file_utils.load_yaml_file(character_path) or {}
+    character_full_name = character_data.get("name", character_name)
+
+    memory_path = file_utils.find_character_memory_file(character_full_name, char_dir)
+    print("load target", memory_path)
+
+    character_memory_data = file_utils.load_yaml_file(memory_path) or {}
+
+    return {
+        "messages": messages,
+        "last_user_message": last_user_message,
+        "world_data": world_data,
+        "world_time": world_time,
+        "system_message": system_message,
+        "character_full_name": character_full_name,
+        "character_memory_data": character_memory_data,
+    }
+
+
+def _get_world_time(world_data: Dict) -> str:
+    current_state = world_data.get("current_state", {})
+    if not isinstance(current_state, dict):
+        return ""
+    return str(current_state.get("time", "")).strip()
+
+
+def _judge_reply_target_speakers(world_data: Dict, messages: list, response_text: str) -> list[str]:
+    
+    prompt_data = file_utils.load_yaml_file(
+        config.PROMPTS_DIR / "character_identification.yaml"
+    ) or {}
+
+    player_message = ""
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            player_message = msg.get("content", "")
+            break
+
+    participants = world_data.get("current_state", {}).get("participants", [])
+    characters_text = string_utils.build_characters_text(participants)
+
+    system_prompt = prompt_data["system"]
+    template_prompt = prompt_data["template"]
+    template_prompt = template_prompt.replace("{characters}", characters_text)
+    template_prompt = template_prompt.replace("{player_message}", player_message)
+    template_prompt = template_prompt.replace("{player_answer}", response_text)
+
+    print("置換後プロンプト全文", template_prompt)
+    service = OpenRouterService()
+    result = service.send_message(
+        messages=[{"role": "user", "content": template_prompt}],
+        system_prompt=system_prompt,
+    )
+
+    parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
+    target_speakers = parsed.get("target_speakers") or []
+
+    if isinstance(target_speakers, str):
+        target_speakers = [target_speakers]
+
+    print("今回の発話対象：", target_speakers)
+    return target_speakers
+
+
+def _decide_next_speakers(user_message: str, character_memory_data: Dict) -> list[str]:
+    current_state = character_memory_data.get("current_state", {}) or {}
+
+    focus_targets = current_state.get("focus_targets", []) or []
+    participants = current_state.get("participants", []) or []
+
+    print("load character memory.focus_targets", focus_targets)
+
+    if len(focus_targets) == 1:
+        return [
+            str(item.get("name")).strip()
+            for item in focus_targets
+            if isinstance(item, dict) and item.get("name")
+        ]
+
+    call_target_text = string_utils.find_existing_character(user_message, participants)
+    print("ユーザ発言から検出した対象", call_target_text)
+
+    # ここは今後LLM判定を足す場所
+    return []
+
+
+def _append_chat_history(
+    session_id: str,
+    speaker_name: str,
+    user_message: str,
+    assistant_message: str,
+) -> None:
+    session_dir = config.SESSIONS_DIR / session_id
+    history = file_utils.load_history(session_dir)
+
+    history.append({
+        "t": time.time(),
+        "speaker": "player",
+        "role": "user",
+        "content": user_message,
+    })
+
+    history.append({
+        "t": time.time(),
+        "speaker": speaker_name,
+        "role": "assistant",
+        "content": assistant_message,
+    })
+
+    file_utils.save_history(session_dir, history)
+
+
+def _build_display_text(
+    world_time: str,
+    response_text: str,
+    character_memory_data: Dict,
+) -> str:
+    display_parts = []
+
+    if world_time:
+        display_parts.append(f"（{world_time}）")
+
+    display_parts.append(response_text)
+
+    parameter_lines = _build_parameter_lines(character_memory_data)
+    if parameter_lines:
+        display_parts.append("\n".join(parameter_lines))
+
+    return "\n".join(display_parts)
+
+
+def _build_parameter_lines(character_memory_data: Dict) -> list[str]:
+    result = []
+
+    parameter_list = character_memory_data.get("parameter", [])
+    if not isinstance(parameter_list, list):
+        return result
+
+    for item in parameter_list:
+        if not isinstance(item, dict):
+            continue
+
+        display_name = str(item.get("display_name", "")).strip()
+        count = item.get("count", 0)
+
+        if display_name:
+            result.append(f"{display_name}：{count}")
+
+    return result
+
+
+def _build_chat_completion_response(
+    session_id: str,
+    body: Dict,
+    character_name: str,
+    content: str,
+    next_speakers: list[str],
+    needs_mob_chat: bool,
+    mob_count: int,
+) -> Dict:
+    return {
+        "response": {
+            "id": f"chatcmpl-{session_id[:8]}",
+            "object": "chat.completion",
+            "created": int(datetime.now().timestamp()),
+            "model": body.get("model", config.DEFAULT_MODEL),
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "name": character_name,
+                    "original_avatar": character_name + ".png",
+                    "force_avatar": character_name + ".png",
+                    "content": content,
+                },
+                "finish_reason": "stop",
+                "target_speakers": next_speakers,
+                "remaining_speakers": next_speakers,
+                "needs_mob_chat": needs_mob_chat,
+                "mob_count": mob_count,
+            }],
+            "usage": {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            },
+        },
+        "status_code": 200,
+    }

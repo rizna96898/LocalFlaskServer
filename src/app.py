@@ -107,40 +107,26 @@ def chat_completions():
         if body.get("first_flag") == "first":
             print("１回目のログ")
 
-            if session_id:
-                ok = file_utils.wait_until_prepare_status(
-                    session_id,
-                    target_stage="prepare",
-                    interval_sec=0.2,
-                )
-                if not ok:
-                    return jsonify({
-                        "error": "prepare が error で終了しました。prepare_status.yaml を確認してください。"
-                    }), 500
+            error_response = _wait_chat_stage_or_response(
+                session_id,
+                "prepare",
+                "prepare が error で終了しました。prepare_status.yaml を確認してください。",
+            )
+            if error_response:
+                return error_response
 
             result = orchestrator.handle_chat_completion(body, allow_image)
 
         else:
             print("２回目のログ")
 
-            if session_id:
-                # 必要ならデバッグ確認用
-                prepare_status = file_utils.load_prepare_status(session_id) or {}
-                print(
-                    f"[APP] mob_chat start: "
-                    f"needs_mob_chat={prepare_status.get('needs_mob_chat')}, "
-                    f"mob_count={prepare_status.get('mob_count')}"
-                )
-
-                ok = file_utils.wait_until_prepare_status(
-                    session_id,
-                    target_stage="main_chat",
-                    interval_sec=0.2,
-                )
-                if not ok:
-                    return jsonify({
-                        "error": "main_chat が error で終了しました。prepare_status.yaml を確認してください。"
-                    }), 500
+            error_response = _wait_chat_stage_or_response(
+                session_id,
+                "main_chat",
+                "main_chat が error で終了しました。prepare_status.yaml を確認してください。",
+            )
+            if error_response:
+                return error_response
 
             result = orchestrator.handle_mob_chat_completion(body, allow_image)
 
@@ -214,6 +200,21 @@ def check_stability():
             "message": f"チェック中にエラー: {str(e)}"
         }), 500
     
+def _wait_chat_stage_or_response(session_id: str, target_stage: str, error_message: str):
+    if not session_id:
+        return None
+
+    ok = file_utils.wait_until_prepare_status(
+        session_id,
+        target_stage=target_stage,
+        interval_sec=0.2,
+    )
+
+    if ok:
+        return None
+
+    return jsonify({"error": error_message}), 500
+
 if __name__ == "__main__":
     print(f"Starting RP Backend on http://127.0.0.1:{config.PORT}")
     if not config.OPENROUTER_API_KEY:
