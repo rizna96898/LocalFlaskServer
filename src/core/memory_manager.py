@@ -171,74 +171,6 @@ class MemoryManager:
 
         Thread(target=task, daemon=True).start()
     
-    # def _run_world_memory_update_async(
-    #     self,
-    #     body: Dict,
-    #     session_id: str,
-    #     last_user_content: str,
-    #     last_assistant_content: str,
-    # ):
-    #     def task():
-    #         try:
-    #             print("_run_world_memory_update_async start")
-    #             world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
-    #             old_world_memory = file_utils.load_yaml_file(world_memory_path) or {}
-    #             if not isinstance(old_world_memory, dict):
-    #                 old_world_memory = {}
-
-    #             prompt_messages = self.prompt_builder.update_memory_prompt(
-    #                 body=body,
-    #                 last_user_content=last_user_content,
-    #                 last_assistant_content=last_assistant_content,
-    #                 old_world_memory=old_world_memory,
-    #             )
-
-    #             response_text = self.openrouter.send_message(
-    #                 messages=prompt_messages,
-    #                 temperature=0.7,
-    #                 max_tokens=1500,
-    #             )
-    #             response_text = string_utils.strip_code_block(response_text)
-
-    #             try:
-    #                 parsed_yaml = yaml.safe_load(response_text) or {}
-    #                 if not isinstance(parsed_yaml, dict):
-    #                     parsed_yaml = {}
-    #             except Exception as e:
-    #                 print(f"[WORLD UPDATE] YAML parse failed: {e}")
-    #                 parsed_yaml = {}
-
-    #             new_world_data = {
-    #                 "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
-    #                 "world": parsed_yaml.get("world", {}) if isinstance(parsed_yaml.get("world"), dict) else {},
-    #             }
-
-    #             normalized_new_world = string_utils.normalize_summary_data(new_world_data)
-    #             merged_world = string_utils._merge_memory_data(old_world_memory, normalized_new_world)
-
-    #             world_block = merged_world.get("world", {})
-    #             if isinstance(world_block, dict):
-    #                 raw_relationships = world_block.get("world_relationships", [])
-    #                 normalized_relationships: list[str] = []
-
-    #                 if isinstance(raw_relationships, list):
-    #                     for item in raw_relationships:
-    #                         if isinstance(item, str) and item.strip():
-    #                             normalized_relationships.append(
-    #                                 string_utils.normalize_relationship_item(item)
-    #                             )
-
-    #                 world_block["world_relationships"] = string_utils._dedupe_list(normalized_relationships)
-    #                 merged_world["world"] = world_block
-
-    #             file_utils.save_yaml_file(world_memory_path, merged_world)
-    #             print(f"[WORLD UPDATE] saved: {world_memory_path}")
-    #             print("_run_world_memory_update_async end")
-    #         except Exception as e:
-    #             print(f"[WORLD UPDATE ERROR] {type(e).__name__}: {e}")
-
-    #     Thread(target=task, daemon=True).start()
-        
     def _run_character_memory_update_async(
         self,
         body: Dict,
@@ -448,28 +380,6 @@ class MemoryManager:
 
         Thread(target=task, daemon=True).start()
 
-    # def _run_world_memory_create_async(self, body: Dict, session_id: str):
-    #     print(f"[WORLD MEMORY CREATE] _run_world_memory_create_async start")
-
-    #     char_info = body.copy()
-    #     prompt_messages = self.prompt_builder.create_memory_prompt(char_info)
-
-    #     result_text = self.openrouter.send_message(prompt_messages)
-    #     response_text = string_utils.strip_code_block(result_text)
-
-    #     memory_file = config.SESSIONS_DIR / session_id / "world_memory.yaml"
-    #     success = file_utils.save_yaml_file(memory_file, response_text)
-
-    #     if not success:
-    #         raise RuntimeError(f"world_memory.yaml の保存に失敗しました: {memory_file}")
-
-    #     print(f"[WORLD MEMORY CREATE] saved: {memory_file}")
-
-    #     self._sync_related_characters_from_memory(session_id)
-
-    #     # 必要ならここで関連キャラの初期memory生成
-    #     # self._run_character_memory_create_async(...)
-        
     def _sync_session_character_files(self, session_id: str, world_relation: list, world_memory_path: Path):
         try:
             st_char_dir = Path(config.CHARACTERS_DIR)

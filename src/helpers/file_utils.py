@@ -374,67 +374,6 @@ def load_character_memories(
 
     return result
 
-# def wait_until_session_memory_ready(
-#     session_id: str,
-#     timeout_sec: float = 60.0,
-#     interval_sec: float = 0.5,
-# ) -> bool:
-#     """
-#     session配下の初期memory作成完了を待つ。
-
-#     判定条件:
-#     - world_memory.yaml が存在する
-#     - file_status.status == "ready"
-#     - character フォルダが存在する
-#     - 必要なら *_memory.yaml が1件以上ある
-
-#     戻り値:
-#     - True: ready
-#     - False: timeout または error
-#     """
-#     session_dir = config.SESSIONS_DIR / session_id
-#     world_memory_file = session_dir / "world_memory.yaml"
-#     character_dir = session_dir / "character"
-
-#     started_at = time.monotonic()
-
-#     while True:
-#         if timeout_sec > 0 and (time.monotonic() - started_at) >= timeout_sec:
-#             print(f"[WAIT] timeout: session_id={session_id}")
-#             return False
-
-#         if not world_memory_file.exists():
-#             time.sleep(interval_sec)
-#             continue
-
-#         world_memory = file_utils.load_yaml_file(world_memory_file) or {}
-#         if not isinstance(world_memory, dict):
-#             time.sleep(interval_sec)
-#             continue
-
-#         file_status = world_memory.get("file_status", {})
-#         status = file_status.get("status") if isinstance(file_status, dict) else None
-
-#         if status == "error":
-#             print(f"[WAIT] world_memory status=error: session_id={session_id}")
-#             return False
-
-#         if status != "ready":
-#             time.sleep(interval_sec)
-#             continue
-
-#         if not character_dir.exists():
-#             time.sleep(interval_sec)
-#             continue
-
-#         character_memory_files = list(character_dir.glob("*_memory.yaml"))
-#         if not character_memory_files:
-#             time.sleep(interval_sec)
-#             continue
-
-#         print(f"[WAIT] session ready: session_id={session_id}")
-#         return True
-
 def get_prepare_status_path(session_id: str) -> Path:
     return config.SESSIONS_DIR / session_id / "prepare_status.yaml"
 
@@ -504,17 +443,6 @@ def update_prepare_status(
         ]
 
     return save_yaml_file(path, data)
-
-
-def mark_prepare_processing(session_id: str, complete_stage: str) -> bool:
-    return update_prepare_status(
-        session_id,
-        status="processing",
-        complete_stage=complete_stage,
-        error_stage=None,
-        error_message=None,
-    )
-
 
 def mark_prepare_ready(session_id: str, complete_stage: str) -> bool:
     return update_prepare_status(

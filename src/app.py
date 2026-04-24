@@ -73,15 +73,17 @@ def chat_after():
 
     try:
         body = request.get_json(force=True)
-        # デバッグログ（必要に応じて残す）
-        # print("=== Request Headers ===")
-        # for key, value in request.headers.items():
-        #     print(f"{key}: {value}")
-        # print("=====================")
-        # print("body全量:", body)
+        allow_image = request.headers.get("X-Allow-Image", "false").lower() == "true"
+        session_id = body.get("session_id")
+        
+        error_response = _wait_chat_stage_or_response(
+            session_id,
+            "prepare",
+            "prepare が error で終了しました。prepare_status.yaml を確認してください。",
+        )
+        if error_response:
+            return error_response
 
-        # 前処理します
-        result = {}
         result = orchestrator.chat_post_processing(body)
         return "", 200
 
