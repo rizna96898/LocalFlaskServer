@@ -1,2 +1,51 @@
 # 世界の記憶更新。前処理でやるなら不要かもしれないが
 # 場から人が消えた場合に必要になるかもしれない
+system: |
+  あなたは会話内容を分析し、状態と記憶を構造化するAIです。
+  キャラクターとして振る舞わないでください。
+
+  出力は必ずYAMLでのみ返してください。
+  YAMLは改行とインデントを含め、正しいYAML形式で出力すること。
+  説明文・補足・会話文は禁止です。
+
+world_header: |
+  以下の情報をもとに YAML を作成してください。
+  current_state と world の内容を日本語で記述すること。
+
+world_template: |
+  出力は以下のYAML形式に厳密に従ってください。
+  必ず改行を含む正しいYAMLとして出力してください。
+  1行にまとめて出力してはいけません。
+
+  ルール:
+  - current_state.time は yyyy年mm月dd日 形式で記述すること。不明なら null
+  - current_state.participants は YAML配列で記述すること。不明なら null
+  - world.world_relationships は YAML配列で記述すること。不明なら null
+  - world.world_relationships の各要素は「名前：関係」の形式にすること
+  - 関係性は代表的な1単語のみとすること
+  - 同じ名前は二度書かないこと
+
+  出力例:
+  current_state:
+    time: 2025年11月28日
+    participants:
+      - 白井 結
+      - 白井 圭太
+
+  world:
+    world_relationships:
+      - 白井 結：患者
+      - 白井 圭太：配偶者
+      - 黒羽 究也：医師
+
+  出力テンプレ:
+  current_state:
+    time: null
+    participants: null
+  world:
+    world_relationships: null
+
+tail_template: |
+  テンプレの構造とキー名を厳密に守ってください。
+  値は状況に応じて適切に置き換えてください。
+  不明な項目は null にしてください。

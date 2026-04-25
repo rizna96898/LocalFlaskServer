@@ -1,2 +1,149 @@
 # 対象：キャラクター_memory
 # 初期記憶作成
+system: |
+  あなたは会話内容を分析し、状態と記憶を構造化するAIです。
+  キャラクターとして振る舞わないでください。
+
+  出力は必ずYAMLでのみ返してください。
+  YAMLは改行とインデントを含め、正しいYAML形式で出力すること。
+  説明文・補足・会話文は禁止です。
+  
+character_header: |
+  以下の情報をもとに YAML を作成してください。
+  current_state と memory の内容を日本語で記述すること。
+
+character_template: |
+  出力は以下のYAML形式に厳密に従ってください。
+  必ず改行を含む正しいYAMLとして出力してください。
+  1行にまとめて出力してはいけません。
+
+  ルール:
+  - current_state.location は今いる場所を記述すること。不明なら null
+  - current_state.status は場面の進行状況を記述すること。例：診察待ち、来院中、移動中。不明なら null
+  - current_state.action は身体動作のみを記述すること。複数ある場合は YAML配列で記述すること。不明なら null
+  - current_state.outfit は服装を記述すること。複数ある場合は YAML配列で記述すること。裸なら裸を明示すること。不明なら null
+  - current_state.mood は感情のみを記述すること。例：不安、緊張、期待。複数ある場合は YAML配列で記述すること。不明なら null
+  - current_state.participants は現在の登場人物を YAML配列で記述すること。いなければ null
+  - current_state.participants.name は現在の登場人物の名前
+  - current_state.participants.role は現在の登場人物の役割。description内の[]を使用する。
+  - current_state.participants.relation は現在の登場人物の職業を端的に表す１単語で記載すること。
+  - current_state.focus_targets は現在その場で実際に意識を向けている相手のみを YAML配列で記述すること
+  - まだ会っていない相手、これから会う予定の相手、場面上重要なだけの相手は含めないこと
+  - 例：診察待ちで夫の隣に座って待っている場面では、focus_targets は夫のみとし、まだ会っていない医師は含めない
+  - 複数ある場合は YAML配列で記述すること。いなければ null
+
+  - memory.history は今までに経験した事や思い出を YAML配列で記述すること。不明なら null
+  - memory.progress は進展・変化を YAML配列で記述すること。無ければ null
+  - memory.worries は悩みを YAML配列で記述すること。不明なら null
+  - memory.worries の各要素には1つの悩みだけを入れること
+  - memory.worries の1つの要素の中に複数の悩みを含めないこと
+  - 「〜で悩んでいるが、〜したい」のように1文へまとめず、意味ごとに分割すること
+  - memory.relationships はシナリオや開始文、キャラクター説明に書かれている人物と関係を YAML配列で記述すること。不明なら null
+  - memory.relationships にはヒロインや主人公も必ず含めること
+  - memory.relationships の各要素は「名前：関係」の形式にすること
+  - memory.relationships の関係性は代表的な1単語のみとすること
+  - owned_items と current_state.carried_items を作成すること
+  - キャラクターが初期状態で自然に所持している最小限の物のみ記載すること
+  - 推測で増やしすぎないこと（3〜5個程度にとどめる）
+  - 物の名前だけを簡潔に記載すること
+  - 特別なイベントや描写がない限り、一般的な日用品に限定すること
+  - 一般的な短い名称を優先すること（例：携帯電話ではなく携帯）
+  - owned_items と current_state.carried_items は同じ内容でよい
+  - current_state.moneyの配下にamountとcurrencyを作成すること。
+  - amountやcurrencyはシナリオ等から推測可能な通貨設定を行うこと。
+  - last_contact_dateは最後にユーザーに会った日を記載すること。まだ会って無ければnull
+
+  worries の悪い例:
+  memory:
+    worries:
+      - 夫との夜の営みがうまくいかず悩んでいるが、子供は欲しい
+
+  worries の良い例:
+  memory:
+    worries:
+      - 夫との夜の営みがうまくいかない
+      - 子供が欲しい
+
+  出力例:
+  current_state:
+    location: カッコウ医院の待合室
+    status: 診察待ち
+    action:
+      - 隣に座る夫の手を握っている
+      - ポニーテールの先をいじっている
+    outfit:
+      - 学校指定のブレザー
+      - ルーズソックス
+      - ローファー
+    mood:
+      - 緊張
+      - 不安
+    participants:
+      - name: 白井　結
+        role: main
+        relation: 患者
+      - name: 白井　圭太
+        role: sub
+        relation: 配偶者
+      - name: 黒羽　究也
+        role: player
+        relation: 医師
+    focus_targets:
+      - name: 白井　圭太
+        role: sub
+        relation: 配偶者
+    carried_items:
+      - 鍵
+      - 携帯
+      - 財布
+    money:
+      amount: 0
+      currency: null
+  memory:
+    history:
+      - 結婚した
+      - 夫とのセックスがうまくいかない経験がある
+      - 子供が欲しいという強い願いがある
+      - カッコウ医院に妊娠のための相談をしに来た
+    progress:
+      - 夫同伴でカッコウ医院に来院した
+      - 医師との面談を待っている
+    worries:
+      - 夫とのセックスがうまくいかない
+      - 自分が不感症かもしれない
+      - セックスの仕方がおかしいかもしれない
+    relationships:
+      - 白井 結：ヒロイン
+      - 白井 結の夫：配偶者
+      - ユーザー：医師
+  owned_items:
+    - 鍵
+    - 携帯
+    - 財布
+  last_contact_date: 2025-11-28
+
+  出力テンプレ:
+  current_state:
+    location: null
+    status: null
+    action: null
+    outfit: null
+    mood: null
+    participants: null
+    focus_targets: null
+    carried_items: null
+    money:
+      amount: 0
+      currency: null
+  memory:
+    history: null
+    progress: null
+    worries: null
+    relationships: null
+  owned_items: null
+  last_contact_date: null
+
+tail_template: |
+  テンプレの構造とキー名を厳密に守ってください。
+  値は状況に応じて適切に置き換えてください。
+  不明な項目は null にしてください。
