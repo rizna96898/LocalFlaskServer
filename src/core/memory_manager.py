@@ -10,6 +10,12 @@ from typing import Dict
 from pathlib import Path
 import yaml
 from config import config
+from constant import (
+    Bootstrap,
+    PromptsPreprocess,
+    PromptsMain,
+    PromptsPostprocess,
+)
 from core.prompt_builder import PromptBuilder
 from helpers import string_utils
 from helpers import file_utils
@@ -97,7 +103,7 @@ class MemoryManager:
                     config.SESSIONS_DIR / session_id / "world_memory.yaml"
                 ) or {}
                 prompt_data = file_utils.load_yaml_file(
-                    config.PROMPTS_DIR / "player_identification.yaml"
+                    config.PROMPTS_DIR / PromptsPreprocess.PLAYER_IDENTIFYCATION
                 ) or {}
 
                 world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])
@@ -445,7 +451,7 @@ class MemoryManager:
             world_relationships = world_block.get("world_relationships", []) if isinstance(world_block, dict) else []
 
             prompt_data = file_utils.load_yaml_file(
-                config.PROMPTS_DIR / "sub_character_prompt.yaml"
+                config.BOOTSTRAP / Bootstrap.SUB_CHARACTER_MEMORY
             ) or {}
 
             sub_template = prompt_data.get("sub_template", "")

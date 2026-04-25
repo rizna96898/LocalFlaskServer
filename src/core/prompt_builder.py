@@ -9,16 +9,20 @@ from typing import List, Dict, Any
 import yaml
 
 from config import config
+from constant import (
+    Bootstrap,
+    PromptsPreprocess,
+    PromptsMain,
+    PromptsPostprocess,
+)
 from helpers.string_utils import normalize_newlines
 from helpers import file_utils
 
 class PromptBuilder:
-    def __init__(self):
-        self.prompts_dir: Path = config.PROMPTS_DIR
 
-    def _load(self, filename: str) -> Dict[str, Any]:
+    def _load(self, filePath: Path, filename: str) -> Dict[str, Any]:
         """promptsフォルダからYAMLを読み込む"""
-        path = self.prompts_dir / filename
+        path = filePath / filename
         if not path.exists():
             print(f"[WARN] Prompt file not found: {path}")
             return {}
@@ -45,8 +49,8 @@ class PromptBuilder:
     # ======================
     def create_memory_prompt(self, charactor: str, story: str = "") -> List[Dict]:
         """新規 world_memory 作成用のプロンプト"""
-        base = self._load("memory_system.yaml")
-        create = self._load("memory_create.yaml")
+        base = self._load(config.PROMPTS_DIR, "memory_system.yaml")
+        create = self._load(config.PROMPTS_DIR,"memory_create.yaml")
 
         # 新形式優先。旧形式 header/template にもフォールバック
         header = create.get("world_header", "")
@@ -119,19 +123,11 @@ class PromptBuilder:
     #     ]
 
     # ======================
-    # 基本システムプロンプト
-    # ======================
-    def get_system_base(self) -> str:
-        """system_base.yaml から基本システムプロンプトを取得"""
-        data = self._load("system_base.yaml")
-        return data.get("system", "あなたは親切で自然なロールプレイキャラクターです。")
-
-    # ======================
     # 動的パラメータ生成プロンプト（新規追加）
     # ======================
     def generate_dynamic_params_prompt(self, scenario: str, charactor: str = "") -> List[Dict]:
         """シナリオに基づいて、最初に必要な動的パラメータを提案させる"""
-        base = self._load("dynamic_params.yaml")
+        base = self._load(config.BOOTSTRAP, PromptsPostprocess.CHARACTER_ITEMS)
 
         user_content = self._join_sections(
             base.get("header", ""),
@@ -184,8 +180,8 @@ class PromptBuilder:
         first_mes: str = "",
     ) -> List[Dict]:
         """キャラクター個別 memory 作成用のプロンプト"""
-        base = self._load("memory_system.yaml")
-        create = self._load("memory_create.yaml")
+        base = self._load(config.PROMPTS_DIR, "memory_system.yaml")
+        create = self._load(config.PROMPTS_DIR, "memory_create.yaml")
 
         header = create.get("character_header", "")
         template = create.get("character_template", "")
@@ -236,7 +232,7 @@ class PromptBuilder:
         last_assistant_content: str,
         old_memory: dict,
     ):
-        prompt_data = self._load("memory_update.yaml")
+        prompt_data = self._load(config.PROMPTS_DIR, "memory_update.yaml")
 
         character_header = prompt_data.get("character_header", "")
         character_template = prompt_data.get("character_template", "")

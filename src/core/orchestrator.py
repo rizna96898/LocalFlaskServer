@@ -15,6 +15,12 @@ from pathlib import Path
 from typing import Dict, Any, Iterable
 from helpers import data_utils
 from config import config
+from constant import (
+    Bootstrap,
+    PromptsPreprocess,
+    PromptsMain,
+    PromptsPostprocess,
+)
 from services.openrouter_service import OpenRouterService
 
 # ヘルパー
@@ -463,7 +469,7 @@ def _load_main_chat_context(session_id: str, body: Dict) -> Dict:
         session_id=session_id,
         character_name=character_name,
         sessions_dir=config.SESSIONS_DIR,
-        prompt_file=config.PROMPTS_DIR / "character_comment_prompt.yaml",
+        prompt_file=config.PROMPTS_DIR / PromptsMain.CHAT
     )
 
     character_path = file_utils.find_character_file(character_name, char_dir)
@@ -496,7 +502,7 @@ def _get_world_time(world_data: Dict) -> str:
 def _judge_reply_target_speakers(world_data: Dict, messages: list, response_text: str) -> list[str]:
     
     prompt_data = file_utils.load_yaml_file(
-        config.PROMPTS_DIR / "character_identification.yaml"
+        config.PROMPTS_DIR / PromptsMain.CHARACTER_IDENTIFICATION
     ) or {}
 
     player_message = ""

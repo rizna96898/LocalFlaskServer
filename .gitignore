@@ -212,3 +212,4 @@ files/sessions/
 .env
 files/settings/
 temp/
+*.txt
