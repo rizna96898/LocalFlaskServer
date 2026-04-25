@@ -14,8 +14,13 @@ SETTINGS_DIR = FILES_DIR / "settings"
 
 class Config:
     def __init__(self):
+
         self.SESSIONS_DIR = SESSIONS_DIR
-        self.PROMPTS_DIR = PROMPTS_DIR
+        self.PROMPTS_DIR  = PROMPTS_DIR
+        self.BOOTSTRAP    = PROMPTS_DIR / "bootstrap"
+        self.PREPROCESS   = PROMPTS_DIR / "chat" / "01_preprocess"
+        self.MAIN         = PROMPTS_DIR / "chat" / "02_main"
+        self.POSTPROCESS  = PROMPTS_DIR / "chat" / "03_postprocess"
         self.SETTINGS_DIR = SETTINGS_DIR
 
         self.settings = self._load_system_settings()

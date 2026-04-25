@@ -23,3 +23,26 @@ class MemoryDetailKeys:
     PROGRESS = "progress"
     WORRIES = "worries"
     RELATIONSHIPS = "relationships"
+
+class Bootstrap:
+    EDIT_SUMMARY         = "01_query_create_edit_summary.yaml"
+    WORLD_MEMORY         = "01_query_create_world_memory.yaml"
+    CHARACTER_ITEMS      = "02_query_create_character_items.yaml"
+    CHARACTER_MEMORY     = "02_query_create_character_memory.yaml"
+    SUB_CHARACTER_MEMORY = "03_query_create_sub_character_memory.yaml"
+      
+class PromptsPreprocess:
+    EDIT_SUMMARY          = "01_query_update_edit_summary.yaml"
+    WORLD_MEMORY          = "01_query_update_world_memory.yaml"
+    PLAYER_IDENTIFYCATION = "99_query_judge_player_identification.yaml"
+
+class PromptsMain:
+    VALIDATION_CHAT          = "01_query_validation_chat.yaml"
+    CHAT                     = "02_query_chat.yaml"
+    CHARACTER_IDENTIFICATION = "02_query_judge_character_identification.yaml"
+
+class PromptsPostprocess:
+    PARAMETER_FLUCTUATION = "01_query_parameter_fluctuation.yaml"
+    WORLD_MEMORY          = "01_query_update_world_memory.yaml"
+    CHARACTER_ITEMS       = "02_query_update_character_items.yaml"
+    CHARACTER_MEMORY      = "02_query_update_character_memory.yaml"
