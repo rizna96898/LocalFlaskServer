@@ -115,9 +115,11 @@ class ChatOrchestrator:
             # TODO:
             # 履歴作成
             # world_memory 更新
+            # self.memory_manager._run_memory_async(body, session_id, "update")
             # character_memory 更新
+            # パラメーター 更新
             # イラストタグ？
-            
+
             # ファイルステータスを更新
             file_utils.mark_prepare_ready(session_id, "after")
 

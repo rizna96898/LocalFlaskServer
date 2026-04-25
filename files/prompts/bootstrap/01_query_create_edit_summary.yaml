@@ -1,0 +1,6 @@
+# 対象：キャラクター_memory
+# memory:
+#  history:
+#  progress:
+#  worries:
+# それぞれに対して文章化して、本文や後処理で投げられるサイズに編集する
