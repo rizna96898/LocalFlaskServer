@@ -8,11 +8,11 @@ system: |
   YAMLは改行とインデントを含め、正しいYAML形式で出力すること。
   説明文・補足・会話文は禁止です。
 
-character_header: |
+header: |
   以下の情報をもとに YAML を作成してください。
   current_state と memory の内容を日本語で記述すること。
 
-character_template: |
+template: |
   出力は以下のYAML形式に厳密に従ってください。
   必ず改行を含む正しいYAMLとして出力してください。
   1行にまとめて出力してはいけません。
