@@ -1,3 +1,4 @@
+# prompt_builder.py
 """
 プロンプト構築クラス
 - すべての固定プロンプトは files/prompts/ 以下のYAMLから読み込む
@@ -49,30 +50,13 @@ class PromptBuilder:
     # ======================
     def create_memory_prompt(self, charactor: str, story: str = "") -> List[Dict]:
         """新規 world_memory 作成用のプロンプト"""
-        base = self._load(config.PROMPTS_DIR, "memory_system.yaml")
-        create = self._load(config.PROMPTS_DIR,"memory_create.yaml")
+        prompt_data = self._load(config.BOOTSTRAP, Bootstrap.WORLD_MEMORY)
 
-        # 新形式優先。旧形式 header/template にもフォールバック
-        header = create.get("world_header", "")
-        template = create.get("world_template", "")
-        tail = create.get("tail_template", "")
-
-        #print("[DEBUG] create keys:", create.keys())
-        #print("[DEBUG] header:", repr(header[:100] if header else ""))
-        #print("[DEBUG] template:", repr(template[:200] if template else ""))
-        
-        user_content = self._join_sections(
-            header,
+        return self._build_messages(
+            prompt_data,
             charactor,
             story,
-            template,
-            tail,
         )
-
-        return [
-            {"role": "system", "content": base.get("system", "")},
-            {"role": "user",   "content": user_content}
-        ]
 
     # def update_memory_prompt(
     #     self,
@@ -127,7 +111,7 @@ class PromptBuilder:
     # ======================
     def generate_dynamic_params_prompt(self, scenario: str, charactor: str = "") -> List[Dict]:
         """シナリオに基づいて、最初に必要な動的パラメータを提案させる"""
-        base = self._load(config.BOOTSTRAP, PromptsPostprocess.CHARACTER_ITEMS)
+        base = self._load(config.BOOTSTRAP, Bootstrap.CHARACTER_ITEMS)
 
         user_content = self._join_sections(
             base.get("header", ""),
@@ -180,48 +164,42 @@ class PromptBuilder:
         first_mes: str = "",
     ) -> List[Dict]:
         """キャラクター個別 memory 作成用のプロンプト"""
-        base = self._load(config.PROMPTS_DIR, "memory_system.yaml")
-        create = self._load(config.PROMPTS_DIR, "memory_create.yaml")
+        prompt_data = self._load(config.BOOTSTRAP, Bootstrap.CHARACTER_MEMORY)
 
-        header = create.get("character_header", "")
-        template = create.get("character_template", "")
-        tail = create.get("tail_template", "")
+        name_text = f"名前: {character_data.get('name', '')}" if character_data.get("name") else ""
 
-        name_text = ""
-        if character_data.get("name"):
-            name_text = f"名前: {character_data.get('name', '')}"
+        description_text = (
+            "説明:\n" + str(character_data.get("description", "")).strip()
+            if character_data.get("description")
+            else ""
+        )
 
-        description_text = ""
-        if character_data.get("description"):
-            description_text = "説明:\n" + str(character_data.get("description", "")).strip()
+        scenario_description_text = (
+            "登場人物:\n" + str(description).strip()
+            if description
+            else ""
+        )
 
-        scenario_description_text = ""
-        if description:
-            scenario_description_text = "登場人物:\n" + str(description).strip()
+        scenario_text = (
+            "シナリオ:\n" + str(scenario).strip()
+            if scenario
+            else ""
+        )
 
-        scenario_text = ""
-        if scenario:
-            scenario_text = "シナリオ:\n" + str(scenario).strip()
+        first_mes_text = (
+            "開始文:\n" + str(first_mes).strip()
+            if first_mes
+            else ""
+        )
 
-        first_mes_text = ""
-        if first_mes:
-            first_mes_text = "開始文:\n" + str(first_mes).strip()
-
-        user_content = self._join_sections(
-            header,
+        return self._build_messages(
+            prompt_data,
             name_text,
             description_text,
             scenario_description_text,
             scenario_text,
             first_mes_text,
-            template,
-            tail,
         )
-
-        return [
-            {"role": "system", "content": base.get("system", "")},
-            {"role": "user",   "content": user_content},
-        ]
     
     def update_character_memory_prompt(
         self,
@@ -232,11 +210,7 @@ class PromptBuilder:
         last_assistant_content: str,
         old_memory: dict,
     ):
-        prompt_data = self._load(config.PROMPTS_DIR, "memory_update.yaml")
-
-        character_header = prompt_data.get("character_header", "")
-        character_template = prompt_data.get("character_template", "")
-        tail_template = prompt_data.get("tail_template", "")
+        prompt_data = self._load(config.POSTPROCESS, PromptsPostprocess.CHARACTER_MEMORY)
 
         current_state_yaml = yaml.safe_dump(
             current_state or {},
@@ -252,58 +226,33 @@ class PromptBuilder:
             default_flow_style=False,
         ).strip()
 
-        system_parts = [
-            character_header,
-            "",
-            "【対象キャラクター】",
-            character_name,
-        ]
-
-        if description:
-            system_parts.extend([
-                "",
-                "【キャラ設定 description】",
-                description,
-            ])
-
-        if current_state_yaml:
-            system_parts.extend([
-                "",
-                "【現在状態 current_state】",
-                current_state_yaml,
-            ])
-
-        system_parts.extend([
-            "",
-            character_template,
-            "",
-            tail_template,
-        ])
-
-        system_prompt = "\n".join(system_parts)
-
         user_parts = [
-            "以下は既存のキャラクター記憶です。",
-            "この構造と内容を基準とし、今回の会話による変化のみを反映してください。",
-            "",
-            "既存の情報は維持し、不要な再生成や書き直しは行わないでください。",
-            "変更が必要な箇所のみ更新してください。",
-            "【既存記憶 old_memory】",
-            old_memory_yaml if old_memory_yaml else "{}",
-            "",
-            "【今回のユーザー発話】",
-            last_user_content or "",
-            "",
-            "【今回のキャラクター発話】",
-            last_assistant_content or "",
-            "",
-            "更新後の YAML のみを出力してください。",
-            "コードブロックや説明文は不要です。",
+            f"対象キャラクター:\n{character_name}",
+            "キャラ設定 description:\n" + description if description else "",
+            "現在状態 current_state:\n" + current_state_yaml if current_state_yaml else "",
+            "既存記憶 old_memory:\n" + (old_memory_yaml if old_memory_yaml else "{}"),
+            "今回のユーザー発話:\n" + (last_user_content or ""),
+            "今回のキャラクター発話:\n" + (last_assistant_content or ""),
         ]
 
-        user_prompt = "\n".join(user_parts)
+        return self._build_messages(
+            prompt_data,
+            *user_parts,
+        )
+
+    def _build_messages(
+        self,
+        prompt_data: Dict[str, Any],
+        *user_parts: str,
+    ) -> List[Dict]:
+        user_content = self._join_sections(
+            prompt_data.get("header", ""),
+            *user_parts,
+            prompt_data.get("template", ""),
+            prompt_data.get("tail_template", ""),
+        )
 
         return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {"role": "system", "content": prompt_data.get("system", "")},
+            {"role": "user", "content": user_content},
         ]
