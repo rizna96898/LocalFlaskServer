@@ -176,6 +176,7 @@ WORLD_MEMORY_DEFAULT = {
     "current_state": {
         "time": None,
         "participants": [],
+        "parties": []
     },
     "world": {
         "world_relationships": [],
@@ -296,76 +297,15 @@ def normalize_relationship_item(text: str) -> str:
     text = re.sub(r"：\s*", "：", text)
     return text
 
-def build_characters_text(participants: list[str]) -> str:
-    lines = []
-    for p in participants:
-        if "：" in p:
-            name, role = p.split("：", 1)
-            lines.append(f"- {name} : {role}")
-        else:
-            lines.append(f"- {p}")
-    return "\n".join(lines)
-
-def normalize_world_memory_data(player_name: str, raw: dict[str, Any] | None) -> dict[str, Any]:
-    data = deepcopy(WORLD_MEMORY_DEFAULT)
-
-    if not isinstance(raw, dict):
-        return data
-
-    data["player_name"] = player_name
-
-    file_status = raw.get("file_status")
-    if isinstance(file_status, dict):
-        data["file_status"]["status"] = _clean_string_or_none(file_status.get("status"))
-
-    current_state = raw.get("current_state")
-
-    if isinstance(current_state, dict):
-        time_val = _clean_string_or_none(current_state.get("time"))
-        if not time_val:
-            time_val = datetime.now().strftime("%Y年%m月%d日")
-
-        data["current_state"]["time"] = time_val
-        data["current_state"]["participants"] = _clean_string_list(current_state.get("participants"))
-    else:
-        data["current_state"]["time"] = datetime.now().strftime("%Y年%m月%d日")
-        data["current_state"]["participants"] = []
-
-    # 新構造を優先し、旧構造 world_relation も互換で読む
-    world = raw.get("world")
-    if isinstance(world, dict):
-        relationships = _clean_world_relation(world.get("world_relationships"))
-    else:
-        relationships = _clean_world_relation(raw.get("world_relation", []))
-
-    data["world"]["world_relationships"] = [
-        normalize_relationship_item(x)
-        for x in relationships
-    ]
-
-    return data
-
-
-# 既存コード互換
-normalize_summary_data = normalize_world_memory_data
-
-
-def load_summary(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
-    return normalize_world_memory_data(raw)
-
-
-def save_summary(path: str, data: dict[str, Any]) -> None:
-    normalized = normalize_world_memory_data(data)
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(
-            normalized,
-            f,
-            allow_unicode=True,
-            sort_keys=False,
-            default_flow_style=False,
-        )
+# def build_characters_text(participants: list[str]) -> str:
+#     lines = []
+#     for p in participants:
+#         if "：" in p:
+#             name, role = p.split("：", 1)
+#             lines.append(f"- {name} : {role}")
+#         else:
+#             lines.append(f"- {p}")
+#     return "\n".join(lines)
 
 def extract_dynamic_params_from_mes_example(mes_example: str) -> list[dict]:
     import yaml
@@ -581,3 +521,195 @@ def get_player_name(text: str) -> str:
         player_name = match.group(1).strip()
 
     return player_name
+
+def normalize_person_item(item: Any) -> dict[str, Any] | None:
+    """
+    name/role 形式の人物データに正規化する。
+    旧形式 "名前：役割" も一応吸収。
+    """
+    if isinstance(item, dict):
+        name = _clean_string_or_none(item.get("name"))
+        role = _clean_string_or_none(item.get("role"))
+        if not name:
+            return None
+
+        result = {"name": name}
+        if role:
+            result["role"] = role
+        return result
+
+    if isinstance(item, str):
+        text = item.strip()
+        if not text:
+            return None
+
+        if "：" in text:
+            name, role = text.split("：", 1)
+        elif ":" in text:
+            name, role = text.split(":", 1)
+        else:
+            name, role = text, ""
+
+        name = name.strip()
+        role = role.strip()
+
+        if not name:
+            return None
+
+        result = {"name": name}
+        if role:
+            result["role"] = role
+        return result
+
+    return None
+
+
+def normalize_person_list(value: Any) -> list[dict[str, Any]]:
+    if _is_null_like(value):
+        return []
+
+    if not isinstance(value, list):
+        return []
+
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for item in value:
+        normalized = normalize_person_item(item)
+        if not normalized:
+            continue
+
+        name = normalized["name"]
+        if name in seen:
+            continue
+
+        seen.add(name)
+        result.append(normalized)
+
+    return result
+
+
+def normalize_parties(value: Any) -> list[dict[str, Any]]:
+    if _is_null_like(value):
+        return []
+
+    if not isinstance(value, list):
+        return []
+
+    result: list[dict[str, Any]] = []
+
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+
+        name = _clean_string_or_none(item.get("name"))
+        members_raw = item.get("members")
+
+        if not name:
+            continue
+
+        members: list[str] = []
+        if isinstance(members_raw, list):
+            for member in members_raw:
+                member_name = _clean_string_or_none(member)
+                if member_name and member_name not in members:
+                    members.append(member_name)
+
+        if not members:
+            continue
+
+        result.append({
+            "name": name,
+            "members": members,
+        })
+
+    return result
+
+
+def build_characters_text(participants: list[Any]) -> str:
+    lines = []
+
+    for p in participants:
+        item = normalize_person_item(p)
+        if not item:
+            continue
+
+        name = item.get("name", "")
+        role = item.get("role", "")
+
+        if role:
+            lines.append(f"- {name} : {role}")
+        else:
+            lines.append(f"- {name}")
+
+    return "\n".join(lines)
+
+def normalize_world_memory_data(player_name: str, raw: dict[str, Any] | None) -> dict[str, Any]:
+    data = deepcopy(WORLD_MEMORY_DEFAULT)
+
+    if not isinstance(raw, dict):
+        return data
+
+    data["player_name"] = player_name
+
+    file_status = raw.get("file_status")
+    if isinstance(file_status, dict):
+        data["file_status"]["status"] = _clean_string_or_none(file_status.get("status"))
+
+    current_state = raw.get("current_state")
+
+    if isinstance(current_state, dict):
+        time_val = _clean_string_or_none(current_state.get("time"))
+        if not time_val:
+            time_val = datetime.now().strftime("%Y年%m月%d日")
+
+        data["current_state"]["time"] = time_val
+        # data["current_state"]["participants"] = _clean_string_list(current_state.get("participants"))
+        data["current_state"]["participants"] = normalize_person_list(
+            current_state.get("participants")
+        )
+        data["current_state"]["parties"] = normalize_parties(
+            current_state.get("parties")
+        )
+    else:
+        data["current_state"]["time"] = datetime.now().strftime("%Y年%m月%d日")
+        data["current_state"]["participants"] = []
+
+    # 新構造を優先し、旧構造 world_relation も互換で読む
+    world = raw.get("world")
+    if isinstance(world, dict):
+        relationships = _clean_world_relation(world.get("world_relationships"))
+    else:
+        relationships = _clean_world_relation(raw.get("world_relation", []))
+
+    # data["world"]["world_relationships"] = [
+    #     normalize_relationship_item(x)
+    #     for x in relationships
+    # ]
+
+    data["world"]["world_relationships"] = normalize_person_list(
+        world.get("world_relationships")
+    )
+    
+    return data
+
+# 既存コード互換
+normalize_summary_data = normalize_world_memory_data
+
+
+def load_summary(path: str) -> dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+    return normalize_world_memory_data(raw)
+
+
+def save_summary(path: str, data: dict[str, Any]) -> None:
+    normalized = normalize_world_memory_data(data)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(
+            normalized,
+            f,
+            allow_unicode=True,
+            sort_keys=False,
+            default_flow_style=False,
+        )

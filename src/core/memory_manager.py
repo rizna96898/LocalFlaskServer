@@ -1,3 +1,4 @@
+# memory_manager.py
 """
 記憶管理モジュール
 - 新規チャット時の初期 world_memory 作成
@@ -72,19 +73,18 @@ class MemoryManager:
         names = []
 
         for item in world_relationships:
-            if not isinstance(item, str):
-                continue
-
-            text = item.strip()
-            if not text:
-                continue
-
-            if "：" in text:
-                name = text.split("：", 1)[0].strip()
-            elif ":" in text:
-                name = text.split(":", 1)[0].strip()
+            if isinstance(item, dict):
+                name = str(item.get("name", "")).strip()
+            elif isinstance(item, str):
+                text = item.strip()
+                if "：" in text:
+                    name = text.split("：", 1)[0].strip()
+                elif ":" in text:
+                    name = text.split(":", 1)[0].strip()
+                else:
+                    name = text
             else:
-                name = text
+                continue
 
             if name and name not in names:
                 names.append(name)
@@ -397,13 +397,6 @@ class MemoryManager:
             print(f"[WORLD] SESSION DIR: {session_char_dir}")
             #print(f"[WORLD] world_relation: {world_relation}")
 
-            # if st_char_dir.exists():
-                #  print(f"[WORLD] found {len(list(st_char_dir.iterdir()))} files")
-                #for f in st_char_dir.iterdir():
-                    #print(f"  - {f.name}")
-            # else:
-                # print("[ERROR] ST character dir not found")
-
             for name in world_relation:
                 #print(f"\n[WORLD] ---- processing: {name} ----")
 
@@ -458,22 +451,14 @@ class MemoryManager:
             tail_template = prompt_data.get("tail_template", "")
 
             for participant in participants:
-                if not isinstance(participant, str):
+                if not isinstance(participant, dict):
                     continue
 
-                text = participant.strip()
-                if not text:
-                    continue
+                sub_name = str(participant.get("name", "")).strip()
+                role = str(participant.get("role", "")).strip()
 
-                if "：" in text:
-                    sub_name, role = text.split("：", 1)
-                elif ":" in text:
-                    sub_name, role = text.split(":", 1)
-                else:
+                if not sub_name:
                     continue
-
-                sub_name = sub_name.strip()
-                role = role.strip()
 
                 if role != "sub":
                     continue
@@ -490,7 +475,7 @@ class MemoryManager:
                 prompt_text = sub_template.format(
                     name=sub_name,
                     world_scenario=world_memory.get("scenario", ""),
-                    world_relationships="\n".join(world_relationships) if isinstance(world_relationships, list) else "",
+                    world_relationships=string_utils.build_characters_text(world_relationships),
                 )
                 if tail_template:
                     prompt_text = prompt_text + "\n" + tail_template

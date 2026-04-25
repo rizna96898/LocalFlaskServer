@@ -119,7 +119,6 @@ class ChatOrchestrator:
             file_utils.mark_prepare_processing(session_id, "after")
 
             # TODO:
-            # 履歴作成
             # world_memory 更新
             # self.memory_manager._run_memory_async(body, session_id, "update")
             # character_memory 更新

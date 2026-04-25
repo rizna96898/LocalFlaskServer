@@ -20,30 +20,43 @@ template: |
   ルール:
   - current_state.time は yyyy年mm月dd日 形式で記述すること。不明なら null
   - current_state.participants は YAML配列で記述すること。不明なら null
-  - current_state.participants の各要素は「名前：役割」の形式にすること
+  - current_state.participants は name と role を持つオブジェクト配列で記述すること
   - 役割とは、descriptionのキャラ名の左にある[]の中の文字をそのまま出力すること
+  - current_state.parties は name と members を持つオブジェクト配列で記述すること。不明なら null
+  - members には一緒に行動している人物名を列挙すること。単独行動でも1人必ず明記すること
   - world.world_relationships は YAML配列で記述すること。不明なら null
-  - world.world_relationships の各要素は「名前：関係」の形式にすること
-  - 関係性は代表的な1単語のみとすること
+  - world.world_relationships は name と role を持つオブジェクト配列で記述すること
+  - world.world_relationships の role は代表的な1単語のみとすること
   - 同じ名前は二度書かないこと
 
   出力例:
   current_state:
     time: 2025年11月28日
     participants:
-      - 白井 結：main
-      - 白井 圭太：sub
+      - name: 白井 結
+        role: main
+      - name: 白井 圭太
+        role: sub
+    parties:
+      - name: 白井夫妻
+        members:
+          - 白井 結
+          - 白井 圭太
 
   world:
     world_relationships:
-      - 白井 結：患者
-      - 白井 圭太：配偶者
-      - 黒羽 究也：医師
+      - name: 白井 結
+        role: 患者
+      - name: 白井 圭太
+        role: 配偶者
+      - name: 黒羽 究也
+        role: 医師
 
   出力テンプレ:
   current_state:
     time: null
     participants: null
+    parties: null
   world:
     world_relationships: null
 
