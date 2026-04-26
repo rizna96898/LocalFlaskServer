@@ -652,10 +652,6 @@ def normalize_world_memory_data(player_name: str, raw: dict[str, Any] | None) ->
 
     data["player_name"] = player_name
 
-    file_status = raw.get("file_status")
-    if isinstance(file_status, dict):
-        data["file_status"]["status"] = _clean_string_or_none(file_status.get("status"))
-
     current_state = raw.get("current_state")
 
     if isinstance(current_state, dict):

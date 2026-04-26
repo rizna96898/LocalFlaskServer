@@ -23,7 +23,9 @@ template: |
   - current_state.participants は name と role を持つオブジェクト配列で記述すること
   - 役割とは、descriptionのキャラ名の左にある[]の中の文字をそのまま出力すること
   - current_state.parties は name と members を持つオブジェクト配列で記述すること。不明なら null
-  - members には一緒に行動している人物名を列挙すること。単独行動でも1人必ず明記すること
+  - current_state.parties は、一緒に移動・退出・行動する可能性が高い人物グループのみを書くこと
+  - 場所名・施設名・組織名だけのグループは parties に書かないこと
+  - 単独行動の人物は parties に書かなくてよい
   - world.world_relationships は YAML配列で記述すること。不明なら null
   - world.world_relationships は name と role を持つオブジェクト配列で記述すること
   - world.world_relationships の role は代表的な1単語のみとすること

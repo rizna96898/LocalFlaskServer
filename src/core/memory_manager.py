@@ -103,8 +103,11 @@ class MemoryManager:
                     config.SESSIONS_DIR / session_id / "world_memory.yaml"
                 ) or {}
                 prompt_data = file_utils.load_yaml_file(
-                    config.PROMPTS_DIR / PromptsPreprocess.PLAYER_IDENTIFYCATION
+                    config.PREPROCESS / PromptsPreprocess.PLAYER_IDENTIFYCATION
                 ) or {}
+
+                print("prompt_path", config.BOOTSTRAP / PromptsPreprocess.PLAYER_IDENTIFYCATION)
+                print("prompt_data", prompt_data)
 
                 world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])
 
@@ -265,6 +268,7 @@ class MemoryManager:
 
                 if operation == "create":
                     current_stage = "world"
+
                     prompt_messages = self.prompt_builder.create_memory_prompt(body)
 
                     response_text = self.openrouter.send_message(
@@ -272,84 +276,49 @@ class MemoryManager:
                         temperature=0.7,
                         max_tokens=1500,
                     )
+
                     response_text = string_utils.strip_code_block(response_text)
 
-                    parsed_yaml = yaml.safe_load(response_text) or {}
-                    if not isinstance(parsed_yaml, dict):
+                    try:
+                        parsed_yaml = yaml.safe_load(response_text) or {}
+                        if not isinstance(parsed_yaml, dict):
+                            parsed_yaml = {}
+                    except Exception as e:
+                        print(f"[WORLD ERROR] YAML parse failed: {e}")
+                        print(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
                         parsed_yaml = {}
 
-                    world_data = parsed_yaml.get("world", {}) if isinstance(parsed_yaml.get("world"), dict) else {}
-                    world_relationships_raw = world_data.get("world_relationships", [])
+                    player_name = string_utils.get_player_name(body.get("description"))
 
-                    if world_relationships_raw is None:
-                        world_relationships = []
-                    elif isinstance(world_relationships_raw, list):
-                        world_relationships = []
+                    normalized_memory = string_utils.normalize_world_memory_data(
+                        player_name,
+                        parsed_yaml,
+                    )
 
-                        for item in world_relationships_raw:
-                            if isinstance(item, str):
-                                item = item.strip()
-                                if item:
-                                    world_relationships.append(
-                                        string_utils.normalize_relationship_item(item)
-                                    )
-
-                            elif isinstance(item, dict):
-                                for name, role in item.items():
-                                    name = str(name).strip() if name is not None else ""
-                                    role = str(role).strip() if role is not None else ""
-
-                                    if not name:
-                                        continue
-
-                                    if role:
-                                        text = f"{name}：{role}"
-                                    else:
-                                        text = name
-
-                                    world_relationships.append(
-                                        string_utils.normalize_relationship_item(text)
-                                    )
-                    elif isinstance(world_relationships_raw, str):
-                        world_relationships = []
-                        for line in world_relationships_raw.splitlines():
-                            line = line.strip()
-                            if not line:
-                                continue
-                            if line.startswith("-"):
-                                line = line.lstrip("-").strip()
-                            if line:
-                                world_relationships.append(string_utils.normalize_relationship_item(line))
-                    else:
-                        world_relationships = []
+                    world_relationships = (
+                        normalized_memory
+                        .get("world", {})
+                        .get("world_relationships", [])
+                    )
 
                     if not world_relationships:
                         print(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
                         print(f"[WORLD ERROR] parsed_yaml: {parsed_yaml!r}")
-                        print(f"[WORLD ERROR] world_relationships_raw: {world_relationships_raw!r}")
                         raise ValueError("world_relationships is empty")
 
-                    res_memory = {
-                        "current_state": parsed_yaml.get("current_state", {}),
-                        "world": {
-                            "world_relationships": world_relationships
-                        }
-                    }
-
                     world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
-                    player_name = string_utils.get_player_name(body.get("description"))
-                    normalized_memory = string_utils.normalize_summary_data(player_name, res_memory)
 
                     print("[DEBUG] parsed_yaml.current_state =", parsed_yaml.get("current_state"))
-                    print("[DEBUG] res_memory.current_state =", res_memory.get("current_state"))
                     print("[DEBUG] normalized_memory.current_state =", normalized_memory.get("current_state"))
+                    print("[DEBUG] normalized_memory.world =", normalized_memory.get("world"))
                     print("[DEBUG] world_memory_path =", world_memory_path)
+
                     saved = file_utils.save_yaml_file(world_memory_path, normalized_memory)
-                    
                     if not saved:
                         raise RuntimeError(f"world memory save failed: {world_memory_path}")
 
                     relation_names = self._extract_relationship_names(world_relationships)
+
                     self._sync_session_character_files(
                         session_id=session_id,
                         world_relation=relation_names,
@@ -357,6 +326,7 @@ class MemoryManager:
                     )
 
                     current_stage = "character"
+
                     self._run_character_memory_create_sync(
                         session_id,
                         relation_names,
