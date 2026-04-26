@@ -213,4 +213,4 @@ files/sessions/
 files/settings/
 temp/
 *.txt
-models/
+*.gguf
