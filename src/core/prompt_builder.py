@@ -256,3 +256,23 @@ class PromptBuilder:
             {"role": "system", "content": prompt_data.get("system", "")},
             {"role": "user", "content": user_content},
         ]
+    
+    def create_edit_summary_prompt(
+        self,
+        memory_key: str,
+        memory_value,
+    ) -> list[dict]:
+        prompt_data = self._load(config.BOOTSTRAP, Bootstrap.EDIT_SUMMARY)
+
+        memory_yaml = yaml.safe_dump(
+            memory_value or [],
+            allow_unicode=True,
+            sort_keys=False,
+            default_flow_style=False,
+        ).strip()
+
+        return self._build_messages(
+            prompt_data,
+            f"対象: {memory_key}",
+            f"情報:\n{memory_yaml}",
+        )
