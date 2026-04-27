@@ -645,6 +645,54 @@ class MemoryManager:
 
         print("セッションキャラディレクトリ", session_char_dir);
         print("_run_character_memory_create_sync end")
+        
+    def _create_character_summary_sync(
+        self,
+        session_id: str,
+        char_name: str,
+        memory_file: Path,
+    ):
+        session_char_dir = config.SESSIONS_DIR / session_id / "character"
+
+        memory_data = file_utils.load_yaml_file(memory_file) or {}
+        memory_block = memory_data.get("memory", {})
+        if not isinstance(memory_block, dict):
+            memory_block = {}
+
+        summary = {
+            "history": [],
+            "progress": [],
+            "worries": [],
+        }
+
+        for key in ("history", "progress", "worries"):
+            value = memory_block.get(key, [])
+            if not value:
+                continue
+
+            prompt_messages = self.prompt_builder.create_edit_summary_prompt(
+                memory_key=key,
+                memory_value=value,
+            )
+
+            response_text = self.openrouter.send_message(
+                messages=prompt_messages,
+                temperature=0.3,
+                max_tokens=1000,
+            )
+
+            response_text = string_utils.strip_code_block(response_text).strip()
+
+            if response_text:
+                summary[key] = [response_text]
+
+        summary_file = session_char_dir / f"{char_name}_summary.yaml"
+        saved = file_utils.save_yaml_file(summary_file, summary)
+
+        if not saved:
+            raise RuntimeError(f"character summary save failed: {summary_file}")
+
+        print(f"[CHAR SUMMARY] saved: {summary_file.name}")
 
 def extract_character_parameters_from_mes_example(mes_example: str, char_name: str) -> list[dict]:
     """
@@ -699,51 +747,3 @@ def extract_character_parameters_from_mes_example(mes_example: str, char_name: s
             return result
 
     return []
-
-def _create_character_summary_sync(
-    self,
-    session_id: str,
-    char_name: str,
-    memory_file: Path,
-):
-    session_char_dir = config.SESSIONS_DIR / session_id / "character"
-
-    memory_data = file_utils.load_yaml_file(memory_file) or {}
-    memory_block = memory_data.get("memory", {})
-    if not isinstance(memory_block, dict):
-        memory_block = {}
-
-    summary = {
-        "history": [],
-        "progress": [],
-        "worries": [],
-    }
-
-    for key in ("history", "progress", "worries"):
-        value = memory_block.get(key, [])
-        if not value:
-            continue
-
-        prompt_messages = self.prompt_builder.create_edit_summary_prompt(
-            memory_key=key,
-            memory_value=value,
-        )
-
-        response_text = self.openrouter.send_message(
-            messages=prompt_messages,
-            temperature=0.3,
-            max_tokens=1000,
-        )
-
-        response_text = string_utils.strip_code_block(response_text).strip()
-
-        if response_text:
-            summary[key] = [response_text]
-
-    summary_file = session_char_dir / f"{char_name}_summary.yaml"
-    saved = file_utils.save_yaml_file(summary_file, summary)
-
-    if not saved:
-        raise RuntimeError(f"character summary save failed: {summary_file}")
-
-    print(f"[CHAR SUMMARY] saved: {summary_file.name}")

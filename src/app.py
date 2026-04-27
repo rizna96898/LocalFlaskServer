@@ -6,6 +6,7 @@ Flaskサーバーのエントリーポイント
 # src/app.py の一番上（他のimportより前に追加）
 import sys
 from pathlib import Path
+from services import local_llama_service
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
@@ -222,5 +223,7 @@ if __name__ == "__main__":
     if not config.OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY が設定されていません。.env ファイルを確認してください。")
     
+    llm_service = local_llama_service.LocalLlamaService()
+
     #app.run(host="127.0.0.1", port=config.PORT, debug=False)
     app.run(host="127.0.0.1", port=5000, debug=True)

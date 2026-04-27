@@ -31,12 +31,17 @@ class Config:
         self.MAX_TOKENS = self.settings.get("max_tokens", 2048)
 
         self.OPENROUTER_API_KEY = self.settings.get("openrouter_api_key")
+        self.OPENROUTER_USE_FLAG = self.settings.get("open_router_use_flag")
         self.OPENROUTER_SITE_URL = self.settings.get("openrouter_site_url", "http://localhost:5000")
         self.OPENROUTER_SITE_NAME = self.settings.get("openrouter_site_name", "Grok-like RP Backend")
         self.CHARACTERS_DIR = self.settings.get("characters_dir", "no set directory")
 
         if not self.OPENROUTER_API_KEY or str(self.OPENROUTER_API_KEY).strip() in ["", "dummy"]:
             print("[WARN] openrouter_api_key が設定されていません。files/settings/system_settings.yaml を確認してください。")
+
+        self.LOCALMODEL_USE_FLAG = self.settings.get("local_model_use_flag")
+        self.LOCALMODEL_PATH = self.settings.get("local_model_path")
+        self.LOCALMODEL_NAME = self.settings.get("local_mode_name")
 
     def _load_system_settings(self) -> dict:
         settings_file = self.SETTINGS_DIR / "system_settings.yaml"
