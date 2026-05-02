@@ -10,6 +10,7 @@ FILES_DIR = ROOT_DIR / "files"
 SESSIONS_DIR = FILES_DIR / "sessions"
 PROMPTS_DIR = FILES_DIR / "prompts"
 SETTINGS_DIR = FILES_DIR / "settings"
+TEMPLATES_DIR = FILES_DIR / "templates"
 
 
 class Config:
@@ -22,6 +23,8 @@ class Config:
         self.MAIN         = PROMPTS_DIR / "chat" / "02_main"
         self.POSTPROCESS  = PROMPTS_DIR / "chat" / "03_postprocess"
         self.SETTINGS_DIR = SETTINGS_DIR
+
+        self.TEMPLATES_DIR  = TEMPLATES_DIR
 
         self.settings = self._load_system_settings()
 

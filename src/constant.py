@@ -30,6 +30,7 @@ class Bootstrap:
     CHARACTER_ITEMS      = "02_query_create_character_items.yaml"
     CHARACTER_MEMORY     = "02_query_create_character_memory.yaml"
     SUB_CHARACTER_MEMORY = "03_query_create_sub_character_memory.yaml"
+    SUB_CHARACTER_TEMPLATE = "sub_character.yaml"
       
 class PromptsPreprocess:
     WORLD_MEMORY          = "01_query_update_world_memory.yaml"

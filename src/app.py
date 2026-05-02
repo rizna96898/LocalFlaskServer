@@ -154,6 +154,7 @@ def chat_completions():
 #新しいチャットを始める受け口
 @app.post("/new_chat")
 def new_chat():
+    print("ニューチャット開始")
     """SillyTavernのNew Chat時に呼ばれる初期化処理"""
     if request.method == "OPTIONS":
         return "", 200
@@ -165,6 +166,7 @@ def new_chat():
         body = request.get_json(force=True)
         session_id = orchestrator.create_new_session(body)
         
+        print("ニューチャット終了")
         # print("body全量", body)
         return jsonify({
             "status": "ok",
