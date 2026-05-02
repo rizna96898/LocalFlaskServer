@@ -543,7 +543,31 @@ def wait_until_prepare_status(
             return True
 
         time.sleep(interval_sec)
-        
+
+def load_yaml_from_character_description(card_data: dict) -> dict:
+    """
+    SillyTavernキャラカードの description に入っている YAML を読み取る。
+    description 全体が YAML である前提。
+    """
+    if not isinstance(card_data, dict):
+        return {}
+
+    description = card_data.get("description", "")
+    if not isinstance(description, str) or not description.strip():
+        return {}
+
+    text = string_utils.strip_code_block(description).strip()
+
+    try:
+        parsed = yaml.safe_load(text) or {}
+        if isinstance(parsed, dict):
+            return parsed
+        return {}
+    except Exception as e:
+        print(f"[CHAR CARD YAML ERROR] description parse failed: {e}")
+        print(f"[CHAR CARD YAML ERROR] head={text[:300]!r}")
+        return {}
+    
 class BlockStyleDumper(yaml.SafeDumper):
     pass
 BlockStyleDumper.add_representer(str, str_presenter)

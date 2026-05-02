@@ -352,59 +352,59 @@ class ChatOrchestrator:
                 print(f"[WARN] Failed to update character.yaml for {session_id}")
         print("_sync_character_if_changed end")
 
-    def _sync_related_characters_from_memory(self, session_id: str):
-        """
-        memory.yaml の world_relation を見て、関連キャラの最新カードを
-        session配下の characters フォルダへ同期する。
+    # def _sync_related_characters_from_memory(self, session_id: str):
+    #     """
+    #     memory.yaml の world_relation を見て、関連キャラの最新カードを
+    #     session配下の characters フォルダへ同期する。
 
-        目的:
-        - SillyTavern 上で更新されたキャラ情報を次の発話から反映させる
-        - 会話に登場中のキャラだけを必要な分だけ毎回更新する
-        """
-        memory_file = config.SESSIONS_DIR / session_id / "memory.yaml"
-        memory_data = file_utils.load_yaml_file(memory_file) or {}
-        related_names = string_utils._clean_world_relation(memory_data.get("world_relation", []))
+    #     目的:
+    #     - SillyTavern 上で更新されたキャラ情報を次の発話から反映させる
+    #     - 会話に登場中のキャラだけを必要な分だけ毎回更新する
+    #     """
+    #     memory_file = config.SESSIONS_DIR / session_id / "memory.yaml"
+    #     memory_data = file_utils.load_yaml_file(memory_file) or {}
+    #     related_names = string_utils._clean_world_relation(memory_data.get("world_relation", []))
 
-        if not related_names:
-            print(f"[WORLD_RELATION] session_id={session_id} → 対象なし")
-            return
+    #     if not related_names:
+    #         print(f"[WORLD_RELATION] session_id={session_id} → 対象なし")
+    #         return
 
-        # world_relation から拾うだけなので、import失敗時は全体を落とさずスキップする
-        try:
-            from core.world_manager import WorldManager
-        except Exception as e:
-            print(f"[WARN] WorldManager import failed: {e}")
-            return
+    #     # world_relation から拾うだけなので、import失敗時は全体を落とさずスキップする
+    #     try:
+    #         from core.world_manager import WorldManager
+    #     except Exception as e:
+    #         print(f"[WARN] WorldManager import failed: {e}")
+    #         return
 
-        world_manager = WorldManager()
-        output_dir = config.SESSIONS_DIR / session_id / "characters"
-        output_dir.mkdir(parents=True, exist_ok=True)
+    #     world_manager = WorldManager()
+    #     output_dir = config.SESSIONS_DIR / session_id / "characters"
+    #     output_dir.mkdir(parents=True, exist_ok=True)
 
-        # print(f"[WORLD_RELATION] session_id={session_id} → {related_names}")
+    #     # print(f"[WORLD_RELATION] session_id={session_id} → {related_names}")
 
-        for character_name in related_names:
-            try:
-                card_data = world_manager.find_character_by_name(character_name)
-                if not card_data:
-                    print(f"[WORLD_RELATION] 未検出: {character_name}")
-                    continue
+    #     for character_name in related_names:
+    #         try:
+    #             card_data = world_manager.find_character_by_name(character_name)
+    #             if not card_data:
+    #                 print(f"[WORLD_RELATION] 未検出: {character_name}")
+    #                 continue
 
-                safe_name = string_utils._normalize_name(str(card_data.get("name") or character_name))
-                character_file = output_dir / f"{safe_name}.yaml"
-                current = file_utils.load_yaml_file(character_file) or {}
-                latest = string_utils._convert_to_yaml_format(card_data)
+    #             safe_name = string_utils._normalize_name(str(card_data.get("name") or character_name))
+    #             character_file = output_dir / f"{safe_name}.yaml"
+    #             current = file_utils.load_yaml_file(character_file) or {}
+    #             latest = string_utils._convert_to_yaml_format(card_data)
 
-                if has_changes(current, latest):
-                    updated = merge_character_data(current, latest)
-                    if file_utils.save_yaml_file(character_file, updated):
-                        print(f"[WORLD_RELATION] 同期: {character_name} -> {character_file.name}")
-                    else:
-                        print(f"[WARN] 保存失敗: {character_file}")
-                else:
-                    print(f"[WORLD_RELATION] 変更なし: {character_name}")
+    #             if has_changes(current, latest):
+    #                 updated = merge_character_data(current, latest)
+    #                 if file_utils.save_yaml_file(character_file, updated):
+    #                     print(f"[WORLD_RELATION] 同期: {character_name} -> {character_file.name}")
+    #                 else:
+    #                     print(f"[WARN] 保存失敗: {character_file}")
+    #             else:
+    #                 print(f"[WORLD_RELATION] 変更なし: {character_name}")
 
-            except Exception as e:
-                print(f"[WARN] 関連キャラ同期失敗: {character_name}: {e}")
+    #         except Exception as e:
+    #             print(f"[WARN] 関連キャラ同期失敗: {character_name}: {e}")
 
     def _generate_response(self, session_id: str, messages: list, system_prompt: str) -> str:
         """最終応答生成

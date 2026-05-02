@@ -152,16 +152,16 @@ def sanitize_relationships_line(text: str) -> str:
     return re.sub(r':(?=\S)', ': ', text)
 
 
-def _convert_to_yaml_format(data: dict) -> dict:
-    """必要な項目だけ抽出"""
-    return {
-        "name": data.get("name", ""),
-        "description": data.get("description", ""),
-        "personality": data.get("personality", ""),
-        "scenario": data.get("scenario", ""),
-        "first_mes": data.get("first_mes", ""),
-        "mes_example": data.get("mes_example", ""),
-    }
+# def _convert_to_yaml_format(data: dict) -> dict:
+#     """必要な項目だけ抽出"""
+#     return {
+#         "name": data.get("name", ""),
+#         "description": data.get("description", ""),
+#         "personality": data.get("personality", ""),
+#         "scenario": data.get("scenario", ""),
+#         "first_mes": data.get("first_mes", ""),
+#         "mes_example": data.get("mes_example", ""),
+#     }
 
 
 def _normalize_name(name: str) -> str:

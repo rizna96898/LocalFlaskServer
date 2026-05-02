@@ -389,14 +389,27 @@ class MemoryManager:
                 if found_file:
                     #print(f"[WORLD] found file: {found_file}")
 
-                    raw_data = file_utils._load_character_data(found_file)
+                    # raw_data = file_utils._load_character_data(found_file)
                     #print(f"[WORLD] raw_data keys: {list(raw_data.keys()) if raw_data else 'EMPTY'}")
 
-                    yaml_data = string_utils._convert_to_yaml_format(raw_data)
+                    # yaml_data = string_utils._convert_to_yaml_format(raw_data)
                     #print(f"[WORLD] yaml_data: {yaml_data}")
 
+                    # file_utils.save_yaml_file(dst_file, yaml_data)
+                    raw_data = file_utils._load_character_data(found_file)
+
+                    yaml_data = file_utils.load_yaml_from_character_description(raw_data)
+
+                    if not yaml_data:
+                        print(f"[WORLD] description YAML not found or invalid: {char_name}")
+                        yaml_data = {
+                            "名前": {
+                                "表示名": raw_data.get("name") or char_name,
+                            }
+                        }
+
                     file_utils.save_yaml_file(dst_file, yaml_data)
-                    print(f"[WORLD] saved yaml: {dst_file}")
+                    print(f"[WORLD] saved character card yaml: {dst_file}")
 
                 else:
                     print(f"[WORLD] {char_name} no match → create empty")
@@ -407,6 +420,7 @@ class MemoryManager:
                         }
 
                         file_utils.save_yaml_file(dst_file, data)
+                        
             # --- ここから sub の詳細生成 ---
             world_memory = file_utils.load_yaml_file(world_memory_path) or {}
             current_state = world_memory.get("current_state", {}) if isinstance(world_memory, dict) else {}
@@ -443,6 +457,11 @@ class MemoryManager:
                 if not isinstance(base_data, dict):
                     base_data = {}
 
+                # ★これ追加
+                if "名前" in base_data:
+                    print(f"[SUB] skip card character: {sub_name}")
+                    continue
+                
                 prompt_text = sub_template.format(
                     name=sub_name,
                     world_scenario=world_memory.get("scenario", ""),
