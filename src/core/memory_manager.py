@@ -327,14 +327,14 @@ class MemoryManager:
 
                     # キャラメモリ作成
                     # LocalLLMだとモデル性能が足りないので細かく
-                    # self._run_character_memory_create_sync(
-                    #     session_id,
-                    #     relation_names,
-                    #     body.get("description", ""),
-                    #     body.get("scenario", ""),
-                    #     body.get("first_mes", ""),
-                    #     body.get("mes_example", ""),
-                    # )
+                    self._run_character_memory_create_sync(
+                        session_id,
+                        relation_names,
+                        body.get("description", ""),
+                        body.get("scenario", ""),
+                        body.get("first_mes", ""),
+                        body.get("mes_example", ""),
+                    )
 
                     file_utils.mark_prepare_ready(session_id, "new_chat")
 
@@ -368,7 +368,7 @@ class MemoryManager:
 
             # モブ用テンプレート
             mob_template_path = config.TEMPLATES_DIR / Bootstrap.SUB_CHARACTER_TEMPLATE
-            print("[WORLD] TEMPLATE_PATH", mob_template_path)
+            print("[WORLD] TEMPLATE_PATH")
             mob_template_data = file_utils.load_yaml_file(mob_template_path) or {}
             if not isinstance(mob_template_data, dict):
                 mob_template_data = {}
