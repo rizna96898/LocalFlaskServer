@@ -267,6 +267,7 @@ class MemoryManager:
                 if operation == "create":
                     current_stage = "world"
 
+                    # 世界の初期記憶作成
                     prompt_messages = self.prompt_builder.create_memory_prompt(body)
 
                     response_text = self.model_handling_service.send_message(
@@ -325,14 +326,16 @@ class MemoryManager:
 
                     current_stage = "character"
 
-                    self._run_character_memory_create_sync(
-                        session_id,
-                        relation_names,
-                        body.get("description", ""),
-                        body.get("scenario", ""),
-                        body.get("first_mes", ""),
-                        body.get("mes_example", ""),
-                    )
+                    # キャラメモリ作成
+                    # LocalLLMだとモデル性能が足りないので細かく
+                    # self._run_character_memory_create_sync(
+                    #     session_id,
+                    #     relation_names,
+                    #     body.get("description", ""),
+                    #     body.get("scenario", ""),
+                    #     body.get("first_mes", ""),
+                    #     body.get("mes_example", ""),
+                    # )
 
                     file_utils.mark_prepare_ready(session_id, "new_chat")
 
