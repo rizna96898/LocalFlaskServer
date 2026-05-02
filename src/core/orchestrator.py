@@ -21,7 +21,7 @@ from constant import (
     PromptsMain,
     PromptsPostprocess,
 )
-from services.openrouter_service import OpenRouterService
+from src.services.llm_service import ModelHandlingService
 
 # ヘルパー
 from helpers import string_utils
@@ -37,7 +37,7 @@ from core.prompt_builder import PromptBuilder
 
 class ChatOrchestrator:
     def __init__(self):
-        self.openrouter = OpenRouterService()
+        self.model_handling_service = ModelHandlingService("local")
         self.memory_manager = MemoryManager()
         self.prompt_builder = PromptBuilder()
         # print("[Orchestrator] Initialized")
@@ -114,7 +114,6 @@ class ChatOrchestrator:
         session_id = body.get("session_id")
 
         try:
-
             # ファイルステータスを更新
             file_utils.mark_prepare_processing(session_id, "after")
 
@@ -170,7 +169,8 @@ class ChatOrchestrator:
             )
 
             # 次の話者確定（ここはもう少し工夫がいるはず）
-            target_speakers = _judge_reply_target_speakers(
+            target_speakers = self._judge_reply_target_speakers(
+                self,
                 world_data=context["world_data"],
                 messages=context["messages"],
                 response_text=response_text,
@@ -436,6 +436,43 @@ class ChatOrchestrator:
             print(f"[ERROR] _generate_response: {e}")
             return "すみません、今ちょっと調子が悪いみたいです…"
 
+    def _judge_reply_target_speakers(self, world_data: Dict, messages: list, response_text: str) -> list[str]:
+        
+        prompt_data = file_utils.load_yaml_file(
+            config.MAIN / PromptsMain.CHARACTER_IDENTIFICATION
+        ) or {}
+
+        player_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                player_message = msg.get("content", "")
+                break
+
+        participants = world_data.get("current_state", {}).get("participants", [])
+        characters_text = string_utils.build_characters_text(participants)
+
+        system_prompt = prompt_data["system"]
+        template_prompt = prompt_data["template"]
+        template_prompt = template_prompt.replace("{characters}", characters_text)
+        template_prompt = template_prompt.replace("{player_message}", player_message)
+        template_prompt = template_prompt.replace("{player_answer}", response_text)
+
+        print("置換後プロンプト全文", template_prompt)
+        # model_handling_service = ModelHandlingService("openrouter")
+        result = self.model_handling_service.send_message(
+            messages=[{"role": "user", "content": template_prompt}],
+            system_prompt=system_prompt,
+        )
+
+        parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
+        target_speakers = parsed.get("target_speakers") or []
+
+        if isinstance(target_speakers, str):
+            target_speakers = [target_speakers]
+
+        print("今回の発話対象：", target_speakers)
+        return target_speakers
+
 def _error_response(message: str, status_code: int) -> Dict:
     return {
         "response": {"error": message},
@@ -496,44 +533,6 @@ def _get_world_time(world_data: Dict) -> str:
     if not isinstance(current_state, dict):
         return ""
     return str(current_state.get("time", "")).strip()
-
-
-def _judge_reply_target_speakers(world_data: Dict, messages: list, response_text: str) -> list[str]:
-    
-    prompt_data = file_utils.load_yaml_file(
-        config.MAIN / PromptsMain.CHARACTER_IDENTIFICATION
-    ) or {}
-
-    player_message = ""
-    for msg in reversed(messages):
-        if msg.get("role") == "user":
-            player_message = msg.get("content", "")
-            break
-
-    participants = world_data.get("current_state", {}).get("participants", [])
-    characters_text = string_utils.build_characters_text(participants)
-
-    system_prompt = prompt_data["system"]
-    template_prompt = prompt_data["template"]
-    template_prompt = template_prompt.replace("{characters}", characters_text)
-    template_prompt = template_prompt.replace("{player_message}", player_message)
-    template_prompt = template_prompt.replace("{player_answer}", response_text)
-
-    print("置換後プロンプト全文", template_prompt)
-    service = OpenRouterService()
-    result = service.send_message(
-        messages=[{"role": "user", "content": template_prompt}],
-        system_prompt=system_prompt,
-    )
-
-    parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
-    target_speakers = parsed.get("target_speakers") or []
-
-    if isinstance(target_speakers, str):
-        target_speakers = [target_speakers]
-
-    print("今回の発話対象：", target_speakers)
-    return target_speakers
 
 def _append_chat_history(
     session_id: str,

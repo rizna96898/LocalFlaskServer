@@ -52,10 +52,14 @@ class PromptBuilder:
         """新規 world_memory 作成用のプロンプト"""
         prompt_data = self._load(config.BOOTSTRAP, Bootstrap.WORLD_MEMORY)
 
-        return self._build_messages(
-            prompt_data,
+        user_parts = [
             charactor,
             story,
+        ]
+
+        return self._build_messages(
+            prompt_data,
+            user_parts
         )
 
     # def update_memory_prompt(
@@ -192,13 +196,17 @@ class PromptBuilder:
             else ""
         )
 
-        return self._build_messages(
-            prompt_data,
+        user_parts = [
             name_text,
             description_text,
             scenario_description_text,
             scenario_text,
             first_mes_text,
+        ]
+
+        return self._build_messages(
+            prompt_data,
+            user_parts
         )
     
     def update_character_memory_prompt(
@@ -243,7 +251,7 @@ class PromptBuilder:
     def _build_messages(
         self,
         prompt_data: Dict[str, Any],
-        *user_parts: str,
+        user_parts: list[str],
     ) -> List[Dict]:
         user_content = self._join_sections(
             prompt_data.get("header", ""),
@@ -271,8 +279,11 @@ class PromptBuilder:
             default_flow_style=False,
         ).strip()
 
-        return self._build_messages(
-            prompt_data,
+        user_parts = [
             f"対象: {memory_key}",
             f"情報:\n{memory_yaml}",
+        ]
+        return self._build_messages(
+            prompt_data,
+            user_parts
         )

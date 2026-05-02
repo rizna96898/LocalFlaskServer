@@ -22,6 +22,7 @@ from flask_cors import CORS
 from config import config                    # src/config.py
 from core.orchestrator import ChatOrchestrator
 from helpers import file_utils
+from services import system_settings_reload_service
 
 app = Flask(__name__)
 
@@ -46,6 +47,9 @@ def chat_prepare():
     print("前処理のログ")
 
     try:
+        # Yamlの設定に変更があれば読み直しておく
+        system_settings_reload_service.SystemSettingsReloadCheckService()
+
         body = request.get_json(force=True)
         # デバッグログ（必要に応じて残す）
         # print("=== Request Headers ===")
@@ -73,6 +77,9 @@ def chat_after():
     print("後処理のログ")
 
     try:
+        # Yamlの設定に変更があれば読み直しておく
+        system_settings_reload_service.SystemSettingsReloadCheckService()
+
         body = request.get_json(force=True)
         allow_image = request.headers.get("X-Allow-Image", "false").lower() == "true"
         session_id = body.get("session_id")
@@ -101,6 +108,9 @@ def chat_completions():
         return "", 200
 
     try:
+        # Yamlの設定に変更があれば読み直しておく
+        system_settings_reload_service.SystemSettingsReloadCheckService()
+
         body = request.get_json(force=True)
         allow_image = request.headers.get("X-Allow-Image", "false").lower() == "true"
         session_id = body.get("session_id")
@@ -149,6 +159,9 @@ def new_chat():
         return "", 200
 
     try:
+        # Yamlの設定に変更があれば読み直しておく
+        system_settings_reload_service.SystemSettingsReloadCheckService()
+
         body = request.get_json(force=True)
         session_id = orchestrator.create_new_session(body)
         
@@ -182,6 +195,10 @@ def check_stability():
         return "", 200
 
     try:
+
+        # Yamlの設定に変更があれば読み直しておく
+        system_settings_reload_service.SystemSettingsReloadCheckService()
+
         result = True
         message = "起動してます。OK"
 
@@ -203,6 +220,7 @@ def check_stability():
             "message": f"チェック中にエラー: {str(e)}"
         }), 500
     
+# 前中後処理が失敗した際に使っているが、置き場はここじゃないと思うのでTODO
 def _wait_chat_stage_or_response(session_id: str, target_stage: str, error_message: str):
     if not session_id:
         return None
@@ -220,10 +238,8 @@ def _wait_chat_stage_or_response(session_id: str, target_stage: str, error_messa
 
 if __name__ == "__main__":
     print(f"Starting RP Backend on http://127.0.0.1:{config.PORT}")
-    if not config.OPENROUTER_API_KEY:
-        raise RuntimeError("OPENROUTER_API_KEY が設定されていません。.env ファイルを確認してください。")
     
-    llm_service = local_llama_service.LocalLlamaService()
+    # if config.LOCALMODEL_USE_FLAG:
+    #     llm_service = local_llama_service.LocalLlamaService()
 
-    #app.run(host="127.0.0.1", port=config.PORT, debug=False)
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=False)

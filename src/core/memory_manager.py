@@ -20,14 +20,14 @@ from constant import (
 from core.prompt_builder import PromptBuilder
 from helpers import string_utils
 from helpers import file_utils
-from services.openrouter_service import OpenRouterService
+from src.services.llm_service import ModelHandlingService
 import traceback
 import asyncio
 
 class MemoryManager:
     def __init__(self):
         self.prompt_builder = PromptBuilder()
-        self.openrouter = OpenRouterService()
+        self.model_handling_service = ModelHandlingService("local")
         # print("[MemoryManager] Initialized")
 
     def create_target_speakers(self, session_id: str, body:  Dict):
@@ -120,10 +120,8 @@ class MemoryManager:
                 template_prompt = template_prompt.replace("{player_message}", body.get("message", ""))
                 
                 print("置換後プロンプト全文", template_prompt)
-
-                service = OpenRouterService()
                 
-                result = service.send_message(
+                result = self.model_handling_service.send_message(
                     messages=[
                         {"role": "user", "content": template_prompt}
                     ],
@@ -226,7 +224,7 @@ class MemoryManager:
                     old_memory=old_memory,
                 )
 
-                response_text = self.openrouter.send_message(
+                response_text = self.model_handling_service.send_message(
                     messages=prompt_messages,
                     temperature=0.7,
                     max_tokens=1500,
@@ -271,7 +269,7 @@ class MemoryManager:
 
                     prompt_messages = self.prompt_builder.create_memory_prompt(body)
 
-                    response_text = self.openrouter.send_message(
+                    response_text = self.model_handling_service.send_message(
                         messages=prompt_messages,
                         temperature=0.7,
                         max_tokens=1500,
@@ -450,7 +448,7 @@ class MemoryManager:
                 if tail_template:
                     prompt_text = prompt_text + "\n" + tail_template
 
-                result_text = self.openrouter.send_message(
+                result_text = self.model_handling_service.send_message(
                     messages=[{"role": "user", "content": prompt_text}],
                     temperature=0.7,
                     max_tokens=1500,
@@ -600,7 +598,7 @@ class MemoryManager:
                 # print(f"[CHAR MEMORY] prompt build end: {char_name}")
 
                 print(f"[CHAR MEMORY] ここで投げようとして結果落ちてるっぽい")
-                response_text = self.openrouter.send_message(
+                response_text = self.model_handling_service.send_message(
                     messages=prompt_messages,
                     temperature=0.7,
                     max_tokens=1500
@@ -675,7 +673,7 @@ class MemoryManager:
                 memory_value=value,
             )
 
-            response_text = self.openrouter.send_message(
+            response_text = self.model_handling_service.send_message(
                 messages=prompt_messages,
                 temperature=0.3,
                 max_tokens=1000,
