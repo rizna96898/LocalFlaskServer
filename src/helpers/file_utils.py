@@ -35,15 +35,6 @@ def mark_prepare_processing(session_id: str, complete_stage: str = "new_chat") -
         error_message=None,
     )
 
-def mark_prepare_ready(session_id: str, complete_stage: str = "new_chat") -> bool:
-    return update_prepare_status(
-        session_id,
-        status="ready",
-        complete_stage=complete_stage,
-        error_stage=None,
-        error_message=None,
-    )
-
 def mark_prepare_error(
     session_id: str,
     error_stage: str,
@@ -218,7 +209,6 @@ def find_character_file(char_name: str, st_char_dir: Path) -> Path | None:
 
 def apply_dynamic_params_to_characters(session_id: str, dynamic_list: list[dict]):
     from config import config
-    from helpers import file_utils
 
     session_char_dir = config.SESSIONS_DIR / session_id / "character"
 

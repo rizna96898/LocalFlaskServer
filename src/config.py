@@ -7,6 +7,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 
 # ディレクトリ定義
 FILES_DIR = ROOT_DIR / "files"
+SYSTEM_DIR = FILES_DIR / "systems"
 SESSIONS_DIR = FILES_DIR / "sessions"
 PROMPTS_DIR = FILES_DIR / "prompts"
 SETTINGS_DIR = FILES_DIR / "settings"
@@ -16,6 +17,7 @@ TEMPLATES_DIR = FILES_DIR / "templates"
 class Config:
     def __init__(self):
 
+        self.SYSTEM_DIR = SYSTEM_DIR
         self.SESSIONS_DIR = SESSIONS_DIR
         self.PROMPTS_DIR  = PROMPTS_DIR
         self.BOOTSTRAP    = PROMPTS_DIR / "bootstrap"

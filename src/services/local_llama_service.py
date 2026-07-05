@@ -30,22 +30,22 @@ def get_llm():
 
     return llm_instance
 
-class LocalLlamaService:
-    def __init__(self):
-        print("Loading model...")
-        print("[PYTHON]", sys.executable)
-        print("[CWD]", os.getcwd())
-        print("[PID]", os.getpid())
-        print("[llama_cpp]", llama_cpp.__file__)
-        print("[PATH]", os.environ.get("PATH", "")[:500])
+# class LocalLlamaService:
+#     def __init__(self):
+#         print("Loading model...")
+#         print("[PYTHON]", sys.executable)
+#         print("[CWD]", os.getcwd())
+#         print("[PID]", os.getpid())
+#         print("[llama_cpp]", llama_cpp.__file__)
+#         print("[PATH]", os.environ.get("PATH", "")[:500])
 
-        self.llm = Llama(
-            model_path="E:\\LocalFlaskServer\\models\\mythomax\\mythomax-l2-13b.Q5_K_M.gguf",
-            n_ctx=4096,
-            n_gpu_layers=-1,
-            verbose=True,
-        )
-        print("Model loaded")
+#         self.llm = Llama(
+#             model_path="E:\\LocalFlaskServer\\models\\mythomax\\mythomax-l2-13b.Q5_K_M.gguf",
+#             n_ctx=4096,
+#             n_gpu_layers=-1,
+#             verbose=True,
+#         )
+#         print("Model loaded")
 
-    def send_message(self, prompt, **kwargs):
-        return self.llm(prompt, **kwargs)
+#     def send_message(self, prompt, **kwargs):
+#         return self.llm(prompt, **kwargs)

@@ -25,6 +25,13 @@ class MemoryDetailKeys:
     RELATIONSHIPS = "relationships"
 
 class Bootstrap:
+    MEMORY_MIDDLE_SUMMERY = "00_query_create_character_memory_middle_summery.yaml"
+    MEMORY_MIDDLE_CATEGORIZE = "00_query_create_character_memory_middle_categorize.yaml"
+    MEMORY_MIDDLE_LOCATION = "00_query_create_character_memory_middle_location.yaml"
+    MEMORY_MIDDLE_CLOTHING = "00_query_create_character_memory_middle_clothing.yaml"
+    MEMORY_MIDDLE_ITEMS = "00_query_create_character_memory_middle_items.yaml"
+    MEMORY_MIDDLE_TARGET = "00_query_create_character_memory_middle_target.yaml"
+    MEMORY_MIDDLE_CURRENCY = "00_query_create_character_memory_middle_currency.yaml"
     EDIT_SUMMARY         = "01_query_create_edit_summary.yaml"
     WORLD_MEMORY         = "01_query_create_world_memory.yaml"
     CHARACTER_ITEMS      = "02_query_create_character_items.yaml"

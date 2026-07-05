@@ -68,6 +68,21 @@ def strip_code_block(text: str) -> str:
         return match.group(1)
     return text
 
+import re
+
+def cleanup_model_output(text: str) -> str:
+    # <think>...</think> を丸ごと削除
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+
+    # 片方だけ出たタグも削除
+    text = text.replace("<think>", "")
+    text = text.replace("</think>", "")
+
+    # ### Response: が混ざった時用
+    if "### Response:" in text:
+        text = text.split("### Response:", 1)[-1]
+
+    return text.strip()
 
 def ensure_list(x):
     if x is None:
@@ -171,21 +186,22 @@ def _normalize_name(name: str) -> str:
     return name.replace(" ", "").replace("　", "").strip()
 
 
-WORLD_MEMORY_DEFAULT = {
-    "player_name": "",
-    "current_state": {
-        "time": None,
-        "participants": [],
-        "parties": []
+_DEFAULT = {
+    "プレイヤーID": "",
+    "プレイヤー名": "",
+    "現在の状態": {
+        "日付": None,
+        "参加者": [],
+        "パーティー一覧": []
     },
-    "world": {
-        "world_relationships": [],
+    "世界の状態": {
+        "参加者": [],
     },
 }
 
 
 # 既存コードとの互換用エイリアス
-SUMMARY_DEFAULT = WORLD_MEMORY_DEFAULT
+SUMMARY_DEFAULT = _DEFAULT
 
 
 def _is_null_like(value: Any) -> bool:
@@ -527,15 +543,23 @@ def normalize_person_item(item: Any) -> dict[str, Any] | None:
     name/role 形式の人物データに正規化する。
     旧形式 "名前：役割" も一応吸収。
     """
+    character_str = "キャラクターID"
+    name_str = "名前"
+    role_str = "役割"
+
     if isinstance(item, dict):
-        name = _clean_string_or_none(item.get("name"))
-        role = _clean_string_or_none(item.get("role"))
+        id = _clean_string_or_none(item.get(character_str))
+        name = _clean_string_or_none(item.get(name_str))
+        role = _clean_string_or_none(item.get(role_str))
         if not name:
             return None
 
-        result = {"name": name}
+        result = {character_str: id}
+        if name:
+            result[name_str] = name
+
         if role:
-            result["role"] = role
+            result[role_str] = role
         return result
 
     if isinstance(item, str):
@@ -544,21 +568,26 @@ def normalize_person_item(item: Any) -> dict[str, Any] | None:
             return None
 
         if "：" in text:
-            name, role = text.split("：", 1)
+            id, name, role = text.split("：", 1)
         elif ":" in text:
-            name, role = text.split(":", 1)
+            id, name, role = text.split(":", 1)
         else:
-            name, role = text, ""
+            id, name, role = text, ""
 
+        id = id.strip()
         name = name.strip()
         role = role.strip()
 
-        if not name:
+        if not id:
             return None
 
-        result = {"name": name}
+        result = {character_str: id}
+
+        if name:
+            result[name_str] = name
+
         if role:
-            result["role"] = role
+            result[role_str] = role
         return result
 
     return None
@@ -576,13 +605,19 @@ def normalize_person_list(value: Any) -> list[dict[str, Any]]:
 
     for item in value:
         normalized = normalize_person_item(item)
+        print("normalized", normalized)
         if not normalized:
             continue
 
-        name = normalized["name"]
+        id = normalized["キャラクターID"]
+        if id in seen:
+            continue
+
+        name = normalized["名前"]
         if name in seen:
             continue
 
+        seen.add(id)
         seen.add(name)
         result.append(normalized)
 
@@ -590,6 +625,10 @@ def normalize_person_list(value: Any) -> list[dict[str, Any]]:
 
 
 def normalize_parties(value: Any) -> list[dict[str, Any]]:
+    member_str = "メンバー一覧"
+    name_str = "名前"
+    character_id = "キャラクターID"
+
     if _is_null_like(value):
         return []
 
@@ -599,28 +638,31 @@ def normalize_parties(value: Any) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
 
     for item in value:
+
         if not isinstance(item, dict):
             continue
 
-        name = _clean_string_or_none(item.get("name"))
-        members_raw = item.get("members")
+        name = _clean_string_or_none(item.get(name_str))
+        members_raw = item.get(member_str)
 
         if not name:
             continue
 
         members: list[str] = []
-        if isinstance(members_raw, list):
+        if isinstance(members, list):
             for member in members_raw:
-                member_name = _clean_string_or_none(member)
-                if member_name and member_name not in members:
-                    members.append(member_name)
+                if isinstance(member, dict):
+                    members.append({
+                        character_id: member.get(character_id),
+                        name_str: member.get(name_str),
+                    })
 
         if not members:
             continue
 
         result.append({
-            "name": name,
-            "members": members,
+            name_str: name,
+            member_str: members,
         })
 
     return result
@@ -644,47 +686,49 @@ def build_characters_text(participants: list[Any]) -> str:
 
     return "\n".join(lines)
 
-def normalize_world_memory_data(player_name: str, raw: dict[str, Any] | None) -> dict[str, Any]:
-    data = deepcopy(WORLD_MEMORY_DEFAULT)
+def normalize_world_memory_data(player_id: str, player_name: str, raw: dict[str, Any] | None) -> dict[str, Any]:
+    current_state_str = "現在の状態"
+    world_state_str = "世界の状態"
+    player_id_str = "プレイヤーID"
+    player_name_str = "プレイヤー名"
+    date_str = "日付"
+    member_str = "参加者"
+    current_member_str = "空間の参加者"
+    world_member_str = "世界の参加者"
+    parties_str = "パーティー一覧"
 
+    data = deepcopy(_DEFAULT)
     if not isinstance(raw, dict):
         return data
 
-    data["player_name"] = player_name
+    data[player_id_str] = player_id
+    data[player_name_str] = player_name
 
-    current_state = raw.get("current_state")
+    current_state = raw.get(current_state_str)
 
     if isinstance(current_state, dict):
         time_val = _clean_string_or_none(current_state.get("time"))
         if not time_val:
             time_val = datetime.now().strftime("%Y年%m月%d日")
 
-        data["current_state"]["time"] = time_val
+        data[current_state_str][date_str] = time_val
         # data["current_state"]["participants"] = _clean_string_list(current_state.get("participants"))
-        data["current_state"]["participants"] = normalize_person_list(
-            current_state.get("participants")
+
+        data[current_state_str][member_str] = normalize_person_list(
+            current_state.get(current_member_str)
         )
-        data["current_state"]["parties"] = normalize_parties(
-            current_state.get("parties")
+        data[current_state_str][parties_str] = normalize_parties(
+            current_state.get(parties_str)
         )
     else:
-        data["current_state"]["time"] = datetime.now().strftime("%Y年%m月%d日")
-        data["current_state"]["participants"] = []
+        data[current_state_str][date_str] = datetime.now().strftime("%Y年%m月%d日")
+        data[current_state_str][member_str] = []
 
-    # 新構造を優先し、旧構造 world_relation も互換で読む
-    world = raw.get("world")
-    if isinstance(world, dict):
-        relationships = _clean_world_relation(world.get("world_relationships"))
-    else:
-        relationships = _clean_world_relation(raw.get("world_relation", []))
+    # # 新構造を優先し、旧構造 world_relation も互換で読む
+    world = raw.get(world_state_str)
 
-    # data["world"]["world_relationships"] = [
-    #     normalize_relationship_item(x)
-    #     for x in relationships
-    # ]
-
-    data["world"]["world_relationships"] = normalize_person_list(
-        world.get("world_relationships")
+    data[world_state_str][member_str] = normalize_person_list(
+        world.get(world_member_str)
     )
     
     return data
@@ -709,3 +753,21 @@ def save_summary(path: str, data: dict[str, Any]) -> None:
             sort_keys=False,
             default_flow_style=False,
         )
+
+def extract_list_items(text: str) -> list[str]:
+    result = []
+
+    for line in text.splitlines():
+        line = line.strip()
+
+        # "- "形式
+        if line.startswith("- "):
+            result.append(line[2:].strip())
+            continue
+
+        # "・"形式（日本語対策）
+        if line.startswith("・"):
+            result.append(line[1:].strip())
+            continue
+
+    return result

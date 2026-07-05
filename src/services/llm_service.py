@@ -10,8 +10,9 @@ import threading
 from llama_cpp import Llama
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-
 from config import config
+from helpers import log
+from helpers import string_utils
 
 class ModelHandlingService:
     def __init__(self, mode="openrouter"):
@@ -29,10 +30,12 @@ class ModelHandlingService:
             model_file_name = config.LOCALMODEL_NAME
             self.llm = Llama(
                 model_path=str(model_file_path / model_file_name),
-                n_ctx=3072,
+                n_ctx=4096,
                 n_gpu_layers=-1,  # GPUに載せる。重ければ数値指定
                 verbose=True,
+                reasoning=False
             )
+            print("ローカルモデルの読み込み完了", str(model_file_path / model_file_name))
             self.impl = LocalModelService(llm=self.llm)
 
         else:
@@ -40,24 +43,31 @@ class ModelHandlingService:
     
     def send_message(
         self,
+        task_type: Optional[str],
         messages: List[Dict[str, str]],
         system_prompt: Optional[str] = None,
-        model: Optional[str] = None,
         temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        **kwargs
+        top_p: Optional[float] = None,
+        stop: Optional[List[str]] = None,
+        top_k: Optional[int] = None,
+        repeat_penalty: Optional[int] = None,
+        logit_bias: Optional[Dict[str, int]] = None,
+        **kwargs,
     ):
-        # ここでだけ軽く補完
-        if max_tokens is None:
-            max_tokens = 512
+        
+        max_tokens = self._get_default_max_tokens(task_type)
 
         return self.impl.send_message(
             messages=messages,
             system_prompt=system_prompt,
-            model=model,
             temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            repeat_penalty=repeat_penalty,
             max_tokens=max_tokens,
-            **kwargs
+            stop=stop,
+            logit_bias=logit_bias,
+            **kwargs,
         )
     def _get_default_max_tokens(self, task_type):
         if task_type == "chat":
@@ -79,9 +89,13 @@ class LocalModelService:
         self,
         messages: List[Dict[str, str]],
         system_prompt: Optional[str] = None,
-        model: Optional[str] = None,
         temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[float] = None,
+        repeat_penalty: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        stop: Optional[List[str]] = None,
+        logit_bias: Optional[Dict[str, int]] = None,
         **kwargs
     ) -> str:
         """
@@ -104,22 +118,41 @@ class LocalModelService:
 
         print(payload_messages)
         prompt = messages_to_prompt(payload_messages)
-        
-        print("=== LOCAL PROMPT TAIL ===")
-        print(prompt[-1000:])
-        print("=========================")
 
+        print("=== LOCAL PROMPT TAIL ===")
+        print("[LOCALMODEL] 送信予定文", prompt)
+        print("=========================")
+        
         try:
             print(f"[LOCALMODEL] send_message start: model={model_name}, started_at={started_at}")
 
-            # print(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
-            response = self.llm(
+            log.debug_dump_all(
                 prompt,
-                max_tokens=512,
-                temperature=0.7,
-                # stop=["user:", "system:"]
+                {
+                    "temperature": temperature,
+                    "top_p": top_p,
+                    "top_k": top_k,
+                    "repeat_penalty": repeat_penalty,
+                    "max_tokens": max_tokens,
+                    "stop": stop,
+                    "logit_bias": logit_bias,
+                }
             )
-            # print(f"[OPENROUTER] requests.post end: elapsed={time.time() - started_at:.2f}s")
+            # print(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
+            # llmのリセット
+            self.llm.reset()
+
+            response = self.llm(
+                prompt=prompt,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                repeat_penalty=repeat_penalty,
+                max_tokens=max_tokens,
+                stop=stop,
+                logit_bias=logit_bias,
+            )
+            print("返信結果全部", response)
             print(f"[LOCALMODEL] send_message end: model={model_name}, ended_at={time.time()}")
 
             choice = response["choices"][0]
@@ -135,16 +168,33 @@ class LocalModelService:
             # 空文字チェック（今回まさにこれで落ちてた）
             content = content.strip()
             if content == "":
-                print("[LOCALMODEL WARNING] empty response")
-                print("finish_reason:", choice.get("finish_reason"))
-                print("prompt_tokens:", response.get("usage", {}).get("prompt_tokens"))
-                raise ValueError(
-                    f"[LOCALMODEL] empty content | finish_reason={choice.get('finish_reason')} | response={response}"
-                )
+                for retry in range(2):
+                    response = self.llm(
+                        prompt=prompt,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                        repeat_penalty=repeat_penalty,
+                        max_tokens=max_tokens,
+                        stop=stop,
+                        logit_bias=logit_bias,
+                    )
+
+                    content = response["choices"][0]["text"].strip()
+
+                    if content:
+                        break
+
+                    print(f"[LOCALMODEL] empty content retry={retry+1}")
+
+                if not content:
+                    raise ValueError(f"[LOCALMODEL] empty content after retry | response={response}")
 
             result = content.strip()
+            result = string_utils.cleanup_model_output(result)
             # print(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
 
+            print("[LOCALMODEL] 最終生成結果返答文字列：", result)
             return result
 
         except requests.exceptions.Timeout as e:
@@ -202,9 +252,13 @@ class OpenRouterService:
         self,
         messages: List[Dict[str, str]],
         system_prompt: Optional[str] = None,
-        model: Optional[str] = None,
         temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[float] = None,
+        repeat_penalty: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        stop: Optional[List[str]] = None,
+        logit_bias: Optional[Dict[str, int]] = None,
         **kwargs
     ) -> str:
         """
@@ -230,6 +284,7 @@ class OpenRouterService:
             "messages": payload_messages,
             "temperature": temp,
             "max_tokens": tokens,
+            "logit_bias": {"248068": -100}, # <think> のトークンIDを抑制
             **kwargs
         }
 

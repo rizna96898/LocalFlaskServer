@@ -1,0 +1,13 @@
+{
+  "temperature": 0.5,
+  "top_p": 0.9,
+  "top_k": 0,
+  "repeat_penalty": 1.1,
+  "max_tokens": 1500,
+  "stop": [
+    "### Instruction:"
+  ],
+  "logit_bias": {
+    "248068": -5
+  }
+}

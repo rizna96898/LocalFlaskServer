@@ -8,8 +8,10 @@
 
 from threading import Thread
 from typing import Dict
+from typing import Any
 from pathlib import Path
 import yaml
+import json
 from config import config
 from constant import (
     Bootstrap,
@@ -17,12 +19,13 @@ from constant import (
     PromptsMain,
     PromptsPostprocess,
 )
-from core.prompt_builder import PromptBuilder
+from src.memory_builders.prompt_builder import PromptBuilder
 from helpers import string_utils
 from helpers import file_utils
 from src.services.llm_service import ModelHandlingService
-import traceback
-import asyncio
+from helpers import response_checker
+from memory_builders import use_memory_constant
+from memory_builders import lord_init_files
 
 class MemoryManager:
     def __init__(self):
@@ -35,12 +38,32 @@ class MemoryManager:
         self._run_create_target_spealers(session_id, body)
         return ""
 
-    def create_initial_memory(self, body: Dict, session_id: str):
+    def create_initial_memory(self, session_id: str) -> str:
         print(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
 
         file_utils.mark_prepare_processing(session_id, "new_chat")
 
-        self._run_memory_async(body, session_id, "create", "", "")
+        base_file_obj = lord_init_files.lord_base_world_yaml(session_id)
+        # ここで必要なファイルをロードして受け渡しに使う
+        system_file_path = config.SYSTEM_DIR / f"sessions_list.yaml"
+        system_file_data = file_utils.load_yaml_file(system_file_path)
+
+        # system_fileからworld_idを取得する
+        sessions = base_file_obj["system_file_data"].get("sessions")
+
+        for session in sessions:
+            if session.get("session_id") == session_id:
+                world_id = session.get("world_id")
+                break
+        
+        # world_idで世界設定を読み込む
+        world_file_path = config.SESSIONS_DIR / session_id / f"{world_id}_world.yaml"
+        print("world_file_path", world_file_path)
+        world_file_data = file_utils.load_yaml_file(world_file_path)
+
+        self._run_memory_async(session_id, "create", world_file_data)
+
+        return world_file_data["開始メッセージ"]
 
     def update_memory(
         self,
@@ -68,28 +91,6 @@ class MemoryManager:
             "first_mes": body.get("first_mes", ""),
             "mes_example": body.get("mes_example", ""),
         }
-
-    def _extract_relationship_names(self, world_relationships):
-        names = []
-
-        for item in world_relationships:
-            if isinstance(item, dict):
-                name = str(item.get("name", "")).strip()
-            elif isinstance(item, str):
-                text = item.strip()
-                if "：" in text:
-                    name = text.split("：", 1)[0].strip()
-                elif ":" in text:
-                    name = text.split(":", 1)[0].strip()
-                else:
-                    name = text
-            else:
-                continue
-
-            if name and name not in names:
-                names.append(name)
-
-        return names
 
     def _run_create_target_spealers(self, session_id: str, body: Dict):
         def task():
@@ -120,12 +121,26 @@ class MemoryManager:
                 template_prompt = template_prompt.replace("{player_message}", body.get("message", ""))
                 
                 print("置換後プロンプト全文", template_prompt)
-                
+                #どれだけ自由に出力させるか。
+                temperature = 0.5
+                #出力候補の「確率の合計」でカット
+                top_p = 0.9
+                #上位K個だけ候補にする
+                top_k = 0
+                #1回の応答の最大長n_ctxの1/4位
+                max_tokens = 1024
+                #停止文字
+                stop=[] # これを足す
+
                 result = self.model_handling_service.send_message(
                     messages=[
                         {"role": "user", "content": template_prompt}
                     ],
-                    system_prompt=system_prompt
+                    system_prompt=system_prompt,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_tokens=max_tokens,
+                    stop=stop
                 )
 
                 parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
@@ -257,24 +272,39 @@ class MemoryManager:
 
         Thread(target=task, daemon=True).start()
         
-    def _run_memory_async(self, body: Dict, session_id: str, operation: str, user: str, char: str):
+    def _run_memory_async(self, session_id: str, operation: str, world_file_data: Dict) -> str:
         def task():
             current_stage = "world"
+            
 
+            # 世界情報の作成
             try:
                 print(f"[MEMORY] {operation}処理を実行中... session_id={session_id}")
+
+                character = world_file_data["登場人物"]["世界の登場人物"]
+                characters_text = json.dumps(
+                    character,
+                    ensure_ascii=False,
+                    indent=2
+                )
+                story = world_file_data["シナリオ本文"]["現在"]
+                characters_text = "【登場人物】\n" + characters_text
+                story = "【シナリオ】\n" + story
+                start_message = "【開始メッセージ】\n" + world_file_data["開始メッセージ"]
+
+                print("character", characters_text)
+                print("story", story)
 
                 if operation == "create":
                     current_stage = "world"
 
+                    # characterとstoryがセットで入っている？
                     # 世界の初期記憶作成
-                    prompt_messages = self.prompt_builder.create_memory_prompt(body)
+                    prompt_messages = self.prompt_builder.create_memory_prompt(characters_text, story, start_message)
 
-                    response_text = self.model_handling_service.send_message(
-                        messages=prompt_messages,
-                        temperature=0.7,
-                        max_tokens=1500,
-                    )
+                    parameters = use_memory_constant.get_world_memory_send_parameters(prompt_messages)
+
+                    response_text = self.send_prompt(parameters)
 
                     response_text = string_utils.strip_code_block(response_text)
 
@@ -282,22 +312,38 @@ class MemoryManager:
                         parsed_yaml = yaml.safe_load(response_text) or {}
                         if not isinstance(parsed_yaml, dict):
                             parsed_yaml = {}
+                        if response_checker.is_invalid_world_memory(parsed_yaml):
+                            print("[WARN] world_relationships is empty. retry once.")
+                            response_text = self.send_prompt(parameters)
+
+                            response_text = string_utils.strip_code_block(response_text)
+                            parsed_yaml = yaml.safe_load(response_text) or {}
+                            if not isinstance(parsed_yaml, dict):
+                                parsed_yaml = {}
+
+                            print("２回目？返却yamlの内容？\n", parsed_yaml)
                     except Exception as e:
                         print(f"[WORLD ERROR] YAML parse failed: {e}")
                         print(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
                         parsed_yaml = {}
 
-                    player_name = string_utils.get_player_name(body.get("description"))
 
+
+                    # 何のために必要なのか忘れた
+                    player_id = "kyuya"
+                    player_name = "究也"
+
+                    # world_memoryのオブジェクトを作成
                     normalized_memory = string_utils.normalize_world_memory_data(
+                        player_id,
                         player_name,
                         parsed_yaml,
                     )
 
                     world_relationships = (
                         normalized_memory
-                        .get("world", {})
-                        .get("world_relationships", [])
+                        .get("世界の状態", {})
+                        .get("参加者", [])
                     )
 
                     if not world_relationships:
@@ -307,36 +353,13 @@ class MemoryManager:
 
                     world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
 
-                    print("[DEBUG] parsed_yaml.current_state =", parsed_yaml.get("current_state"))
-                    print("[DEBUG] normalized_memory.current_state =", normalized_memory.get("current_state"))
-                    print("[DEBUG] normalized_memory.world =", normalized_memory.get("world"))
+                    print("[DEBUG] normalized_memory.現在の状態 =", normalized_memory.get("現在の状態"))
+                    print("[DEBUG] normalized_memory.世界の状態 =", normalized_memory.get("世界の状態"))
                     print("[DEBUG] world_memory_path =", world_memory_path)
 
                     saved = file_utils.save_yaml_file(world_memory_path, normalized_memory)
                     if not saved:
                         raise RuntimeError(f"world memory save failed: {world_memory_path}")
-
-                    relation_names = self._extract_relationship_names(world_relationships)
-
-                    self._sync_session_character_files(
-                        session_id=session_id,
-                        world_relation=relation_names,
-                    )
-
-                    current_stage = "character"
-
-                    # キャラメモリ作成
-                    # LocalLLMだとモデル性能が足りないので細かく
-                    self._run_character_memory_create_sync(
-                        session_id,
-                        relation_names,
-                        body.get("description", ""),
-                        body.get("scenario", ""),
-                        body.get("first_mes", ""),
-                        body.get("mes_example", ""),
-                    )
-
-                    file_utils.mark_prepare_ready(session_id, "new_chat")
 
                 elif operation == "update":
                     # 既存update処理
@@ -354,6 +377,37 @@ class MemoryManager:
                     complete_stage="new_chat",
                 )
 
+            # ここからキャラクター情報の作成
+            try:
+                if operation == "create":
+                    current_stage = "character"
+                    file_utils.mark_prepare_ready(session_id, "new_chat")
+
+                    base_file_obj = lord_init_files.lord_base_character_yaml(session_id)
+
+                    # キャラメモリ作成
+                    # LocalLLMだとモデル性能が足りないので細かく
+                    self._run_character_memory_create_sync(
+                        session_id,
+                        world_file_data["登場人物"]["世界の登場人物"],
+                        world_file_data["シナリオ本文"],
+                        world_file_data["開始メッセージ"],
+                        world_file_data["シナリオパラメータ"],
+                        base_file_obj,
+                        normalized_memory
+                    )
+
+            except Exception as e:
+                print(f"[CHARACTER LOGIC ERROR] {type(e).__name__}: {e}")
+                import traceback
+                print(traceback.format_exc())
+
+                file_utils.mark_prepare_error(
+                    session_id,
+                    error_stage=current_stage,
+                    error_message=f"{type(e).__name__}: {e}",
+                    complete_stage="new_chat",
+                )
         Thread(target=task, daemon=True).start()
 
     def _sync_session_character_files(self, session_id: str, world_relation: list):
@@ -437,176 +491,12 @@ class MemoryManager:
         except Exception as e:
             print(f"[WORLD ERROR] {e}")
 
-    # def _sync_session_character_files(self, session_id: str, world_relation: list, world_memory_path: Path):
-    #     try:
-    #         st_char_dir = Path(config.CHARACTERS_DIR)
-    #         session_char_dir = config.SESSIONS_DIR / session_id / "character"
-    #         session_char_dir.mkdir(parents=True, exist_ok=True)
-
-    #         print(f"[WORLD] === character sync start ===")
-    #         print(f"[WORLD] CHAR DIR: {st_char_dir}")
-    #         print(f"[WORLD] SESSION DIR: {session_char_dir}")
-    #         #print(f"[WORLD] world_relation: {world_relation}")
-
-    #         for name in world_relation:
-    #             #print(f"\n[WORLD] ---- processing: {name} ----")
-
-    #             if not isinstance(name, str):
-    #                 print("[WORLD] skip: not string")
-    #                 continue
-
-    #             char_name = name.strip()
-    #             if not char_name:
-    #                 print("[WORLD] skip: empty name")
-    #                 continue
-
-    #             dst_file = session_char_dir / f"{char_name}.yaml"
-
-    #             found_file = file_utils.find_character_file(char_name, st_char_dir)
-
-    #             #print(f"[WORLD] search result: {found_file}")
-
-    #             if found_file:
-    #                 #print(f"[WORLD] found file: {found_file}")
-
-    #                 # raw_data = file_utils._load_character_data(found_file)
-    #                 #print(f"[WORLD] raw_data keys: {list(raw_data.keys()) if raw_data else 'EMPTY'}")
-
-    #                 # yaml_data = string_utils._convert_to_yaml_format(raw_data)
-    #                 #print(f"[WORLD] yaml_data: {yaml_data}")
-
-    #                 # file_utils.save_yaml_file(dst_file, yaml_data)
-    #                 raw_data = file_utils._load_character_data(found_file)
-
-    #                 yaml_data = file_utils.load_yaml_from_character_description(raw_data)
-
-    #                 if not yaml_data:
-    #                     print(f"[WORLD] description YAML not found or invalid: {char_name}")
-    #                     yaml_data = {
-    #                         "名前": {
-    #                             "表示名": raw_data.get("name") or char_name,
-    #                         }
-    #                     }
-
-    #                 file_utils.save_yaml_file(dst_file, yaml_data)
-    #                 print(f"[WORLD] saved character card yaml: {dst_file}")
-
-    #             else:
-    #                 print(f"[WORLD] {char_name} no match → create empty")
-
-    #                 if not dst_file.exists():
-    #                     data = {
-    #                         "last_target": None
-    #                     }
-
-    #                     file_utils.save_yaml_file(dst_file, data)
-                        
-    #         # --- ここから sub の詳細生成 ---
-    #         world_memory = file_utils.load_yaml_file(world_memory_path) or {}
-    #         current_state = world_memory.get("current_state", {}) if isinstance(world_memory, dict) else {}
-    #         participants = current_state.get("participants", []) if isinstance(current_state, dict) else []
-    #         world_block = world_memory.get("world", {}) if isinstance(world_memory, dict) else {}
-    #         world_relationships = world_block.get("world_relationships", []) if isinstance(world_block, dict) else []
-
-    #         prompt_data = file_utils.load_yaml_file(
-    #             config.BOOTSTRAP / Bootstrap.SUB_CHARACTER_MEMORY
-    #         ) or {}
-
-    #         sub_template = prompt_data.get("sub_template", "")
-    #         tail_template = prompt_data.get("tail_template", "")
-
-    #         for participant in participants:
-    #             if not isinstance(participant, dict):
-    #                 continue
-
-    #             sub_name = str(participant.get("name", "")).strip()
-    #             role = str(participant.get("role", "")).strip()
-
-    #             if not sub_name:
-    #                 continue
-
-    #             if role != "sub":
-    #                 continue
-
-    #             character_file = session_char_dir / f"{sub_name}.yaml"
-    #             if not character_file.exists():
-    #                 print(f"[SUB] skip missing shell: {character_file}")
-    #                 continue
-
-    #             base_data = file_utils.load_yaml_file(character_file) or {}
-    #             if not isinstance(base_data, dict):
-    #                 base_data = {}
-
-    #             # ★これ追加
-    #             if "名前" in base_data:
-    #                 print(f"[SUB] skip card character: {sub_name}")
-    #                 continue
-                
-    #             prompt_text = sub_template.format(
-    #                 name=sub_name,
-    #                 world_scenario=world_memory.get("scenario", ""),
-    #                 world_relationships=string_utils.build_characters_text(world_relationships),
-    #             )
-    #             if tail_template:
-    #                 prompt_text = prompt_text + "\n" + tail_template
-
-    #             result_text = self.model_handling_service.send_message(
-    #                 messages=[{"role": "user", "content": prompt_text}],
-    #                 temperature=0.7,
-    #                 max_tokens=1500,
-    #             )
-
-    #             response_text = string_utils.strip_code_block(result_text)
-
-    #             try:
-    #                 parsed_yaml = yaml.safe_load(response_text) or {}
-    #                 if not isinstance(parsed_yaml, dict):
-    #                     parsed_yaml = {}
-    #             except Exception as e:
-    #                 print(f"[SUB] YAML parse failed: {sub_name}: {e}")
-    #                 parsed_yaml = {}
-
-    #             base_profile = parsed_yaml.get("base_profile", {}) if isinstance(parsed_yaml.get("base_profile"), dict) else {}
-    #             personality = parsed_yaml.get("personality", {}) if isinstance(parsed_yaml.get("personality"), dict) else {}
-    #             attitude = parsed_yaml.get("attitude", {}) if isinstance(parsed_yaml.get("attitude"), dict) else {}
-    #             current_state_data = parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {}
-
-    #             if "base_profile" not in base_data or not isinstance(base_data.get("base_profile"), dict):
-    #                 base_data["base_profile"] = {"name": sub_name}
-    #             if "personality" not in base_data or not isinstance(base_data.get("personality"), dict):
-    #                 base_data["personality"] = {}
-    #             if "attitude" not in base_data or not isinstance(base_data.get("attitude"), dict):
-    #                 base_data["attitude"] = {}
-    #             if "current_state" not in base_data or not isinstance(base_data.get("current_state"), dict):
-    #                 base_data["current_state"] = {}
-
-    #             base_data["base_profile"]["name"] = sub_name
-    #             base_data["base_profile"]["role"] = base_profile.get("role")
-    #             base_data["base_profile"]["relation_to_main"] = base_profile.get("relation_to_main")
-
-    #             base_data["personality"]["base_traits"] = personality.get("base_traits", []) if isinstance(personality.get("base_traits"), list) else []
-    #             base_data["personality"]["speech_style"] = personality.get("speech_style")
-
-    #             base_data["attitude"]["to_main"] = attitude.get("to_main")
-    #             base_data["attitude"]["to_player"] = attitude.get("to_player")
-
-    #             base_data["current_state"]["emotion"] = current_state_data.get("emotion")
-    #             if "last_target" not in base_data["current_state"]:
-    #                 base_data["current_state"]["last_target"] = None
-
-    #             file_utils.save_yaml_file(character_file, base_data)
-    #             print(f"[SUB] saved yaml: {character_file}")
-
-    #         print(f"[WORLD] === character sync end ===")
-
-    #     except Exception as e:
-    #         print(f"[WORLD ERROR] {e}")
-
-    def _has_source_character_card(self, char_name: str) -> bool:
+    def _has_source_character_card(self, char_id: str) -> bool:
+        print("キャラカード？", config.CHARACTERS_DIR)
         st_char_dir = Path(config.CHARACTERS_DIR)
         if not st_char_dir.exists():
             return False
-        return file_utils.find_character_file(char_name, st_char_dir) is not None
+        return file_utils.find_character_file(char_id, st_char_dir) is not None
     
     def _run_character_memory_create_async(
         self,
@@ -632,117 +522,140 @@ class MemoryManager:
     def _run_character_memory_create_sync(
         self,
         session_id: str,
-        relation_names: list[str],
-        description: str = "",
-        scenario: str = "",
-        first_mes: str = "",
-        mes_example: str = "",
+        characters: list[dict[str, Any]] = [],
+        scenario: dict = {},
+        start_message: list[dict[str, Any]] = [],
+        scenario_parameter: dict = {},
+        base_file_obj: dict[str, Any] = {},
+        world_memory_data: dict[str, Any] = {},
     ):
         print("_run_character_memory_create_sync start")
         # print(f"[CHAR MEMORY] relation_names = {relation_names}")
 
-        session_char_dir = config.SESSIONS_DIR / session_id / "character"
-        session_char_dir.mkdir(parents=True, exist_ok=True)
-
+        session_dir = config.SESSIONS_DIR / session_id
+        session_char_dir = session_dir / "character"
+        # session_char_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = config.SESSIONS_DIR.parent.parent / "temp"
         done: set[str] = set()
 
-        for name in relation_names:
-            # print(f"[CHAR MEMORY] loop start: {name!r}")
+        # キャラクター単位の初期設定ファイル作成
+        for character in characters:
+            
             try:
-                if not isinstance(name, str):
-                    print(f"[CHAR MEMORY] skip not str: {name!r}")
+
+                char_id = character["参照ID"]
+
+                # 作成対象はキャラのみ
+                # 将来的にサブキャラも判定するかも
+                if character["参照種別"] != "character":
+                    print(f"[CHAR MEMORY] skip mob: {char_id}")
                     continue
+                
+                # キャラの状況一覧を問い合わせ
+                print("[CHAR MEMORY MIDDLE SUMMERY] start")
+                temp_file = self.proc_middle_summery(base_file_obj,
+                                                     character,
+                                                     char_id,
+                                                     scenario,
+                                                     scenario_parameter,
+                                                     start_message,
+                                                     temp_dir,
+                                                     session_id,)
+                print("[CHAR MEMORY MIDDLE SUMMERY] end")
 
-                char_name = name.strip()
-                # print(f"[CHAR MEMORY] normalized: {char_name!r}")
+                # 現在の状態(current_state)の作成
+                # 場所(location)の特定
+                print(f"[CHAR MEMORY PLACE] start: ")
+                location = self.proc_middle_location(base_file_obj, temp_file,)
+                print(f"[CHAR MEMORY PLACE] end: ")
 
-                if not char_name:
-                    print("[CHAR MEMORY] skip empty")
-                    continue
+                # キャラの状況一覧から、分類を判定
+                print(f"[CHAR MEMORY CATEGORIZE] start: ")
+                temp_file_path = self.proc_middle_categorize(temp_file,
+                                                             base_file_obj,
+                                                             temp_dir,
+                                                             char_id,
+                                                             session_id)
+                print(f"[CHAR MEMORY CATEGORIZE] end: ")
 
-                if char_name in done:
-                    # print(f"[CHAR MEMORY] skip duplicate: {char_name}")
-                    continue
+                temp_file_data = file_utils.load_yaml_file(temp_file_path) or {}
+                action = []
+                status = []
+                mood = []
+                for temp_file_str in temp_file_data:
+                    print('temp_file_str["要約元"]', temp_file_str["要約元"])
+                    print('temp_file_str["分類"]', temp_file_str["分類"])
+                    match temp_file_str["分類"]:
+                        case "行動":
+                            action.append(temp_file_str["要約元"])
+                        case "状態":
+                            status.append(temp_file_str["要約元"])
+                        case "心情":
+                            mood.append(temp_file_str["要約元"])
 
-                done.add(char_name)
+                # キャラの状況一覧から、分類を判定
+                # 服装を判定
+                print(f"[CHAR MEMORY  CLOTHING] start: ")
+                clothing_data = self.proc_middle_clothing(                                         session_char_dir,
+                                                          base_file_obj,
+                                                          char_id,)
+                print(f"[CHAR MEMORY CLOTHING] end: ")
 
-                if not self._has_source_character_card(char_name):
-                    print(f"[CHAR MEMORY] skip mob: {char_name}")
-                    continue
+                # 所持品を判定
+                print(f"[CHAR MEMORY ITEMS] start: ")
+                item_data = self.proc_middle_items(                                         session_char_dir,
+                                                          base_file_obj,
+                                                          char_id,
+                                                          clothing_data,
+                                                          location,
+                                                          temp_file)
+                print(f"[CHAR MEMORY ITEMS] end: ")
 
-                # print(f"[CHAR MEMORY] card exists: {char_name}")
+                # 意識（forcus_target）の特定（多分作成済み）
+                print(f"[CHAR MEMORY TARGET] start: ")
+                
+                target_data = self.proc_middle_target(                                         base_file_obj,
+                                                          character["表示名"],
+                                                          world_memory_data,
+                                                          start_message)
+                target_list = []
+                target_list.append(target_data["相手"])
+                print(f"[CHAR MEMORY TARGET] end: ")
 
-                char_file = session_char_dir / f"{char_name}.yaml"
-                # print(f"[CHAR MEMORY] char_file: {char_file}")
+                # 所持金（currency）の特定
+                print(f"[CHAR MEMORY CURRENCY] start: ")
+                currency_data = self.proc_middle_currency(                                         session_char_dir,
+                                                        base_file_obj,
+                                                        char_id,
+                                                        start_message,)
+                print(f"[CHAR MEMORY CURRENCY] end: ")
 
-                if not char_file.exists():
-                    print(f"[CHAR MEMORY] skip missing session yaml: {char_file}")
-                    continue
+                character_memory_obj = {}
+                character_memory_obj["現在の状態"] = {}
+                character_memory_obj["現在の状態"]["場所"] = location
+                character_memory_obj["現在の状態"]["状態"] = status
+                character_memory_obj["現在の状態"]["行動"] = action
+                character_memory_obj["現在の状態"]["心情"] = mood
+                character_memory_obj["現在の状態"]["服装"] = clothing_data["服装"]
+                character_memory_obj["現在の状態"]["関係性"] = world_memory_data["現在の状態"]["参加者"]
+                character_memory_obj["現在の状態"]["意識"] = target_list
+                character_memory_obj["現在の状態"]["所持品"] = item_data["所持品"]
+                character_memory_obj["現在の状態"]["金額"] = currency_data
 
-                memory_file = session_char_dir / f"{char_name}_memory.yaml"
-                # print(f"[CHAR MEMORY] memory_file: {memory_file}")
-
-                if memory_file.exists():
-                    print(f"[CHAR MEMORY] skip exists: {memory_file.name}")
-                    continue
-
-                # print(f"[CHAR MEMORY] load yaml start: {char_name}")
-                char_data = file_utils.load_yaml_file(char_file) or {}
-                # print(f"[CHAR MEMORY] load yaml end: {char_name}")
-
-                # print(f"[CHAR MEMORY] prompt build start: {char_name}")
-                prompt_messages = self.prompt_builder.create_character_memory_prompt(
-                    char_data,
-                    description,
-                    scenario,
-                    first_mes,
-                )
-                # print(f"[CHAR MEMORY] prompt build end: {char_name}")
-
-                print(f"[CHAR MEMORY] ここで投げようとして結果落ちてるっぽい")
-                response_text = self.model_handling_service.send_message(
-                    messages=prompt_messages,
-                    temperature=0.7,
-                    max_tokens=1500
-                )
-
-                # print(f"[CHAR MEMORY] parse start: {char_name}")
-                response_text = string_utils.strip_code_block(response_text)
-                parsed_yaml = yaml.safe_load(response_text) or {}
-                # print(f"[CHAR MEMORY] parse end: {char_name}")
-
-                result = {
-                    "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
-                    "memory": parsed_yaml.get("memory", {}) if isinstance(parsed_yaml.get("memory"), dict) else {},
-                    "owned_items": parsed_yaml.get("owned_items", []) if isinstance(parsed_yaml.get("owned_items"), list) else [],
-                }
-
-                parameter_data = extract_character_parameters_from_mes_example(mes_example, char_name)
-                if parameter_data:
-                    result["parameter"] = parameter_data
-                    
-                # print(f"[CHAR MEMORY] save start: {memory_file}")
-                saved = file_utils.save_yaml_file(memory_file, result)
-                # print(f"[CHAR MEMORY] save result: {saved}")
-
+                print("character_memory_save start");
+                character_memory_path = config.SESSIONS_DIR / session_id / "character" / f"{char_id}_memory.yaml"
+                saved = file_utils.save_yaml_file(character_memory_path, character_memory_obj)
                 if not saved:
-                    raise RuntimeError(f"character memory save failed: {memory_file}")
-
-                self._create_character_summary_sync(
-                    session_id=session_id,
-                    char_name=char_name,
-                    memory_file=memory_file,
-                )
-                # print(f"[CHAR MEMORY] saved: {memory_file.name}")
-                # print(f"[CHAR MEMORY] exists after save: {memory_file.exists()}")
-
-                # print(f"[CHAR MEMORY] send_message end: {char_name}")
+                    raise RuntimeError(f"character memory save failed: {character_memory_path}")
+                print("character_memory_save end");
+                continue
             except Exception as e:
                 print(f"[CHAR MEMORY ERROR] {type(e).__name__}: {e}")
                 import traceback
                 print(traceback.format_exc())
                 raise
 
+        
         print("セッションキャラディレクトリ", session_char_dir);
         print("_run_character_memory_create_sync end")
         
@@ -794,56 +707,382 @@ class MemoryManager:
 
         print(f"[CHAR SUMMARY] saved: {summary_file.name}")
 
-def extract_character_parameters_from_mes_example(mes_example: str, char_name: str) -> list[dict]:
-    """
-    mes_example 内の dynamic_params から、
-    target == char_name（スペース無視）に一致する param_data を返す。
-    一致しなければ [] を返す。
-    """
-    if not isinstance(mes_example, str) or not mes_example.strip():
+    # 問い合わせサービスへのクッション関数
+    def send_prompt(self, send_data: Dict):
+        response_text = self.model_handling_service.send_message(
+            task_type=send_data.get("task_type"),
+            messages=send_data.get("prompt_messages"),
+            system_prompt=send_data.get("system_prompt"),
+            temperature=send_data.get("temperature"),
+            top_p=send_data.get("top_p"),
+            stop=send_data.get("stop"),
+            top_k = send_data.get("top_k"),
+            repeat_penalty = send_data.get("repeat_penalty"),
+            logit_bias= send_data.get("logit_bias")
+        )
+        return response_text
+
+    def proc_middle_summery(self, 
+                            base_file_obj: Dict[str, any] = {},
+                            character: Dict[str, any] = {},
+                            char_id: str = "",
+                            scenario: str = "",
+                            scenario_parameter: str = "",
+                            start_message: str = "",
+                            temp_dir: str = "",
+                            session_id: str = ""):
+        
+        print("[CHAR MEMORY MIDDLE SUMMERY] replace start")
+        result = self.replace_middle_summery(base_file_obj,
+                                             character,
+                                             char_id,
+                                             scenario,
+                                             scenario_parameter,
+                                             start_message,)              
+        print("[CHAR MEMORY MIDDLE SUMMERY] replace end")
+        
+        print("[CHAR MEMORY MIDDLE SUMMERY] send message start")
+        parameters = use_memory_constant.get_character_midle_summery_send_parameters(result["system_prompt"], result["template_prompt"])
+        response_text = self.send_prompt(parameters)
+        response_text = string_utils.strip_code_block(response_text)
+        list_input = string_utils.extract_list_items(response_text)
+        print("[CHAR MEMORY MIDDLE SUMMERY] send message end")
+        
+        # config.SESSIONS_DIR = files/sessions 前提なら、プロジェクト直下の temp
+        temp_file = temp_dir / f"{char_id}_{session_id}_middle.yaml"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        # 書き込み
+        print(f"[CHAR MEMORY MIDDLE SUMMERY] saved: {temp_file}")
+        with temp_file.open("w", encoding="utf-8") as f:
+            yaml.safe_dump(list_input, f, allow_unicode=True, sort_keys=False)
+
+        return temp_file
+    
+    def proc_middle_categorize(self, 
+                               temp_file: str = "",
+                               base_file_obj: Dict[str, any] = {},
+                               temp_dir: str = "",
+                               char_id: str = "",
+                               session_id: str = "",):
+        temp_categorize_data = file_utils.load_yaml_file(temp_file) or {}
+        system_prompt = base_file_obj["prompt_categorize_yaml"].get("system")
+        # systemの中も置換しないといけないような気がする・・・
+        for temp_categorize_str in temp_categorize_data:
+            temp_str = base_file_obj["prompt_categorize_yaml"].get("message_header") + "\n" + temp_categorize_str + "\n" + base_file_obj["prompt_categorize_yaml"].get("tail_template")
+
+            parameters = use_memory_constant.get_character_midle_categorize_send_parameters(system_prompt, temp_str)
+
+            response_text = self.send_prompt(parameters)
+            response_text = string_utils.strip_code_block(response_text)
+        
+            category = response_text.replace("分類名: ", "")
+            categorized_result = []
+            categorized_result.append({
+                "要約元": temp_categorize_str,
+                "分類": category
+            })
+            # config.SESSIONS_DIR = files/sessions 前提なら、プロジェクト直下の temp
+            temp_file_path = temp_dir / f"{char_id}_{session_id}_middle_categorize.yaml"
+
+            # ① 既存読み込み
+            if temp_file_path.exists():
+                with temp_file_path.open("r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or []
+            else:
+                data = []
+
+            # ② 追加
+            print("★ 書き込み前", len(data))
+            data.extend(categorized_result)
+            print("★ 書き込み後", len(data))
+
+            # ③ 上書き
+            with temp_file_path.open("w", encoding="utf-8") as f:
+                yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+        
+        print(f"[CHAR MEMORY CATEGORIZE] saved: {temp_file_path}")
+
+        return temp_file_path
+    
+    def proc_middle_location(self, 
+                          base_file_obj: Dict[str, any] = {},
+                          replace_obj: Dict[str, any] = {},):
+        
+        temp_place_str = file_utils.load_yaml_file(replace_obj) or {}
+        temp_place_str = yaml.dump(
+            temp_place_str,
+            allow_unicode=True,
+            sort_keys=False
+        )
+
+        system_prompt = base_file_obj["prompt_location_yaml"].get("system")
+        # # systemの中も置換しないといけないような気がする・・・
+        temp_str = base_file_obj["prompt_location_yaml"].get("template") + "\n" + base_file_obj["prompt_location_yaml"].get("tail_template")
+
+        temp_str = temp_str.replace("{summary_data}", temp_place_str)
+
+        # # ここでreplaceが必要かな？
+        # # 後共通化できそう？
+        parameters = use_memory_constant.get_character_midle_location_send_parameters(system_prompt, temp_str)
+
+        response_text = self.send_prompt(parameters)
+        response_text = string_utils.strip_code_block(response_text)
+        print("response_text", response_text)
+        return response_text
+
+    def proc_middle_clothing(self,
+                             session_char_dir:Path = "",
+                             base_file_obj: Dict[str, any] = {},
+                             char_id: str = "",):
+        # characterファイルの読み込み
+        character_data = file_utils.load_yaml_file(session_char_dir / f"{char_id}_setting.yaml") or {}
+        character_data = yaml.dump(
+            character_data,
+            allow_unicode=True,
+            sort_keys=False
+        )
+
+        system_prompt = base_file_obj["prompt_clothing_yaml"].get("system")
+        temp_str = base_file_obj["prompt_clothing_yaml"].get("template")
+        tail_str = base_file_obj["prompt_clothing_yaml"].get("tail_template")
+
+        temp_str = temp_str.replace("{character_data}", character_data)
+        temp_str = temp_str + "\n" + tail_str
+
+        parameters = use_memory_constant.get_character_midle_clothing_send_parameters(system_prompt, temp_str)
+
+        response_text = self.send_prompt(parameters)
+        response_text = string_utils.strip_code_block(response_text)
+        
+        print("response_text", response_text)
+        return yaml.safe_load(response_text) or {}
+
+    def proc_middle_items(self,
+                          session_char_dir:Path = "",
+                          base_file_obj: Dict[str, any] = {},
+                          char_id: str = "",
+                          clothing_data: list[str] = [],
+                          location: str = "",
+                          temp_file: str = "",):
+        
+        temp_categorize_data = file_utils.load_yaml_file(temp_file) or {}
+
+        # characterファイルの読み込み
+        character_data = file_utils.load_yaml_file(session_char_dir / f"{char_id}_setting.yaml") or {}
+        character_data = yaml.dump(
+            character_data,
+            allow_unicode=True,
+            sort_keys=False
+        )
+        clothing_str = yaml.dump(
+            clothing_data["服装"],
+            allow_unicode=True,
+            sort_keys=False
+        )
+        summary_str = yaml.dump(
+            temp_categorize_data,
+            allow_unicode=True,
+            sort_keys=False
+        )
+
+        system_prompt = base_file_obj["prompt_items_yaml"].get("system")
+        temp_str = base_file_obj["prompt_items_yaml"].get("template")
+        tail_str = base_file_obj["prompt_items_yaml"].get("tail_template")
+
+        temp_str = temp_str.replace("{clothing_data}", clothing_str)
+        temp_str = temp_str.replace("{character_data}", character_data)
+        temp_str = temp_str.replace("{location}", location)
+        temp_str = temp_str.replace("{summary}", summary_str)
+
+        temp_str = temp_str + "\n" + tail_str
+
+        parameters = use_memory_constant.get_character_midle_items_send_parameters(system_prompt, temp_str)
+
+        response_text = self.send_prompt(parameters)
+        response_text = string_utils.strip_code_block(response_text)
+        
+        print("返却前全文", response_text)
+        return yaml.safe_load(response_text) or {}
+
+    def proc_middle_target(self,
+                          base_file_obj: Dict[str, any] = {},
+                          character_name: str = "",
+                          world_memory_data: list[str] = [],
+                          first_message: str = "",):
+        participants_str = yaml.dump(
+            world_memory_data["現在の状態"]["参加者"],
+            allow_unicode=True,
+            sort_keys=False
+        )
+
+        system_prompt = base_file_obj["prompt_target_yaml"].get("system")
+        temp_str = base_file_obj["prompt_target_yaml"].get("template")
+        tail_str = base_file_obj["prompt_target_yaml"].get("tail_template")
+
+        temp_str = temp_str.replace("{character_name}", character_name or "")
+        temp_str = temp_str.replace("{participants_data}", participants_str or "")
+        temp_str = temp_str.replace("{first_message}", first_message or "")
+
+        temp_str = temp_str + "\n" + tail_str
+
+        print("置換後", temp_str)
+        parameters = use_memory_constant.get_character_midle_target_send_parameters(system_prompt, temp_str)
+
+        response_text = self.send_prompt(parameters)
+        response_text = string_utils.strip_code_block(response_text)
+        
+        print("返却前全文", response_text)
+        return yaml.safe_load(response_text) or {}
+
+    def proc_middle_currency(self,
+                          session_char_dir:Path = "",
+                          base_file_obj: Dict[str, any] = {},
+                          char_id: str = "",
+                          first_message: str = "",):
+        
+        # characterファイルの読み込み
+        character_data = file_utils.load_yaml_file(session_char_dir / f"{char_id}_setting.yaml") or {}
+        character_name = character_data["名前"]["表示名"]
+        character_data = yaml.dump(
+            character_data,
+            allow_unicode=True,
+            sort_keys=False
+        )
+
+        system_prompt = base_file_obj["prompt_currency_yaml"].get("system")
+        temp_str = base_file_obj["prompt_currency_yaml"].get("template")
+        tail_str = base_file_obj["prompt_currency_yaml"].get("tail_template")
+
+        temp_str = temp_str.replace("{character_name}", character_name)
+        temp_str = temp_str.replace("{character_data}", character_data)
+        temp_str = temp_str.replace("{first_message}", first_message)
+
+        temp_str = temp_str + "\n" + tail_str
+
+        parameters = use_memory_constant.get_character_midle_currency_send_parameters(system_prompt, temp_str)
+
+        response_text = self.send_prompt(parameters)
+        response_text = string_utils.strip_code_block(response_text)
+        
+        print("返却前全文", response_text)
+        return yaml.safe_load(response_text) or {}
+
+    def extract_character_parameters_from_mes_example(self, mes_example: str, char_name: str) -> list[dict]:
+        """
+        mes_example 内の dynamic_params から、
+        target == char_name（スペース無視）に一致する param_data を返す。
+        一致しなければ [] を返す。
+        """
+        if not isinstance(mes_example, str) or not mes_example.strip():
+            return []
+
+        try:
+            parsed = yaml.safe_load(mes_example) or {}
+        except Exception as e:
+            print(f"[PARAM WARN] mes_example parse failed: {e}")
+            return []
+
+        if not isinstance(parsed, dict):
+            return []
+
+        dynamic_params = parsed.get("dynamic_params")
+        if not isinstance(dynamic_params, list):
+            return []
+
+        target_norm = "".join(str(char_name).split())
+
+        for item in dynamic_params:
+            if not isinstance(item, dict):
+                continue
+
+            target = item.get("target")
+            param_data = item.get("param_data")
+
+            if not isinstance(target, str) or not isinstance(param_data, list):
+                continue
+
+            item_target_norm = "".join(target.split())
+
+            if item_target_norm == target_norm:
+                result = []
+                for param in param_data:
+                    if not isinstance(param, dict):
+                        continue
+
+                    display_name = param.get("display_name")
+                    if not display_name:
+                        continue
+
+                    result.append({
+                        "display_name": display_name,
+                        "count": param.get("count", 0),
+                    })
+                return result
+
         return []
 
-    try:
-        parsed = yaml.safe_load(mes_example) or {}
-    except Exception as e:
-        print(f"[PARAM WARN] mes_example parse failed: {e}")
-        return []
+    def replace_middle_summery(self, 
+                               base_file_obj: Dict[str, any] = {},
+                               character: Dict[str, any] = {},
+                               char_id: str = "",
+                               scenario: str = "",
+                               scenario_parameter: str = "",
+                               start_message: str = ""):
+        
+        system_prompt = base_file_obj["prompt_data"].get("system", "")
+        template_prompt = base_file_obj["prompt_data"].get("template", "")
+        
+        # 置換できるように改行有文字列にする
+        
+        scenario_str = json.dumps(
+                        scenario,
+                        ensure_ascii=False,
+                        indent=2
+                    )
+        scenario_parameter_prompt = self.convert_dynamic_params(scenario_parameter)
+        scenario_parameter_str = yaml.dump(
+            scenario_parameter_prompt,
+            allow_unicode=True,
+            sort_keys=False
+        )
+        relationships = base_file_obj["world_memory_data"].get("世界の状態").get("参加者")
+        relationships_str = yaml.dump(
+            relationships,
+            allow_unicode=True,
+            sort_keys=False
+        )
 
-    if not isinstance(parsed, dict):
-        return []
+        # system_promptの置換
+        system_prompt = system_prompt.replace("{character_name}", character["表示名"])
+        # template_promptの置換
+        template_prompt = template_prompt.replace("{character_name}", char_id)
+        template_prompt = template_prompt.replace("{scenario}", scenario_str or "")
+        template_prompt = template_prompt.replace("{mes_example}", scenario_parameter_str or "")
+        template_prompt = template_prompt.replace("{first_mes}", start_message or "")
+        template_prompt = template_prompt.replace("{characters}", relationships_str)
 
-    dynamic_params = parsed.get("dynamic_params")
-    if not isinstance(dynamic_params, list):
-        return []
+        result = {}
+        result["system_prompt"] = system_prompt
+        result["template_prompt"] = template_prompt
+        return result
 
-    target_norm = "".join(str(char_name).split())
+    def convert_dynamic_params(self, data):
+        result = {}
 
-    for item in dynamic_params:
-        if not isinstance(item, dict):
-            continue
+        for item in data.get("変動パラメータ", []):
+            target = item.get("対象キャラクターID")
+            param_list = item.get("パラメーター", [])
 
-        target = item.get("target")
-        param_data = item.get("param_data")
+            if not target:
+                continue
 
-        if not isinstance(target, str) or not isinstance(param_data, list):
-            continue
+            result[target] = {}
 
-        item_target_norm = "".join(target.split())
+            for p in param_list:
+                name = p.get("表示名")
+                value = p.get("数値")
 
-        if item_target_norm == target_norm:
-            result = []
-            for param in param_data:
-                if not isinstance(param, dict):
-                    continue
+                if name:
+                    result[target][name] = value
 
-                display_name = param.get("display_name")
-                if not display_name:
-                    continue
-
-                result.append({
-                    "display_name": display_name,
-                    "count": param.get("count", 0),
-                })
-            return result
-
-    return []
+        return {"変動パラメータ": result}

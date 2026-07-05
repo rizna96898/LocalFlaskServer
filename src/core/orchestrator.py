@@ -32,38 +32,32 @@ from helpers.data_utils import has_changes, merge_character_data
 from core.memory_manager import MemoryManager
 
 # プロンプト構築
-from core.prompt_builder import PromptBuilder
+from src.memory_builders.prompt_builder import PromptBuilder
 
 
 class ChatOrchestrator:
     def __init__(self):
-        self.model_handling_service = ModelHandlingService("local")
+        self.model_handling_service = None
         self.memory_manager = MemoryManager()
         self.prompt_builder = PromptBuilder()
         # print("[Orchestrator] Initialized")
 
+    def get_model_handling_service(self):
+        if self.model_handling_service is None:
+            self.model_handling_service = ModelHandlingService("local")
+        return self.model_handling_service
+    
     # ニューチャット
     def create_new_session(self, body: Dict) -> str:
         # """新規チャット作成（/new_chat）"""
         session_id = body.get("session_id") or str(uuid.uuid4())
 
-        # セッションディレクトリ作成
-        file_utils.ensure_session_dir(config.SESSIONS_DIR, session_id)
-
         # ニューチャット用ステータス作成
         file_utils.create_prepare_status(session_id)
 
-        # キャラクター設定の同期
-        self._sync_character_if_changed(session_id, body)
-
-        # bodyにsession_idを明示的に入れて渡す
-        call_body = body.copy()
-        call_body["session_id"] = session_id
-
         # 初期記憶の非同期作成
-        self.memory_manager.create_initial_memory(call_body, session_id)
-
-        return session_id
+        return self.memory_manager.create_initial_memory(session_id)
+        
 
     # 前処理
     def chat_pretreatment(self, body: Dict) -> Dict:
@@ -320,7 +314,6 @@ class ChatOrchestrator:
     def _sync_character_if_changed(self, session_id: str, body: Dict):
         print("_sync_character_if_changed start")
         """SillyTavernから来たメインキャラクター情報を session の world.yaml に同期
-
         役割:
         - 主人公 / メインキャラの最新カード情報を session 側へ持ってくる
         - ここは world_relation の関連キャラ同期とは別枠
@@ -351,60 +344,6 @@ class ChatOrchestrator:
             else:
                 print(f"[WARN] Failed to update character.yaml for {session_id}")
         print("_sync_character_if_changed end")
-
-    # def _sync_related_characters_from_memory(self, session_id: str):
-    #     """
-    #     memory.yaml の world_relation を見て、関連キャラの最新カードを
-    #     session配下の characters フォルダへ同期する。
-
-    #     目的:
-    #     - SillyTavern 上で更新されたキャラ情報を次の発話から反映させる
-    #     - 会話に登場中のキャラだけを必要な分だけ毎回更新する
-    #     """
-    #     memory_file = config.SESSIONS_DIR / session_id / "memory.yaml"
-    #     memory_data = file_utils.load_yaml_file(memory_file) or {}
-    #     related_names = string_utils._clean_world_relation(memory_data.get("world_relation", []))
-
-    #     if not related_names:
-    #         print(f"[WORLD_RELATION] session_id={session_id} → 対象なし")
-    #         return
-
-    #     # world_relation から拾うだけなので、import失敗時は全体を落とさずスキップする
-    #     try:
-    #         from core.world_manager import WorldManager
-    #     except Exception as e:
-    #         print(f"[WARN] WorldManager import failed: {e}")
-    #         return
-
-    #     world_manager = WorldManager()
-    #     output_dir = config.SESSIONS_DIR / session_id / "characters"
-    #     output_dir.mkdir(parents=True, exist_ok=True)
-
-    #     # print(f"[WORLD_RELATION] session_id={session_id} → {related_names}")
-
-    #     for character_name in related_names:
-    #         try:
-    #             card_data = world_manager.find_character_by_name(character_name)
-    #             if not card_data:
-    #                 print(f"[WORLD_RELATION] 未検出: {character_name}")
-    #                 continue
-
-    #             safe_name = string_utils._normalize_name(str(card_data.get("name") or character_name))
-    #             character_file = output_dir / f"{safe_name}.yaml"
-    #             current = file_utils.load_yaml_file(character_file) or {}
-    #             latest = string_utils._convert_to_yaml_format(card_data)
-
-    #             if has_changes(current, latest):
-    #                 updated = merge_character_data(current, latest)
-    #                 if file_utils.save_yaml_file(character_file, updated):
-    #                     print(f"[WORLD_RELATION] 同期: {character_name} -> {character_file.name}")
-    #                 else:
-    #                     print(f"[WARN] 保存失敗: {character_file}")
-    #             else:
-    #                 print(f"[WORLD_RELATION] 変更なし: {character_name}")
-
-    #         except Exception as e:
-    #             print(f"[WARN] 関連キャラ同期失敗: {character_name}: {e}")
 
     def _generate_response(self, session_id: str, messages: list, system_prompt: str) -> str:
         """最終応答生成
@@ -459,7 +398,7 @@ class ChatOrchestrator:
 
         print("置換後プロンプト全文", template_prompt)
         # model_handling_service = ModelHandlingService("openrouter")
-        result = self.model_handling_service.send_message(
+        result = self.get_model_handling_service.send_message(
             messages=[{"role": "user", "content": template_prompt}],
             system_prompt=system_prompt,
         )
