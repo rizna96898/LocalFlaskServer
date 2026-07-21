@@ -4,6 +4,7 @@
 from __future__ import annotations
 from typing import List
 import re
+import time
 from copy import deepcopy
 from typing import Any
 import yaml
@@ -12,6 +13,8 @@ from pathlib import Path
 from typing import Any
 from helpers import string_utils
 
+class LiteralString(str):
+    pass
 
 def clean_for_save(text: str) -> str:
     if not text:
@@ -771,3 +774,38 @@ def extract_list_items(text: str) -> list[str]:
             continue
 
     return result
+
+def none_if_blank(value):
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        value = value.replace("\r\n", "\n").strip()
+        return value if value else None
+
+    return value
+
+def to_literal_if_multiline(value):
+    value = string_utils.none_if_blank(value)
+
+    if value is None:
+        return None
+
+    # 改行コード統一
+    value = value.replace("\r\n", "\n")
+
+    if "\n" in value:
+        return LiteralString(value)
+
+    return value
+
+def history_append(history: dict, speaker: str, role: str, line_id: str, message: str, icon_data: dict):
+    history.append({
+        "t": time.time(),
+        "speaker": speaker,
+        "role": role,
+        "line_id": line_id,
+        "message": message,
+        "icon_data": icon_data
+    })
+    

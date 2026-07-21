@@ -4,8 +4,6 @@
 """
 
 from __future__ import annotations
-from config import config
-from pathlib import Path
 import yaml
 from typing import Dict, Any
 import json
@@ -17,14 +15,23 @@ from helpers import file_utils
 import base64
 import time
 
+def literal_str_representer(dumper, data):
+    return dumper.represent_scalar(
+        "tag:yaml.org,2002:str",
+        data,
+        style="|"
+    )
+
+yaml.SafeDumper.add_representer(
+    string_utils.LiteralString,
+    literal_str_representer
+)
+
+# セッションディレクトリを作成してPathを返す
 def ensure_session_dir(sessions_dir: Path, session_id: str) -> Path:
-    """セッションディレクトリを作成してPathを返す"""
     session_dir = sessions_dir / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     return session_dir
-
-def get_prepare_status_file(session_id: str) -> Path:
-    return config.SESSIONS_DIR / session_id / "prepare_status.yaml"
 
 def mark_prepare_processing(session_id: str, complete_stage: str = "new_chat") -> bool:
     return update_prepare_status(
@@ -76,22 +83,6 @@ def save_yaml_file(file_path: Path, data: Dict[str, Any]) -> bool:
         print(f"[ERROR] Failed to save YAML {file_path}: {e}")
         return False
 
-def save_json_file(file_path: Path, data: Dict) -> bool:
-    """
-    JSONファイルを保存するヘルパー関数
-    - ディレクトリがなければ自動作成
-    - UTF-8で保存（日本語対応）
-    """
-    try:
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"[FILE] JSON保存完了: {file_path.name}")
-        return True
-    except Exception as e:
-        print(f"[ERROR] JSON保存失敗 {file_path}: {e}")
-        return False
-    
 def load_yaml_file(file_path: Path) -> Dict[str, Any]:
     """YAMLファイルを読み込む"""
     try:
@@ -243,11 +234,11 @@ def load_history(directory_full_path: str) -> list:
         history = []
 
     #不要なt（タイムスタンプ）を落とす
-    llm_history = [
-        {"role": m["role"], "content": m["content"]}
-        for m in history
-    ]
-    return llm_history
+    # llm_history = [
+    #     {"role": m["role"], "message": m["message"]}
+    #     for m in history
+    # ]
+    return history
 
 #会話履歴を保存
 def save_history(dir_full_path: str, history: list) -> None:
@@ -364,134 +355,13 @@ def load_character_memories(
 
     return result
 
-def get_prepare_status_path(session_id: str) -> Path:
-    return config.SESSIONS_DIR / session_id / "prepare_status.yaml"
-
-
-def load_prepare_status(session_id: str) -> dict[str, Any]:
-    path = get_prepare_status_path(session_id)
-    data = load_yaml_file(path) or {}
-    return data if isinstance(data, dict) else {}
-
-
-def create_prepare_status(session_id: str) -> bool:
-    return save_yaml_file(
-        get_prepare_status_path(session_id),
-        {
-            "status": "processing",
-            "complete_stage": "new_chat",   # new_chat / prepare / main_chat / mob_chat / after
-            "error_stage": None,
-            "error_message": None,
-            "needs_mob_chat": False,
-            "mob_count": 0,
-            "next_speakers": [],
-        },
-    )
-
-
-def update_prepare_status(
-    session_id: str,
-    *,
-    status: str | None = None,
-    complete_stage: str | None = None,
-    error_stage: str | None = None,
-    error_message: str | None = None,
-    needs_mob_chat: bool | None = None,
-    mob_count: int | None = None,
-    next_speakers: list | None = None,   # ← 追加
-) -> bool:
-    path = get_prepare_status_path(session_id)
-    data = load_yaml_file(path) or {}
-
-    if not isinstance(data, dict):
-        data = {}
-
-    if status is not None:
-        data["status"] = status
-
-    if complete_stage is not None:
-        data["complete_stage"] = complete_stage
-
-    if error_stage is not None:
-        data["error_stage"] = error_stage
-
-    if error_message is not None:
-        data["error_message"] = error_message
-
-    if needs_mob_chat is not None:
-        data["needs_mob_chat"] = needs_mob_chat
-
-    if mob_count is not None:
-        data["mob_count"] = mob_count
-
-    if next_speakers is not None:
-        # 念のため安全に文字列化＆空要素除去
-        data["next_speakers"] = [
-            str(x).strip()
-            for x in next_speakers
-            if x
-        ]
-
-    return save_yaml_file(path, data)
-
-def mark_prepare_ready(session_id: str, complete_stage: str) -> bool:
-    return update_prepare_status(
-        session_id,
-        status="ready",
-        complete_stage=complete_stage,
-        error_stage=None,
-        error_message=None,
-    )
-
-
-def mark_prepare_error(
-    session_id: str,
-    *,
-    complete_stage: str,
-    error_stage: str,
-    error_message: str,
-) -> bool:
-    return update_prepare_status(
-        session_id,
-        status="error",
-        complete_stage=complete_stage,
-        error_stage=error_stage,
-        error_message=error_message,
-    )
-
-def is_prepare_status_ready(session_id: str, expected_stage: str) -> bool:
-    data = load_prepare_status(session_id)
-    if not isinstance(data, dict):
-        return False
-
-    return (
-        data.get("status") == "ready"
-        and data.get("complete_stage") == expected_stage
-    )
-
-def can_start_prepare(session_id: str) -> bool:
-    data = load_prepare_status(session_id)
-    if not isinstance(data, dict):
-        return False
-
-    return (
-        data.get("status") == "ready"
-        and data.get("complete_stage") in ("new_chat", "after")
-    )
-
-
-def can_start_main_chat(session_id: str) -> bool:
-    return is_prepare_status_ready(session_id, "prepare")
-
-
-def can_start_after(session_id: str) -> bool:
-    return is_prepare_status_ready(session_id, "main_chat")
-
+# よくわからない。いるの？
 def get_needs_mob_chat(session_id: str) -> bool:
     data = load_prepare_status(session_id)
     return bool(data.get("needs_mob_chat", False)) if isinstance(data, dict) else False
 
-
+# mob_count ここじゃない気が
+# ファイル操作じゃない
 def get_mob_count(session_id: str) -> int:
     data = load_prepare_status(session_id)
     if not isinstance(data, dict):
@@ -503,6 +373,7 @@ def get_mob_count(session_id: str) -> int:
     except Exception:
         return 0
 
+# 処理可能確認
 def wait_until_prepare_status(
     session_id: str,
     *,
@@ -534,6 +405,7 @@ def wait_until_prepare_status(
 
         time.sleep(interval_sec)
 
+# キャラ説明を取得
 def load_yaml_from_character_description(card_data: dict) -> dict:
     """
     SillyTavernキャラカードの description に入っている YAML を読み取る。
@@ -558,6 +430,14 @@ def load_yaml_from_character_description(card_data: dict) -> dict:
         print(f"[CHAR CARD YAML ERROR] head={text[:300]!r}")
         return {}
     
+# 世界情報から日付持ってきてる
+# 必要だけどここじゃない
+def get_world_time(world_data: Dict) -> str:
+    current_state = world_data.get("current_state", {})
+    if not isinstance(current_state, dict):
+        return ""
+    return str(current_state.get("time", "")).strip()
+
 class BlockStyleDumper(yaml.SafeDumper):
     pass
 BlockStyleDumper.add_representer(str, str_presenter)

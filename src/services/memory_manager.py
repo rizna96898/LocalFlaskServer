@@ -19,10 +19,10 @@ from constant import (
     PromptsMain,
     PromptsPostprocess,
 )
-from src.memory_builders.prompt_builder import PromptBuilder
+from memory_builders.prompt_builder import PromptBuilder
 from helpers import string_utils
 from helpers import file_utils
-from src.services.llm_service import ModelHandlingService
+from services.llm_service import ModelHandlingService
 from helpers import response_checker
 from memory_builders import use_memory_constant
 from memory_builders import lord_init_files
@@ -33,249 +33,57 @@ class MemoryManager:
         self.model_handling_service = ModelHandlingService("local")
         # print("[MemoryManager] Initialized")
 
-    def create_target_speakers(self, session_id: str, body:  Dict):
-        print(f"[TARGET SPEAKERS] session_id={session_id} → 発言対象確定を開始")
-        self._run_create_target_spealers(session_id, body)
-        return ""
+    # 問い合わせサービスへのクッション関数
+    def send_prompt(self, send_data: Dict):
+        response_text = self.model_handling_service.send_message(
+            task_type=send_data.get("task_type"),
+            messages=send_data.get("prompt_messages"),
+            system_prompt=send_data.get("system_prompt"),
+            temperature=send_data.get("temperature"),
+            top_p=send_data.get("top_p"),
+            stop=send_data.get("stop"),
+            top_k = send_data.get("top_k"),
+            repeat_penalty = send_data.get("repeat_penalty"),
+            logit_bias= send_data.get("logit_bias")
+        )
+        return response_text
 
+    # 初期記憶の非同期作成
     def create_initial_memory(self, session_id: str) -> str:
         print(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
 
-        file_utils.mark_prepare_processing(session_id, "new_chat")
+        try:
+            file_utils.mark_prepare_processing(session_id, "new_chat")
 
-        base_file_obj = lord_init_files.lord_base_world_yaml(session_id)
-        # ここで必要なファイルをロードして受け渡しに使う
-        system_file_path = config.SYSTEM_DIR / f"sessions_list.yaml"
-        system_file_data = file_utils.load_yaml_file(system_file_path)
+            base_file_obj = lord_init_files.lord_base_world_yaml(session_id)
+            # ここで必要なファイルをロードして受け渡しに使う
+            system_file_path = config.SYSTEM_DIR / f"sessions_list.yaml"
+            system_file_data = file_utils.load_yaml_file(system_file_path)
 
-        # system_fileからworld_idを取得する
-        sessions = base_file_obj["system_file_data"].get("sessions")
+            # system_fileからworld_idを取得する
+            sessions = base_file_obj["system_file_data"].get("sessions")
 
-        for session in sessions:
-            if session.get("session_id") == session_id:
-                world_id = session.get("world_id")
-                break
-        
-        # world_idで世界設定を読み込む
-        world_file_path = config.SESSIONS_DIR / session_id / f"{world_id}_world.yaml"
-        print("world_file_path", world_file_path)
-        world_file_data = file_utils.load_yaml_file(world_file_path)
+            for session in sessions:
+                if session.get("session_id") == session_id:
+                    world_id = session.get("world_id")
+                    break
+            
+            # world_idで世界設定を読み込む
+            world_file_path = config.SESSIONS_DIR / session_id / f"{world_id}_world.yaml"
+            print("world_file_path", world_file_path)
+            world_file_data = file_utils.load_yaml_file(world_file_path)
 
-        self._run_memory_async(session_id, "create", world_file_data)
+            # 記憶作成
+            self._run_memory_async(session_id, "create", world_file_data)
 
-        return world_file_data["開始メッセージ"]
+            return world_file_data["開始メッセージ"]
+        except Exception as e:
+            print(f"[CREATE INITIAL MEMORY ERROR] {type(e).__name__}: {e}")
 
-    def update_memory(
-        self,
-        body: Dict,
-        session_id: str,
-        character_name: str,
-        last_user_content: str,
-        last_assistant_content: str,
-    ):
-        print(f"[MEMORY] session_id={session_id} char={character_name} → 記憶更新を開始")
-        self._run_memory_async(
-            body=body,
-            session_id=session_id,
-            operation="update",
-            user=last_user_content,
-            char=last_assistant_content
-        )
-
-    def _extract_character_context(self, body: Dict) -> Dict:
-        return {
-            "name": body.get("name", ""),
-            "description": body.get("description", ""),
-            "personality": body.get("personality", ""),
-            "scenario": body.get("scenario", ""),
-            "first_mes": body.get("first_mes", ""),
-            "mes_example": body.get("mes_example", ""),
-        }
-
-    def _run_create_target_spealers(self, session_id: str, body: Dict):
-        def task():
-            try:
-                # print("session_id:", session_id, type(session_id))
-                # print("body:", body, type(body))
-
-                # プレイヤーの発言が誰の物かを確認するプロンプトを投げる
-                # yamlのロード
-                world_memory = file_utils.load_yaml_file(
-                    config.SESSIONS_DIR / session_id / "world_memory.yaml"
-                ) or {}
-                prompt_data = file_utils.load_yaml_file(
-                    config.PREPROCESS / PromptsPreprocess.PLAYER_IDENTIFYCATION
-                ) or {}
-
-                print("prompt_path", config.BOOTSTRAP / PromptsPreprocess.PLAYER_IDENTIFYCATION)
-                print("prompt_data", prompt_data)
-
-                world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])
-
-                print("current participantsの編集後文字列", world_participants)
-                # print("実行プロンプト原文", prompt_data)
-                system_prompt = prompt_data["system"]
-                template_prompt = prompt_data["template"]
-
-                template_prompt = template_prompt.replace("{characters}", world_participants)
-                template_prompt = template_prompt.replace("{player_message}", body.get("message", ""))
-                
-                print("置換後プロンプト全文", template_prompt)
-                #どれだけ自由に出力させるか。
-                temperature = 0.5
-                #出力候補の「確率の合計」でカット
-                top_p = 0.9
-                #上位K個だけ候補にする
-                top_k = 0
-                #1回の応答の最大長n_ctxの1/4位
-                max_tokens = 1024
-                #停止文字
-                stop=[] # これを足す
-
-                result = self.model_handling_service.send_message(
-                    messages=[
-                        {"role": "user", "content": template_prompt}
-                    ],
-                    system_prompt=system_prompt,
-                    temperature=temperature,
-                    top_p=top_p,
-                    max_tokens=max_tokens,
-                    stop=stop
-                )
-
-                parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
-                target = parsed.get("target_speakers")
-
-                print("今回の発話対象", target)
-
-                name = body.get("player")
-                player_name = name.split(": ", 1)[1].split("：", 1)[0]
-
-                print("player_name", player_name)
-                character_path = Path(config.SESSIONS_DIR / session_id / "character")
-
-                player_path = file_utils.find_character_file(player_name, character_path)
-
-                print("player_path", player_path)
-
-                player_obj = file_utils.load_yaml_file(player_path)
-
-                player_obj["last_target"] = target
-
-                file_utils.save_yaml_file(player_path, player_obj)
-
-                # ここは実データの持ち方に合わせて調整
-                mob_count = 0
-
-                if isinstance(target, list):
-                    # プレイヤーとメインキャラを除いた人数をモブ数にしたいならここで調整
-                    mob_count = len(target)
-
-                elif isinstance(body.get("mob_count"), int):
-                    mob_count = int(body.get("mob_count"))
-
-                needs_mob_chat = mob_count > 0
-
-                file_utils.update_prepare_status(
-                    session_id,
-                    status="ready",
-                    complete_stage="prepare",
-                    error_stage=None,
-                    error_message=None,
-                    needs_mob_chat=needs_mob_chat,
-                    mob_count=mob_count,
-                )
-
-                print(f"[CREATE TARGET SPEAKERS UPDATE] ")
-
-            except Exception as e:
-                print(f"[CREATE TARGET SPEAKERS ERROR] {type(e).__name__}: {e}")
-
-        Thread(target=task, daemon=True).start()
-    
-    def _run_character_memory_update_async(
-        self,
-        body: Dict,
-        session_id: str,
-        character_name: str,
-        last_user_content: str,
-        last_assistant_content: str,
-    ):
-        def task():
-            try:
-                # print("[CHAR UPDATE] _run_character_memory_update_async start")
-
-                session_char_dir = config.SESSIONS_DIR / session_id / "character"
-                session_char_dir.mkdir(parents=True, exist_ok=True)
-
-                char_name = character_name.strip()
-                if not char_name:
-                    print("[CHAR UPDATE] skip empty character_name")
-                    return
-
-                character_file_path = file_utils.find_character_yaml_file(char_name, session_char_dir)
-                if not character_file_path:
-                    print(f"[CHAR UPDATE] character file not found: {char_name}")
-                    return
-                memory_file_path = file_utils.find_character_memory_file(char_name, session_char_dir)
-                if not memory_file_path:
-                    print(f"[CHAR UPDATE] memory file not found: {char_name}")
-                    return
-
-                character_file = file_utils.load_yaml_file(character_file_path) or {}
-                if not isinstance(character_file, dict):
-                    character_file = {}
-
-                old_memory = file_utils.load_yaml_file(memory_file_path) or {}
-                if not isinstance(old_memory, dict):
-                    old_memory = {}
-
-                prompt_messages = self.prompt_builder.update_character_memory_prompt(
-                    character_name=char_name,
-                    description=character_file.get("description"),
-                    current_state=old_memory.get("current_state"),
-                    last_user_content=last_user_content,
-                    last_assistant_content=last_assistant_content,
-                    old_memory=old_memory,
-                )
-
-                response_text = self.model_handling_service.send_message(
-                    messages=prompt_messages,
-                    temperature=0.7,
-                    max_tokens=1500,
-                )
-                response_text = string_utils.strip_code_block(response_text)
-
-                try:
-                    parsed_yaml = yaml.safe_load(response_text) or {}
-                    if not isinstance(parsed_yaml, dict):
-                        parsed_yaml = {}
-                except Exception as e:
-                    print(f"[CHAR UPDATE] YAML parse failed: {char_name}: {e}")
-                    parsed_yaml = {}
-
-                new_memory = {
-                    "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
-                    "memory": parsed_yaml.get("memory", {}) if isinstance(parsed_yaml.get("memory"), dict) else {},
-                    "owned_items": parsed_yaml.get("owned_items", []) if isinstance(parsed_yaml.get("owned_items"), list) else [],
-                    "param_data": parsed_yaml.get("param_data", []) if isinstance(parsed_yaml.get("param_data"), list) else [],
-                    "last_contact_date": parsed_yaml.get("last_contact_date"),
-                }
-
-                merged_memory = string_utils._merge_memory_data(old_memory, new_memory)
-                file_utils.save_yaml_file(memory_file_path, merged_memory)
-
-                print(f"[CHAR UPDATE] saved: {memory_file_path.name}")
-
-            except Exception as e:
-                print(f"[CHAR UPDATE ERROR] {type(e).__name__}: {e}")
-
-        Thread(target=task, daemon=True).start()
-        
+   # 上から呼ばれてる非同期処理
     def _run_memory_async(self, session_id: str, operation: str, world_file_data: Dict) -> str:
         def task():
             current_stage = "world"
-            
 
             # 世界情報の作成
             try:
@@ -326,9 +134,6 @@ class MemoryManager:
                         print(f"[WORLD ERROR] YAML parse failed: {e}")
                         print(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
                         parsed_yaml = {}
-
-
-
                     # 何のために必要なのか忘れた
                     player_id = "kyuya"
                     player_name = "究也"
@@ -410,115 +215,7 @@ class MemoryManager:
                 )
         Thread(target=task, daemon=True).start()
 
-    def _sync_session_character_files(self, session_id: str, world_relation: list):
-        try:
-            st_char_dir = Path(config.CHARACTERS_DIR)
-            session_char_dir = config.SESSIONS_DIR / session_id / "character"
-            session_char_dir.mkdir(parents=True, exist_ok=True)
-
-            print(f"[WORLD] === character sync start ===")
-            print(f"[WORLD] CHAR DIR: {st_char_dir}")
-            print(f"[WORLD] SESSION DIR: {session_char_dir}")
-
-            # モブ用テンプレート
-            mob_template_path = config.TEMPLATES_DIR / Bootstrap.SUB_CHARACTER_TEMPLATE
-            print("[WORLD] TEMPLATE_PATH")
-            mob_template_data = file_utils.load_yaml_file(mob_template_path) or {}
-            if not isinstance(mob_template_data, dict):
-                mob_template_data = {}
-
-            for name in world_relation:
-                if not isinstance(name, str):
-                    print("[WORLD] skip: not string")
-                    continue
-
-                char_name = name.strip()
-                if not char_name:
-                    print("[WORLD] skip: empty name")
-                    continue
-
-                dst_file = session_char_dir / f"{char_name}.yaml"
-                found_file = file_utils.find_character_file(char_name, st_char_dir)
-
-                # --------------------------------------------------
-                # 1. キャラカードが存在する場合
-                #    description 内 YAML を正として保存する
-                # --------------------------------------------------
-                if found_file:
-                    raw_data = file_utils._load_character_data(found_file)
-
-                    yaml_data = file_utils.load_yaml_from_character_description(raw_data)
-
-                    if not yaml_data:
-                        print(f"[WORLD] description YAML not found or invalid: {char_name}")
-                        yaml_data = {
-                            "名前": {
-                                "表示名": raw_data.get("name") or char_name,
-                            }
-                        }
-
-                    file_utils.save_yaml_file(dst_file, yaml_data)
-                    print(f"[WORLD] saved character card yaml: {dst_file}")
-                    continue
-
-                # --------------------------------------------------
-                # 2. キャラカードが存在しない場合
-                #    モブ用テンプレートに名前だけ入れて保存する
-                # --------------------------------------------------
-                print(f"[WORLD] {char_name} no match → create mob character yaml")
-
-                if dst_file.exists():
-                    print(f"[MOB] skip existing yaml: {dst_file}")
-                    continue
-
-                # テンプレートを破壊しないように deepcopy
-                import copy
-                data = copy.deepcopy(mob_template_data)
-
-                if not isinstance(data, dict):
-                    data = {}
-
-                if "名前" not in data or not isinstance(data.get("名前"), dict):
-                    data["名前"] = {}
-
-                data["名前"]["表示名"] = char_name
-
-                file_utils.save_yaml_file(dst_file, data)
-                print(f"[MOB] saved character yaml: {dst_file}")
-
-            print(f"[WORLD] === character sync end ===")
-
-        except Exception as e:
-            print(f"[WORLD ERROR] {e}")
-
-    def _has_source_character_card(self, char_id: str) -> bool:
-        print("キャラカード？", config.CHARACTERS_DIR)
-        st_char_dir = Path(config.CHARACTERS_DIR)
-        if not st_char_dir.exists():
-            return False
-        return file_utils.find_character_file(char_id, st_char_dir) is not None
-    
-    def _run_character_memory_create_async(
-        self,
-        session_id: str,
-        relation_names: list[str],
-        description: str = "",
-        scenario: str = "",
-        first_mes: str = "",
-        mes_example: str = "",
-    ):
-        def task():
-            self._run_character_memory_create_sync(
-                session_id=session_id,
-                relation_names=relation_names,
-                description=description,
-                scenario=scenario,
-                first_mes=first_mes,
-                mes_example=mes_example,
-            )
-
-        Thread(target=task, daemon=True).start()
-
+    # 登場人物の初期記憶作成
     def _run_character_memory_create_sync(
         self,
         session_id: str,
@@ -658,70 +355,8 @@ class MemoryManager:
         
         print("セッションキャラディレクトリ", session_char_dir);
         print("_run_character_memory_create_sync end")
-        
-    def _create_character_summary_sync(
-        self,
-        session_id: str,
-        char_name: str,
-        memory_file: Path,
-    ):
-        session_char_dir = config.SESSIONS_DIR / session_id / "character"
 
-        memory_data = file_utils.load_yaml_file(memory_file) or {}
-        memory_block = memory_data.get("memory", {})
-        if not isinstance(memory_block, dict):
-            memory_block = {}
-
-        summary = {
-            "history": [],
-            "progress": [],
-            "worries": [],
-        }
-
-        for key in ("history", "progress", "worries"):
-            value = memory_block.get(key, [])
-            if not value:
-                continue
-
-            prompt_messages = self.prompt_builder.create_edit_summary_prompt(
-                memory_key=key,
-                memory_value=value,
-            )
-
-            response_text = self.model_handling_service.send_message(
-                messages=prompt_messages,
-                temperature=0.3,
-                max_tokens=1000,
-            )
-
-            response_text = string_utils.strip_code_block(response_text).strip()
-
-            if response_text:
-                summary[key] = [response_text]
-
-        summary_file = session_char_dir / f"{char_name}_summary.yaml"
-        saved = file_utils.save_yaml_file(summary_file, summary)
-
-        if not saved:
-            raise RuntimeError(f"character summary save failed: {summary_file}")
-
-        print(f"[CHAR SUMMARY] saved: {summary_file.name}")
-
-    # 問い合わせサービスへのクッション関数
-    def send_prompt(self, send_data: Dict):
-        response_text = self.model_handling_service.send_message(
-            task_type=send_data.get("task_type"),
-            messages=send_data.get("prompt_messages"),
-            system_prompt=send_data.get("system_prompt"),
-            temperature=send_data.get("temperature"),
-            top_p=send_data.get("top_p"),
-            stop=send_data.get("stop"),
-            top_k = send_data.get("top_k"),
-            repeat_penalty = send_data.get("repeat_penalty"),
-            logit_bias= send_data.get("logit_bias")
-        )
-        return response_text
-
+    # 要約の問い合わせ
     def proc_middle_summery(self, 
                             base_file_obj: Dict[str, any] = {},
                             character: Dict[str, any] = {},
@@ -758,6 +393,7 @@ class MemoryManager:
 
         return temp_file
     
+    # 要約のカテゴリ分割をと言わせ
     def proc_middle_categorize(self, 
                                temp_file: str = "",
                                base_file_obj: Dict[str, any] = {},
@@ -804,6 +440,7 @@ class MemoryManager:
 
         return temp_file_path
     
+    # 場所の問い合わせ
     def proc_middle_location(self, 
                           base_file_obj: Dict[str, any] = {},
                           replace_obj: Dict[str, any] = {},):
@@ -830,6 +467,7 @@ class MemoryManager:
         print("response_text", response_text)
         return response_text
 
+    # 服装の問い合わせ
     def proc_middle_clothing(self,
                              session_char_dir:Path = "",
                              base_file_obj: Dict[str, any] = {},
@@ -857,6 +495,7 @@ class MemoryManager:
         print("response_text", response_text)
         return yaml.safe_load(response_text) or {}
 
+    # 所持品の問い合わせ
     def proc_middle_items(self,
                           session_char_dir:Path = "",
                           base_file_obj: Dict[str, any] = {},
@@ -904,6 +543,7 @@ class MemoryManager:
         print("返却前全文", response_text)
         return yaml.safe_load(response_text) or {}
 
+    # 意識を誰に向けているか問い合わせ
     def proc_middle_target(self,
                           base_file_obj: Dict[str, any] = {},
                           character_name: str = "",
@@ -934,6 +574,7 @@ class MemoryManager:
         print("返却前全文", response_text)
         return yaml.safe_load(response_text) or {}
 
+    # 所持金の問い合わせ
     def proc_middle_currency(self,
                           session_char_dir:Path = "",
                           base_file_obj: Dict[str, any] = {},
@@ -967,60 +608,29 @@ class MemoryManager:
         print("返却前全文", response_text)
         return yaml.safe_load(response_text) or {}
 
-    def extract_character_parameters_from_mes_example(self, mes_example: str, char_name: str) -> list[dict]:
-        """
-        mes_example 内の dynamic_params から、
-        target == char_name（スペース無視）に一致する param_data を返す。
-        一致しなければ [] を返す。
-        """
-        if not isinstance(mes_example, str) or not mes_example.strip():
-            return []
+    # TODO 変動パラメータの作成（未実装、予定）
+    def convert_dynamic_params(self, data):
+        result = {}
 
-        try:
-            parsed = yaml.safe_load(mes_example) or {}
-        except Exception as e:
-            print(f"[PARAM WARN] mes_example parse failed: {e}")
-            return []
+        for item in data.get("変動パラメータ", []):
+            target = item.get("対象キャラクターID")
+            param_list = item.get("パラメーター", [])
 
-        if not isinstance(parsed, dict):
-            return []
-
-        dynamic_params = parsed.get("dynamic_params")
-        if not isinstance(dynamic_params, list):
-            return []
-
-        target_norm = "".join(str(char_name).split())
-
-        for item in dynamic_params:
-            if not isinstance(item, dict):
+            if not target:
                 continue
 
-            target = item.get("target")
-            param_data = item.get("param_data")
+            result[target] = {}
 
-            if not isinstance(target, str) or not isinstance(param_data, list):
-                continue
+            for p in param_list:
+                name = p.get("表示名")
+                value = p.get("数値")
 
-            item_target_norm = "".join(target.split())
+                if name:
+                    result[target][name] = value
 
-            if item_target_norm == target_norm:
-                result = []
-                for param in param_data:
-                    if not isinstance(param, dict):
-                        continue
+        return {"変動パラメータ": result}
 
-                    display_name = param.get("display_name")
-                    if not display_name:
-                        continue
-
-                    result.append({
-                        "display_name": display_name,
-                        "count": param.get("count", 0),
-                    })
-                return result
-
-        return []
-
+    # システムプロンプトとテンプレートプロンプトの置換
     def replace_middle_summery(self, 
                                base_file_obj: Dict[str, any] = {},
                                character: Dict[str, any] = {},
@@ -1066,23 +676,418 @@ class MemoryManager:
         result["template_prompt"] = template_prompt
         return result
 
-    def convert_dynamic_params(self, data):
-        result = {}
+    # 次の話者確定（使ってない可能性ある）
+    # def create_target_speakers(self, session_id: str, body:  Dict):
+    #     print(f"[TARGET SPEAKERS] session_id={session_id} → 発言対象確定を開始")
+    #     self._run_create_target_speakers(session_id, body)
+    #     return ""
 
-        for item in data.get("変動パラメータ", []):
-            target = item.get("対象キャラクターID")
-            param_list = item.get("パラメーター", [])
+    # 次の話者確定（上から呼ばれる）
+    # def _run_create_target_speakers(self, session_id: str, body: Dict):
+    #     def task():
+    #         try:
+    #             # print("session_id:", session_id, type(session_id))
+    #             # print("body:", body, type(body))
 
-            if not target:
-                continue
+    #             # プレイヤーの発言が誰の物かを確認するプロンプトを投げる
+    #             # yamlのロード
+    #             world_memory = file_utils.load_yaml_file(
+    #                 config.SESSIONS_DIR / session_id / "world_memory.yaml"
+    #             ) or {}
+    #             prompt_data = file_utils.load_yaml_file(
+    #                 config.PREPROCESS / PromptsPreprocess.PLAYER_IDENTIFYCATION
+    #             ) or {}
 
-            result[target] = {}
+    #             print("prompt_path", config.BOOTSTRAP / PromptsPreprocess.PLAYER_IDENTIFYCATION)
+    #             print("prompt_data", prompt_data)
 
-            for p in param_list:
-                name = p.get("表示名")
-                value = p.get("数値")
+    #             world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])
 
-                if name:
-                    result[target][name] = value
+    #             print("current participantsの編集後文字列", world_participants)
+    #             # print("実行プロンプト原文", prompt_data)
+    #             system_prompt = prompt_data["system"]
+    #             template_prompt = prompt_data["template"]
 
-        return {"変動パラメータ": result}
+    #             template_prompt = template_prompt.replace("{characters}", world_participants)
+    #             template_prompt = template_prompt.replace("{player_message}", body.get("message", ""))
+                
+    #             print("置換後プロンプト全文", template_prompt)
+    #             #どれだけ自由に出力させるか。
+    #             temperature = 0.5
+    #             #出力候補の「確率の合計」でカット
+    #             top_p = 0.9
+    #             #上位K個だけ候補にする
+    #             top_k = 0
+    #             #1回の応答の最大長n_ctxの1/4位
+    #             max_tokens = 1024
+    #             #停止文字
+    #             stop=[] # これを足す
+
+    #             result = self.model_handling_service.send_message(
+    #                 messages=[
+    #                     {"role": "user", "content": template_prompt}
+    #                 ],
+    #                 system_prompt=system_prompt,
+    #                 temperature=temperature,
+    #                 top_p=top_p,
+    #                 max_tokens=max_tokens,
+    #                 stop=stop
+    #             )
+
+    #             parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
+    #             target = parsed.get("target_speakers")
+
+    #             print("今回の発話対象", target)
+
+    #             name = body.get("player")
+    #             player_name = name.split(": ", 1)[1].split("：", 1)[0]
+
+    #             print("player_name", player_name)
+    #             character_path = Path(config.SESSIONS_DIR / session_id / "character")
+
+    #             player_path = file_utils.find_character_file(player_name, character_path)
+
+    #             print("player_path", player_path)
+
+    #             player_obj = file_utils.load_yaml_file(player_path)
+
+    #             player_obj["last_target"] = target
+
+    #             file_utils.save_yaml_file(player_path, player_obj)
+
+    #             # ここは実データの持ち方に合わせて調整
+    #             mob_count = 0
+
+    #             if isinstance(target, list):
+    #                 # プレイヤーとメインキャラを除いた人数をモブ数にしたいならここで調整
+    #                 mob_count = len(target)
+
+    #             elif isinstance(body.get("mob_count"), int):
+    #                 mob_count = int(body.get("mob_count"))
+
+    #             needs_mob_chat = mob_count > 0
+
+    #             file_utils.update_prepare_status(
+    #                 session_id,
+    #                 status="ready",
+    #                 complete_stage="prepare",
+    #                 error_stage=None,
+    #                 error_message=None,
+    #                 needs_mob_chat=needs_mob_chat,
+    #                 mob_count=mob_count,
+    #             )
+
+    #             print(f"[CREATE TARGET SPEAKERS UPDATE] ")
+
+    #         except Exception as e:
+    #             print(f"[CREATE TARGET SPEAKERS ERROR] {type(e).__name__}: {e}")
+
+    #     Thread(target=task, daemon=True).start()
+    
+    # 使ってないけどキャラクターの記憶を更新
+    # def _run_character_memory_update_async(
+    #     self,
+    #     body: Dict,
+    #     session_id: str,
+    #     character_name: str,
+    #     last_user_content: str,
+    #     last_assistant_content: str,
+    # ):
+    #     def task():
+    #         try:
+    #             print("[CHAR UPDATE] _run_character_memory_update_async start")
+
+    #             session_char_dir = config.SESSIONS_DIR / session_id / "character"
+    #             session_char_dir.mkdir(parents=True, exist_ok=True)
+
+    #             char_name = character_name.strip()
+    #             if not char_name:
+    #                 print("[CHAR UPDATE] skip empty character_name")
+    #                 return
+
+    #             character_file_path = file_utils.find_character_yaml_file(char_name, session_char_dir)
+    #             if not character_file_path:
+    #                 print(f"[CHAR UPDATE] character file not found: {char_name}")
+    #                 return
+    #             memory_file_path = file_utils.find_character_memory_file(char_name, session_char_dir)
+    #             if not memory_file_path:
+    #                 print(f"[CHAR UPDATE] memory file not found: {char_name}")
+    #                 return
+
+    #             character_file = file_utils.load_yaml_file(character_file_path) or {}
+    #             if not isinstance(character_file, dict):
+    #                 character_file = {}
+
+    #             old_memory = file_utils.load_yaml_file(memory_file_path) or {}
+    #             if not isinstance(old_memory, dict):
+    #                 old_memory = {}
+
+    #             prompt_messages = self.prompt_builder.update_character_memory_prompt(
+    #                 character_name=char_name,
+    #                 description=character_file.get("description"),
+    #                 current_state=old_memory.get("current_state"),
+    #                 last_user_content=last_user_content,
+    #                 last_assistant_content=last_assistant_content,
+    #                 old_memory=old_memory,
+    #             )
+
+    #             response_text = self.model_handling_service.send_message(
+    #                 messages=prompt_messages,
+    #                 temperature=0.7,
+    #                 max_tokens=1500,
+    #             )
+    #             response_text = string_utils.strip_code_block(response_text)
+
+    #             try:
+    #                 parsed_yaml = yaml.safe_load(response_text) or {}
+    #                 if not isinstance(parsed_yaml, dict):
+    #                     parsed_yaml = {}
+    #             except Exception as e:
+    #                 print(f"[CHAR UPDATE] YAML parse failed: {char_name}: {e}")
+    #                 parsed_yaml = {}
+
+    #             new_memory = {
+    #                 "current_state": parsed_yaml.get("current_state", {}) if isinstance(parsed_yaml.get("current_state"), dict) else {},
+    #                 "memory": parsed_yaml.get("memory", {}) if isinstance(parsed_yaml.get("memory"), dict) else {},
+    #                 "owned_items": parsed_yaml.get("owned_items", []) if isinstance(parsed_yaml.get("owned_items"), list) else [],
+    #                 "param_data": parsed_yaml.get("param_data", []) if isinstance(parsed_yaml.get("param_data"), list) else [],
+    #                 "last_contact_date": parsed_yaml.get("last_contact_date"),
+    #             }
+
+    #             merged_memory = string_utils._merge_memory_data(old_memory, new_memory)
+    #             file_utils.save_yaml_file(memory_file_path, merged_memory)
+
+    #             print(f"[CHAR UPDATE] saved: {memory_file_path.name}")
+
+    #         except Exception as e:
+    #             print(f"[CHAR UPDATE ERROR] {type(e).__name__}: {e}")
+
+    #     Thread(target=task, daemon=True).start()
+
+    # 使ってないけど更新処理
+    # def update_memory(
+    #     self,
+    #     body: Dict,
+    #     session_id: str,
+    #     character_name: str,
+    #     last_user_content: str,
+    #     last_assistant_content: str,
+    # ):
+    #     print(f"[MEMORY] session_id={session_id} char={character_name} → 記憶更新を開始")
+    #     self._run_memory_async(
+    #         body=body,
+    #         session_id=session_id,
+    #         operation="update",
+    #         user=last_user_content,
+    #         char=last_assistant_content
+    #     )
+
+    # モブキャラを作ってる？ブラウザでほぼ確定してるから要らんのかも
+    # def _sync_session_character_files(self, session_id: str, world_relation: list):
+    #     try:
+    #         st_char_dir = Path(config.CHARACTERS_DIR)
+    #         session_char_dir = config.SESSIONS_DIR / session_id / "character"
+    #         session_char_dir.mkdir(parents=True, exist_ok=True)
+
+    #         print(f"[WORLD] === character sync start ===")
+    #         print(f"[WORLD] CHAR DIR: {st_char_dir}")
+    #         print(f"[WORLD] SESSION DIR: {session_char_dir}")
+
+    #         # モブ用テンプレート
+    #         mob_template_path = config.TEMPLATES_DIR / Bootstrap.SUB_CHARACTER_TEMPLATE
+    #         print("[WORLD] TEMPLATE_PATH")
+    #         mob_template_data = file_utils.load_yaml_file(mob_template_path) or {}
+    #         if not isinstance(mob_template_data, dict):
+    #             mob_template_data = {}
+
+    #         for name in world_relation:
+    #             if not isinstance(name, str):
+    #                 print("[WORLD] skip: not string")
+    #                 continue
+
+    #             char_name = name.strip()
+    #             if not char_name:
+    #                 print("[WORLD] skip: empty name")
+    #                 continue
+
+    #             dst_file = session_char_dir / f"{char_name}.yaml"
+    #             found_file = file_utils.find_character_file(char_name, st_char_dir)
+
+    #             # --------------------------------------------------
+    #             # 1. キャラカードが存在する場合
+    #             #    description 内 YAML を正として保存する
+    #             # --------------------------------------------------
+    #             if found_file:
+    #                 raw_data = file_utils._load_character_data(found_file)
+
+    #                 yaml_data = file_utils.load_yaml_from_character_description(raw_data)
+
+    #                 if not yaml_data:
+    #                     print(f"[WORLD] description YAML not found or invalid: {char_name}")
+    #                     yaml_data = {
+    #                         "名前": {
+    #                             "表示名": raw_data.get("name") or char_name,
+    #                         }
+    #                     }
+
+    #                 file_utils.save_yaml_file(dst_file, yaml_data)
+    #                 print(f"[WORLD] saved character card yaml: {dst_file}")
+    #                 continue
+
+    #             # --------------------------------------------------
+    #             # 2. キャラカードが存在しない場合
+    #             #    モブ用テンプレートに名前だけ入れて保存する
+    #             # --------------------------------------------------
+    #             print(f"[WORLD] {char_name} no match → create mob character yaml")
+
+    #             if dst_file.exists():
+    #                 print(f"[MOB] skip existing yaml: {dst_file}")
+    #                 continue
+
+    #             # テンプレートを破壊しないように deepcopy
+    #             import copy
+    #             data = copy.deepcopy(mob_template_data)
+
+    #             if not isinstance(data, dict):
+    #                 data = {}
+
+    #             if "名前" not in data or not isinstance(data.get("名前"), dict):
+    #                 data["名前"] = {}
+
+    #             data["名前"]["表示名"] = char_name
+
+    #             file_utils.save_yaml_file(dst_file, data)
+    #             print(f"[MOB] saved character yaml: {dst_file}")
+
+    #         print(f"[WORLD] === character sync end ===")
+
+    #     except Exception as e:
+    #         print(f"[WORLD ERROR] {e}")
+
+    # 登場人物の初期記憶作成
+    # def _run_character_memory_create_async(
+    #     self,
+    #     session_id: str,
+    #     relation_names: list[str],
+    #     description: str = "",
+    #     scenario: str = "",
+    #     first_mes: str = "",
+    #     mes_example: str = "",
+    # ):
+    #     def task():
+    #         self._run_character_memory_create_sync(
+    #             session_id=session_id,
+    #             relation_names=relation_names,
+    #             description=description,
+    #             scenario=scenario,
+    #             first_mes=first_mes,
+    #             mes_example=mes_example,
+    #         )
+
+    #     Thread(target=task, daemon=True).start()
+
+
+    # 要約を作っている？
+    # def _create_character_summary_sync(
+    #     self,
+    #     session_id: str,
+    #     char_name: str,
+    #     memory_file: Path,
+    # ):
+    #     session_char_dir = config.SESSIONS_DIR / session_id / "character"
+
+    #     memory_data = file_utils.load_yaml_file(memory_file) or {}
+    #     memory_block = memory_data.get("memory", {})
+    #     if not isinstance(memory_block, dict):
+    #         memory_block = {}
+
+    #     summary = {
+    #         "history": [],
+    #         "progress": [],
+    #         "worries": [],
+    #     }
+
+    #     for key in ("history", "progress", "worries"):
+    #         value = memory_block.get(key, [])
+    #         if not value:
+    #             continue
+
+    #         prompt_messages = self.prompt_builder.create_edit_summary_prompt(
+    #             memory_key=key,
+    #             memory_value=value,
+    #         )
+
+    #         response_text = self.model_handling_service.send_message(
+    #             messages=prompt_messages,
+    #             temperature=0.3,
+    #             max_tokens=1000,
+    #         )
+
+    #         response_text = string_utils.strip_code_block(response_text).strip()
+
+    #         if response_text:
+    #             summary[key] = [response_text]
+
+    #     summary_file = session_char_dir / f"{char_name}_summary.yaml"
+    #     saved = file_utils.save_yaml_file(summary_file, summary)
+
+    #     if not saved:
+    #         raise RuntimeError(f"character summary save failed: {summary_file}")
+
+    #     print(f"[CHAR SUMMARY] saved: {summary_file.name}")
+
+
+    # def extract_character_parameters_from_mes_example(self, mes_example: str, char_name: str) -> list[dict]:
+    #     """
+    #     mes_example 内の dynamic_params から、
+    #     target == char_name（スペース無視）に一致する param_data を返す。
+    #     一致しなければ [] を返す。
+    #     """
+    #     if not isinstance(mes_example, str) or not mes_example.strip():
+    #         return []
+
+    #     try:
+    #         parsed = yaml.safe_load(mes_example) or {}
+    #     except Exception as e:
+    #         print(f"[PARAM WARN] mes_example parse failed: {e}")
+    #         return []
+
+    #     if not isinstance(parsed, dict):
+    #         return []
+
+    #     dynamic_params = parsed.get("dynamic_params")
+    #     if not isinstance(dynamic_params, list):
+    #         return []
+
+    #     target_norm = "".join(str(char_name).split())
+
+    #     for item in dynamic_params:
+    #         if not isinstance(item, dict):
+    #             continue
+
+    #         target = item.get("target")
+    #         param_data = item.get("param_data")
+
+    #         if not isinstance(target, str) or not isinstance(param_data, list):
+    #             continue
+
+    #         item_target_norm = "".join(target.split())
+
+    #         if item_target_norm == target_norm:
+    #             result = []
+    #             for param in param_data:
+    #                 if not isinstance(param, dict):
+    #                     continue
+
+    #                 display_name = param.get("display_name")
+    #                 if not display_name:
+    #                     continue
+
+    #                 result.append({
+    #                     "display_name": display_name,
+    #                     "count": param.get("count", 0),
+    #                 })
+    #             return result
+
+    #     return []
+

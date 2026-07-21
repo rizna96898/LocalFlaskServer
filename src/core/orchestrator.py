@@ -7,572 +7,184 @@
 - 画像作成
 """
 
-import uuid
-import time
-import yaml
-from datetime import datetime
+from flask import jsonify, send_file
 from pathlib import Path
-from typing import Dict, Any, Iterable
-from helpers import data_utils
-from config import config
-from constant import (
-    Bootstrap,
-    PromptsPreprocess,
-    PromptsMain,
-    PromptsPostprocess,
-)
-from src.services.llm_service import ModelHandlingService
-
+from services import llm_service
 # ヘルパー
-from helpers import string_utils
-from helpers import file_utils
-from helpers.data_utils import has_changes, merge_character_data
+from usecases import pc_operation
+from usecases import template
+from usecases import chat_settings
+from usecases import chat_execute
 
 # 記憶管理
-from core.memory_manager import MemoryManager
+from usecases.memory_manager import MemoryManager
 
 # プロンプト構築
-from src.memory_builders.prompt_builder import PromptBuilder
-
-
+from memory_builders.prompt_builder import PromptBuilder
+from usecases.chat_execute import ChatExecute
+from usecases.chat_settings import ChatSettings
+# app.pyから呼ばれる処理。
 class ChatOrchestrator:
     def __init__(self):
         self.model_handling_service = None
-        self.memory_manager = MemoryManager()
-        self.prompt_builder = PromptBuilder()
+        #self.memory_manager = MemoryManager()
+        self.chat_execute = ChatExecute()
+        self.chat_settings = ChatSettings()
+        #self.chat_utils = ChatUtils()
         # print("[Orchestrator] Initialized")
 
-    def get_model_handling_service(self):
-        if self.model_handling_service is None:
-            self.model_handling_service = ModelHandlingService("local")
-        return self.model_handling_service
+    # folder選択ウィンドウを表示（したかったけど今は使えない）
+    def select_base_path(self, payload):
+        return pc_operation.select_base_path(payload)
+
+    # folder選択ウィンドウを表示（したかったけど今は使えない）
+    def open_system_yaml(self, payload):
+        return pc_operation.open_system_yaml(payload)
+
+    # 世界の登場人物設定ファイルテンプレートを読み込んで返却
+    def get_template_world_include_player_yaml(self, payload):
+        return template.get_template_world_include_player_yaml(payload)
     
-    # ニューチャット
-    def create_new_session(self, body: Dict) -> str:
-        # """新規チャット作成（/new_chat）"""
-        session_id = body.get("session_id") or str(uuid.uuid4())
+    # 世界のクリア条件設定ファイルテンプレートを読み込んで返却
+    def get_template_world_goal_setting_yaml(self, payload):
+        return template.get_template_world_goal_setting_yaml(payload)
 
-        # ニューチャット用ステータス作成
-        file_utils.create_prepare_status(session_id)
+    # 世界設定の設定ファイルテンプレートを読み込んで返却
+    def get_template_world_parameter_setting_yaml(self, payload):
+        return template.get_template_world_parameter_setting_yaml(payload)
+  
+    # playerの設定ファイルテンプレートを読み込んで返却
+    def get_template_player_yaml(self, payload):
+        return template.get_template_player_yaml(payload)
 
-        # 初期記憶の非同期作成
-        return self.memory_manager.create_initial_memory(session_id)
+    # キャラクターの設定ファイルテンプレートを読み込んで返却
+    def get_template_character_yaml(self, payload):
+        return template.get_template_character_yaml(payload)
+
+    # 世界設定を保存
+    def save_world_setting(self, payload):
+        return self.chat_settings.save_world_setting(payload)
+
+    # 世界設定を読み込んで返却
+    def load_world_settings(self, payload):
+        return self.chat_settings.load_world_settings(payload)
+
+    # プレイヤー設定を保存
+    def save_player_setting(self, payload):
+        return self.chat_settings.save_player_setting(payload)
+
+    # キャラクター設定を保存
+    def save_character_setting(self, payload):
+        return self.chat_settings.save_character_setting(payload)
+
+    # キャラクター設定を読み込んで返却
+    def load_character_settings(self, payload):
+        return self.chat_settings.load_character_settings(payload)
+
+    # キャラクター画像を読み込んで返却
+    def load_image(self, base_chat_path, image_type, character_id):
         
+        base_dir = Path(base_chat_path) / "characters"
 
-    # 前処理
-    def chat_pretreatment(self, body: Dict) -> Dict:
-        print("[ORCH] chat_pretreatment start")
+        if image_type == "icon":
+            save_dir = base_dir / "icon" / character_id
+            filename = f"{character_id}.png"
 
-        session_id = body.get("session_id")
+        elif image_type == "standing":
+            save_dir = base_dir / "standing" / character_id
+            filename = f"{character_id}_standing.png"
 
-        try:
-            print(f"[ORCH] session_id={session_id}")
+        else:
+            return jsonify({
+                "ok": False,
+                "message": "image_type が不正です"
+            }), 400
 
-            if not session_id:
-                print("[ERROR] chat_pretreatment: session_id取得エラー")
-                return {
-                    "response": {
-                        "error": "session_idが何らかの理由で取れなかったので新しいチャットを開始してください。"
-                    },
-                    "status_code": 503,
-                }
+        image_path = save_dir / filename
 
-            file_utils.mark_prepare_processing(session_id, "prepare")
+        print(image_path)
+        
+        if not image_path.exists():
+            return jsonify({
+                "ok": False,
+                "message": "画像が存在しません"
+            }), 404
 
-            self.memory_manager.create_target_speakers(session_id, body)
+        return send_file(image_path)
 
-            return {
-                "ok": True,
-                "body": body,
-            }
+    # キャラクター画像を保存
+    def save_image(self, base_chat_path, image_type, character_id, file):
 
-        except Exception as e:
-            print(f"[ERROR] chat_pretreatment: {e}")
-            import traceback
-            print(traceback.format_exc())
+        base_dir = Path(base_chat_path) / "characters"
 
-            if session_id:
-                file_utils.mark_prepare_error(
-                    session_id,
-                    complete_stage="prepare",
-                    error_stage="prepare",
-                    error_message=f"{type(e).__name__}: {e}",
-                )
+        if image_type == "icon":
+            save_dir = base_dir / "icon" / character_id
+            filename = f"{character_id}.png"
 
-            return {"error": "Internal server error"}, 500
+        elif image_type == "standing":
+            save_dir = base_dir / "standing" / character_id
+            filename = f"{character_id}_standing.png"
+
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        save_path = save_dir / filename
+
+        file.save(save_path)
+
+        return jsonify({
+            "ok": True,
+            "message": "画像を保存しました",
+            "path": str(save_path)
+        }), 200
+
+    # モデルのロードを行う
+    def load_model(self, payload):
+        return llm_service.load_model(payload)
+
+    # StabilityMatrix起動確認受け口
+    def check_stability(self, payload):
+        return llm_service.check_stability(payload)
     
-    # 後処理
-    def chat_post_processing(self, body: Dict) -> Dict:
-        print("[ORCH] chat_post_processing start")
+    # セッションリスト一覧を取得して返却
+    def load_session_list(self, payload):
+        return self.chat_execute.load_session_list(payload)
 
-        session_id = body.get("session_id")
-
-        try:
-            # ファイルステータスを更新
-            file_utils.mark_prepare_processing(session_id, "after")
-
-            # TODO:
-            # world_memory 更新
-            # self.memory_manager._run_memory_async(body, session_id, "update")
-            # character_memory 更新
-            # パラメーター 更新
-            # イラストタグ？
-
-            # ファイルステータスを更新
-            file_utils.mark_prepare_ready(session_id, "after")
-
-            return {
-                "ok": True,
-                "history": None,
-            }
-
-        except Exception as e:
-            print(f"[ERROR] chat_post_processing: {e}")
-            import traceback
-            print(traceback.format_exc())
-
-            if session_id:
-                file_utils.mark_prepare_error(
-                    session_id,
-                    complete_stage="after",
-                    error_stage="after",
-                    error_message=f"{type(e).__name__}: {e}",
-                )
-
-            return {"error": "Internal server error"}, 500
+    # 世界選択
+    # 世界の名前、idと、該当世界の保持セッションID・セッション名一覧を返却
+    # セッションIDの新規作成はここでは行わない
+    def world_start(self, payload):
+        return self.chat_execute.world_start(payload)
     
-    # 多分トータルのチャットハンドラーが必要になる（と思ってる）
-
-    # メインプレイヤーチャット（予定）
-    def handle_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
-        session_id = body.get("session_id")
-
-        try:
-            if not session_id:
-                return _error_response("session_idがありません。", 503)
-
-            file_utils.mark_prepare_processing(session_id, "main_chat")
-
-            context = _load_main_chat_context(session_id, body)
-
-            # キャラクター返信作成
-            response_text = self._generate_response(
-                session_id=session_id,
-                messages=context["messages"],
-                system_prompt=context["system_message"],
-            )
-
-            # 次の話者確定（ここはもう少し工夫がいるはず）
-            target_speakers = self._judge_reply_target_speakers(
-                self,
-                world_data=context["world_data"],
-                messages=context["messages"],
-                response_text=response_text,
-            )
-
-            needs_mob_chat = len(target_speakers) > 0
-            mob_count = len(target_speakers)
-
-            # 履歴作成
-            _append_chat_history(
-                session_id=session_id,
-                speaker_name=context["character_full_name"],
-                user_message=context["last_user_message"],
-                assistant_message=response_text,
-            )
-
-            # 返信情報作成
-            display_text = _build_display_text(
-                world_time=context["world_time"],
-                response_text=response_text,
-                character_memory_data=context["character_memory_data"],
-            )
-
-            # 画面返信情報作成
-            result = _build_chat_completion_response(
-                session_id=session_id,
-                body=body,
-                character_name=context["character_full_name"],
-                content=display_text,
-                next_speakers=target_speakers,
-                needs_mob_chat=needs_mob_chat,
-                mob_count=mob_count,
-            )
-
-            # prepare_status.yaml更新
-            file_utils.update_prepare_status(
-                session_id,
-                status="ready",
-                complete_stage="main_chat",
-                error_stage=None,
-                error_message=None,
-                needs_mob_chat=needs_mob_chat,
-                mob_count=mob_count,
-                next_speakers=target_speakers,
-            )
-
-            return result
-
-        except Exception as e:
-            print(f"[ERROR] handle_chat_completion: {e}")
-            import traceback
-            print(traceback.format_exc())
-
-            if session_id:
-                file_utils.mark_prepare_error(
-                    session_id,
-                    complete_stage="main_chat",
-                    error_stage="main_chat",
-                    error_message=f"{type(e).__name__}: {e}",
-                )
-
-            return _error_response("Internal server error", 500)
-        
-    # サブキャラクターチャット（予定）
-    def handle_mob_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
-        print("[ORCH] handle_mob_chat_completion start")
-
-        session_id = body.get("session_id")
-        print(f"[ORCH] session_id={session_id}")
-
-        try:
-            if not session_id:
-                return {
-                    "response": {"error": "session_idがありません。"},
-                    "status_code": 503,
-                }
-
-            ok = file_utils.wait_until_prepare_status(
-                session_id,
-                target_stage="main_chat",
-                interval_sec=0.2,
-            )
-            if not ok:
-                return {
-                    "response": {"error": "main_chat が error で終了しました。"},
-                    "status_code": 500,
-                }
-
-            file_utils.mark_prepare_processing(session_id, "mob_chat")
-            # TODO
-            # mob同士の会話をどうするか悩む（多分発生しないか、禁止が良さげ）
-            # mobの履歴も一応持つ（名前を付ければ判別できるから）
-
-            result = {
-                "response": {
-                    "id": f"chatcmpl-{session_id[:8]}",
-                    "object": "chat.completion",
-                    "created": int(datetime.now().timestamp()),
-                    "model": body.get("model", config.DEFAULT_MODEL),
-                    "choices": [{
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "name": "白井　圭太",
-                            "original_avatar": "白井　圭太.png",
-                            "force_avatar": "白井　圭太.png",
-                            "content": "二人目の発言だよ",
-                        },
-                        "finish_reason": "stop",
-                        # ↓ 次話者情報
-                        "target_speakers": "",
-                        "remaining_speakers": "",
-                        "needs_mob_chat": False,
-                        "mob_count": 0,
-                    }],
-                    "usage": {
-                        "prompt_tokens": 0,
-                        "completion_tokens": 0,
-                        "total_tokens": 0
-                    }
-                },
-                "status_code": 200
-            }
-        
-            file_utils.mark_prepare_ready(session_id, "mob_chat")
-
-            return result
-
-        except Exception as e:
-            print(f"[ERROR] handle_mob_chat_completion: {e}")
-            import traceback
-            print(traceback.format_exc())
-
-            if session_id:
-                file_utils.mark_prepare_error(
-                    session_id,
-                    complete_stage="mob_chat",
-                    error_stage="mob_chat",
-                    error_message=f"{type(e).__name__}: {e}",
-                )
-
-            return {
-                "response": {"error": "Internal server error"},
-                "status_code": 500,
-            }
-
-    def _sync_character_if_changed(self, session_id: str, body: Dict):
-        print("_sync_character_if_changed start")
-        """SillyTavernから来たメインキャラクター情報を session の world.yaml に同期
-        役割:
-        - 主人公 / メインキャラの最新カード情報を session 側へ持ってくる
-        - ここは world_relation の関連キャラ同期とは別枠
-        """
-        
-        character_file = config.SESSIONS_DIR / session_id / "world.yaml"
-        # print(f"[DEBUG] load target = {character_file}")
-        current = file_utils.load_yaml_file(character_file) or {}
-
-        new_data = {
-            "name": body.get("name"),
-            "description": string_utils.clean_for_save(body.get("description", "")),
-            "personality": string_utils.clean_for_save(body.get("personality", "")),
-            "scenario": string_utils.clean_for_save(body.get("scenario", "")),
-            "first_mes": string_utils.clean_for_save(body.get("first_mes", "")),
-            "mes_example": string_utils.clean_for_save(body.get("mes_example", "")),
-        }
-
-        # print("比較元内容（ファイルの中)", current);
-        # print("比較先内容（bodyの中）", new_data);
-        # print("比較結果", has_changes(current, new_data));
-        if has_changes(current, new_data):
-            # print("has_changes start")
-            updated = merge_character_data(current, new_data)
-            success = file_utils.save_yaml_file(character_file, updated)
-            if success:
-                print(f"[CHARACTER] Updated for session {session_id}")
-            else:
-                print(f"[WARN] Failed to update character.yaml for {session_id}")
-        print("_sync_character_if_changed end")
-
-    def _generate_response(self, session_id: str, messages: list, system_prompt: str) -> str:
-        """最終応答生成
-
-        現状:
-        - 最後の user メッセージだけを抜き出して LLM へ渡している
-
-        今後の見直し候補:
-        - 会話履歴をどこまで渡すか
-        - memory.yaml や related characters をプロンプトへどう混ぜるか
-        - response_text 生成後に事後更新をどう差し込むか
-        """
-        user_message = ""
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
-
-        try:
-            response_text = self.openrouter.send_message(
-                messages=[{"role": "user", "content": user_message}],
-                system_prompt=system_prompt,
-                temperature=config.TEMPERATURE,
-                max_tokens=config.MAX_TOKENS
-            )
-            return response_text
-
-        except Exception as e:
-            print(f"[ERROR] _generate_response: {e}")
-            return "すみません、今ちょっと調子が悪いみたいです…"
-
-    def _judge_reply_target_speakers(self, world_data: Dict, messages: list, response_text: str) -> list[str]:
-        
-        prompt_data = file_utils.load_yaml_file(
-            config.MAIN / PromptsMain.CHARACTER_IDENTIFICATION
-        ) or {}
-
-        player_message = ""
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                player_message = msg.get("content", "")
-                break
-
-        participants = world_data.get("current_state", {}).get("participants", [])
-        characters_text = string_utils.build_characters_text(participants)
-
-        system_prompt = prompt_data["system"]
-        template_prompt = prompt_data["template"]
-        template_prompt = template_prompt.replace("{characters}", characters_text)
-        template_prompt = template_prompt.replace("{player_message}", player_message)
-        template_prompt = template_prompt.replace("{player_answer}", response_text)
-
-        print("置換後プロンプト全文", template_prompt)
-        # model_handling_service = ModelHandlingService("openrouter")
-        result = self.get_model_handling_service.send_message(
-            messages=[{"role": "user", "content": template_prompt}],
-            system_prompt=system_prompt,
-        )
-
-        parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
-        target_speakers = parsed.get("target_speakers") or []
-
-        if isinstance(target_speakers, str):
-            target_speakers = [target_speakers]
-
-        print("今回の発話対象：", target_speakers)
-        return target_speakers
-
-def _error_response(message: str, status_code: int) -> Dict:
-    return {
-        "response": {"error": message},
-        "status_code": status_code,
-    }
-
-
-def _load_main_chat_context(session_id: str, body: Dict) -> Dict:
-    session_dir = config.SESSIONS_DIR / session_id
-    char_dir = session_dir / "character"
-
-    messages = body.get("messages", [])
-    last_user_message = string_utils.get_reversed_user_message(messages)
-
-    world_file = session_dir / "world_memory.yaml"
-    world_data = file_utils.load_yaml_file(world_file) or {}
-
-    player_name = world_data.get("player_name")
-    print("プレイヤー名：", player_name)
-
-    player_path = file_utils.find_character_file(player_name, char_dir)
-    player_data = file_utils.load_yaml_file(player_path) or {}
-
-    character_name = player_data.get("last_target")
-    print("誰向けの発言か", character_name)
-
-    world_time = _get_world_time(world_data)
-
-    system_message = file_utils.build_character_comment_system_message(
-        session_id=session_id,
-        character_name=character_name,
-        sessions_dir=config.SESSIONS_DIR,
-        prompt_file=config.MAIN / PromptsMain.CHAT
-    )
-
-    character_path = file_utils.find_character_file(character_name, char_dir)
-    character_data = file_utils.load_yaml_file(character_path) or {}
-    character_full_name = character_data.get("name", character_name)
-
-    memory_path = file_utils.find_character_memory_file(character_full_name, char_dir)
-    print("load target", memory_path)
-
-    character_memory_data = file_utils.load_yaml_file(memory_path) or {}
-
-    return {
-        "messages": messages,
-        "last_user_message": last_user_message,
-        "world_data": world_data,
-        "world_time": world_time,
-        "system_message": system_message,
-        "character_full_name": character_full_name,
-        "character_memory_data": character_memory_data,
-    }
-
-
-def _get_world_time(world_data: Dict) -> str:
-    current_state = world_data.get("current_state", {})
-    if not isinstance(current_state, dict):
-        return ""
-    return str(current_state.get("time", "")).strip()
-
-def _append_chat_history(
-    session_id: str,
-    speaker_name: str,
-    user_message: str,
-    assistant_message: str,
-) -> None:
-    session_dir = config.SESSIONS_DIR / session_id
-    history = file_utils.load_history(session_dir)
-
-    history.append({
-        "t": time.time(),
-        "speaker": "player",
-        "role": "user",
-        "content": user_message,
-    })
-
-    history.append({
-        "t": time.time(),
-        "speaker": speaker_name,
-        "role": "assistant",
-        "content": assistant_message,
-    })
-
-    file_utils.save_history(session_dir, history)
-
-
-def _build_display_text(
-    world_time: str,
-    response_text: str,
-    character_memory_data: Dict,
-) -> str:
-    display_parts = []
-
-    if world_time:
-        display_parts.append(f"（{world_time}）")
-
-    display_parts.append(response_text)
-
-    parameter_lines = _build_parameter_lines(character_memory_data)
-    if parameter_lines:
-        display_parts.append("\n".join(parameter_lines))
-
-    return "\n".join(display_parts)
-
-
-def _build_parameter_lines(character_memory_data: Dict) -> list[str]:
-    result = []
-
-    parameter_list = character_memory_data.get("parameter", [])
-    if not isinstance(parameter_list, list):
+    # セッションの削除
+    def delete_session(self, payload):
+        return self.chat_execute.delete_session(payload)
+    
+    # セッションリストから選択した際に、会話履歴を読み込んで返却する
+    def selected_session(self, payload):
+        return self.chat_execute.selected_session(payload)
+    
+    # メッセージをクリックした時のページネーション部分を展開して返却
+    def selected_message(self, payload):
+        return self.chat_execute.selected_message(payload)
+    
+    #新しいチャットを開始する為の事前準備ファイルをLLM_CHAT_CONSOLEから持ってくる
+    def chat_startup(self, payload):
+        return self.chat_execute.chat_startup(payload)
+    
+    # 新しいチャット
+    def new_chat(self, payload):
+        result = self.chat_execute.new_chat(payload)
+        response, status = result
+        print("status =", status)
+        print("json   =", response.get_json())
+        print("text   =", response.get_data(as_text=True))
         return result
+      
+    # 発言
+    def chat(self, payload):
+        return self.chat_execute.chat(payload)
 
-    for item in parameter_list:
-        if not isinstance(item, dict):
-            continue
+    # 再送。チャット欄の最終発言を送信し直す
+    def re_chat(self, payload):
+        return self.chat_execute.re_chat(payload)
 
-        display_name = str(item.get("display_name", "")).strip()
-        count = item.get("count", 0)
-
-        if display_name:
-            result.append(f"{display_name}：{count}")
-
-    return result
-
-
-def _build_chat_completion_response(
-    session_id: str,
-    body: Dict,
-    character_name: str,
-    content: str,
-    next_speakers: list[str],
-    needs_mob_chat: bool,
-    mob_count: int,
-) -> Dict:
-    return {
-        "response": {
-            "id": f"chatcmpl-{session_id[:8]}",
-            "object": "chat.completion",
-            "created": int(datetime.now().timestamp()),
-            "model": body.get("model", config.DEFAULT_MODEL),
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "name": character_name,
-                    "original_avatar": character_name + ".png",
-                    "force_avatar": character_name + ".png",
-                    "content": content,
-                },
-                "finish_reason": "stop",
-                "target_speakers": next_speakers,
-                "remaining_speakers": next_speakers,
-                "needs_mob_chat": needs_mob_chat,
-                "mob_count": mob_count,
-            }],
-            "usage": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            },
-        },
-        "status_code": 200,
-    }

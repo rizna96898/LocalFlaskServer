@@ -1,4 +1,6 @@
 import os
+from llama_cpp import Llama
+from helpers import file_utils
 
 current_model_path = None
 llm_instance = None
@@ -13,7 +15,7 @@ def get_llm():
     mtime = os.path.getmtime(SETTINGS_PATH)
 
     if mtime != last_mtime:
-        settings = load_yaml()  # 既存の関数でOK
+        settings = file_utils.load_yaml()  # 既存の関数でOK
         new_path = settings["model"]["path"]
 
         if new_path != current_model_path:

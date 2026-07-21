@@ -11,7 +11,7 @@ from llama_cpp import Llama
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from config import config
-from helpers import log
+from logger import log
 from helpers import string_utils
 
 class ModelHandlingService:
@@ -368,6 +368,11 @@ class OpenRouterService:
         """system_promptを明確に指定したいとき用の便利メソッド"""
         return self.send_message(messages, system_prompt=system_prompt, **kwargs)
 
+def get_model_handling_service(self):
+    if self.model_handling_service is None:
+        self.model_handling_service = ModelHandlingService("local")
+    return self.model_handling_service
+
 # OpenRouterとLocalModelで渡す状態を変えるのが辛いので一旦ここで吸収
 def messages_to_prompt(payload_messages):
     lines = []
@@ -386,3 +391,57 @@ def messages_to_prompt(payload_messages):
     lines.append("### Response:")
 
     return "\n".join(lines)
+
+def load_model(self, payload):
+    base_path = payload.get("base_path") or ""
+
+    if not base_path:
+        return response_checker._json_error("ベースパスが未設定です。", status=400)
+
+    full_path = Path(base_path) / "files" / "settings" / "system_settings.yaml"
+
+    if not full_path.exists() or not full_path.is_file():
+        return response_checker._json_error("ファイル読み込み失敗", status=404, full_path=str(full_path))
+
+    try:
+        # TODO:
+        # ここを既存のモデルロード処理に差し替えてください。
+        # 例:
+        # global loaded_model
+        # loaded_model = load_model_from_yaml(full_path)
+        return response_checker._json_ok(message="ロード完了", full_path=str(full_path))
+    except Exception as exc:
+        return response_checker._json_error(f"モデルロード失敗しました。{exc}", status=500, full_path=str(full_path))
+
+# stability matrix起動確認。入り口
+def check_stability(self, payload):
+    """Stability Matrixの起動確認（Silly Tavern改造対応）"""
+    # OPTIONSプリフライト対応（重要）
+    if payload.method == "OPTIONS":
+        return "", 200
+
+    try:
+
+        # Yamlの設定に変更があれば読み直しておく
+        system_settings_reload_service.SystemSettingsReloadCheckService()
+
+        result = True
+        message = "起動してます。OK"
+
+#        if generateImage.test_communication_confirmation():
+#            message = "起動してます。OK"
+#        else:
+        result = False
+        message = "起動してないよ。"
+
+        return jsonify({
+            "ok": result,
+            "message": message
+        }), 200
+
+    except Exception as e:
+        print(f"[ERROR] check_stability: {e}")
+        return jsonify({
+            "ok": False,
+            "message": f"チェック中にエラー: {str(e)}"
+        }), 500
