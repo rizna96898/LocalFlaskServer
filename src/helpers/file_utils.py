@@ -14,6 +14,7 @@ from helpers import string_utils
 from helpers import file_utils
 import base64
 import time
+from services.status import status_manager
 
 def literal_str_representer(dumper, data):
     return dumper.represent_scalar(
@@ -34,7 +35,7 @@ def ensure_session_dir(sessions_dir: Path, session_id: str) -> Path:
     return session_dir
 
 def mark_prepare_processing(session_id: str, complete_stage: str = "new_chat") -> bool:
-    return update_prepare_status(
+    return status_manager.update_prepare_status(
         session_id,
         status="processing",
         complete_stage=complete_stage,
@@ -48,7 +49,7 @@ def mark_prepare_error(
     error_message: str,
     complete_stage: str = "new_chat",
 ) -> bool:
-    return update_prepare_status(
+    return status_manager.update_prepare_status(
         session_id,
         status="error",
         complete_stage=complete_stage,
@@ -357,13 +358,13 @@ def load_character_memories(
 
 # よくわからない。いるの？
 def get_needs_mob_chat(session_id: str) -> bool:
-    data = load_prepare_status(session_id)
+    data = status_manager.load_prepare_status(session_id)
     return bool(data.get("needs_mob_chat", False)) if isinstance(data, dict) else False
 
 # mob_count ここじゃない気が
 # ファイル操作じゃない
 def get_mob_count(session_id: str) -> int:
-    data = load_prepare_status(session_id)
+    data = status_manager.load_prepare_status(session_id)
     if not isinstance(data, dict):
         return 0
 
@@ -386,7 +387,7 @@ def wait_until_prepare_status(
     timeout なし
     """
     while True:
-        data = load_prepare_status(session_id)
+        data = status_manager.load_prepare_status(session_id)
 
         if not data:
             time.sleep(interval_sec)

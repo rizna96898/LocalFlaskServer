@@ -9,20 +9,14 @@
 
 from flask import jsonify, send_file
 from pathlib import Path
-from services import llm_service
+from services.llm import llm_service
 # ヘルパー
-from usecases import pc_operation
-from usecases import template
-from usecases import chat_settings
-from usecases import chat_execute
-
-# 記憶管理
-from usecases.memory_manager import MemoryManager
+from services.systems import pc_operation
+from services.template import template
 
 # プロンプト構築
-from memory_builders.prompt_builder import PromptBuilder
 from usecases.chat_execute import ChatExecute
-from usecases.chat_settings import ChatSettings
+from services.chat.chat_settings import ChatSettings
 # app.pyから呼ばれる処理。
 class ChatOrchestrator:
     def __init__(self):

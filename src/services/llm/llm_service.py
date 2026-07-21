@@ -3,7 +3,7 @@
 OpenRouterとの通信を専門に扱うサービスクラス
 設定はすべて config（system_settings.yaml）から取得
 """
-
+import sys
 import requests
 import time
 import threading
@@ -55,6 +55,9 @@ class ModelHandlingService:
         **kwargs,
     ):
         
+        print(sys.stdout)
+        print(sys.stderr)
+
         max_tokens = self._get_default_max_tokens(task_type)
 
         return self.impl.send_message(
@@ -101,6 +104,9 @@ class LocalModelService:
         """
         LocalModelにメッセージを送信し、応答のcontent部分を返す
         """
+
+        print(sys.stdout)
+        print(sys.stderr)
 
         # パラメータの優先順位: 引数 > config
         model_name = config.LOCALMODEL_NAME

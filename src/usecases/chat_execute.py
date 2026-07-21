@@ -9,11 +9,10 @@ from config import config
 from shutil import copy2
 from helpers import file_utils
 from pathlib import Path
-from services import system_settings_reload_service
 from exception import exception_proc
 from helpers import string_utils
 from helpers import data_utils
-from services import llm_service
+from services.llm import llm_service
 from constant import (
     Bootstrap,
     PromptsPreprocess,
@@ -22,7 +21,11 @@ from constant import (
 )
 from helpers import response_checker
 from helpers.chat_utils import ChatUtils
-from src.services.memory_manager import MemoryManager
+from services.memory.memory_manager import MemoryManager
+from services.status import status_manager
+from usecases import chat_execute
+import os
+import sys
 
 class ChatExecute:
     def __init__(self):
@@ -411,6 +414,18 @@ class ChatExecute:
 
     # チャット処理。入り口
     def chat(self, payload):
+        os.write(1, b"=== FD1 stdout test ===\n")
+        os.write(2, b"=== FD2 stderr test ===\n")
+
+        sys.stdout.write("=== sys.stdout.write test ===\n")
+        sys.stdout.flush()
+
+        sys.stderr.write("=== sys.stderr.write test ===\n")
+        sys.stderr.flush()
+
+        print("=== print stdout test ===", flush=True)
+        print("=== print stderr test ===", file=sys.stderr, flush=True)
+        print("=== /session_start 到達 ===", flush=True)
         print("チャット開始")
         try:
             # start_message = orchestrator.create_new_session(body)
@@ -530,17 +545,17 @@ class ChatExecute:
 
             file_utils.mark_prepare_processing(session_id, "main_chat")
 
-            context = _load_main_chat_context(session_id, body)
+            context = self._load_main_chat_context(session_id, body)
 
             # キャラクター返信作成
-            response_text = _generate_response(
+            response_text = self._generate_response(
                 session_id=session_id,
                 messages=context["messages"],
                 system_prompt=context["system_message"],
             )
 
             # 次の話者確定（ここはもう少し工夫がいるはず）
-            target_speakers = _judge_reply_target_speakers(
+            target_speakers = self._judge_reply_target_speakers(
                 world_data=context["world_data"],
                 messages=context["messages"],
                 response_text=response_text,
@@ -550,7 +565,7 @@ class ChatExecute:
             mob_count = len(target_speakers)
 
             # 履歴作成
-            _append_chat_history(
+            self._append_chat_history(
                 session_id=session_id,
                 speaker_name=context["character_full_name"],
                 user_message=context["last_user_message"],
@@ -558,14 +573,14 @@ class ChatExecute:
             )
 
             # 返信情報作成
-            display_text = _build_display_text(
+            display_text = self._build_display_text(
                 world_time=context["world_time"],
                 response_text=response_text,
                 character_memory_data=context["character_memory_data"],
             )
 
             # 画面返信情報作成
-            result = _build_chat_completion_response(
+            result = self._build_chat_completion_response(
                 session_id=session_id,
                 body=body,
                 character_name=context["character_full_name"],
@@ -576,7 +591,7 @@ class ChatExecute:
             )
 
             # prepare_status.yaml更新
-            file_utils.update_prepare_status(
+            status_manager.update_prepare_status(
                 session_id,
                 status="ready",
                 complete_stage="main_chat",

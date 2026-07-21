@@ -2,9 +2,10 @@ from flask import jsonify
 from typing import Dict
 from uuid import uuid4
 from helpers import file_utils
-from services import system_settings_reload_service
+from services.systems import system_settings_reload_service
 from exception import exception_proc
-from usecases.memory_manager import MemoryManager
+from services.memory.memory_manager import MemoryManager
+from services.status import status_manager
 from helpers import response_checker
 # Orchestratorの初期化
 
@@ -18,7 +19,7 @@ class ChatUtils:
         session_id = body.get("session_id") or str(uuid4())
 
         # ニューチャット用ステータス作成
-        file_utils.create_prepare_status(session_id)
+        status_manager.create_prepare_status(session_id)
 
         # 初期記憶の非同期作成
         return self.memory_manager.create_initial_memory(session_id)

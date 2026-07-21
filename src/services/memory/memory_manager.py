@@ -22,11 +22,11 @@ from constant import (
 from memory_builders.prompt_builder import PromptBuilder
 from helpers import string_utils
 from helpers import file_utils
-from services.llm_service import ModelHandlingService
+from services.llm.llm_service import ModelHandlingService
 from helpers import response_checker
 from memory_builders import use_memory_constant
 from memory_builders import lord_init_files
-
+from services.status import status_manager
 class MemoryManager:
     def __init__(self):
         self.prompt_builder = PromptBuilder()
@@ -186,7 +186,7 @@ class MemoryManager:
             try:
                 if operation == "create":
                     current_stage = "character"
-                    file_utils.mark_prepare_ready(session_id, "new_chat")
+                    status_manager.mark_prepare_ready(session_id, "new_chat")
 
                     base_file_obj = lord_init_files.lord_base_character_yaml(session_id)
 
