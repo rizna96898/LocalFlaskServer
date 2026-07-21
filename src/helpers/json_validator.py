@@ -1,4 +1,6 @@
-import jsondef save_json_file(file_path: Path, data: Dict) -> bool:
+import json
+
+def save_json_file(file_path: Path, data: Dict) -> bool:
     """
     JSONファイルを保存するヘルパー関数
     - ディレクトリがなければ自動作成
