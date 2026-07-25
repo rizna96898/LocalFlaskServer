@@ -1,5 +1,6 @@
 from flask import jsonify, send_file
 from pathlib import Path
+from logger import log
 
 def load_image(self, base_chat_path, image_type, character_id):
     
@@ -21,7 +22,7 @@ def load_image(self, base_chat_path, image_type, character_id):
 
     image_path = save_dir / filename
 
-    print(image_path)
+    log.info(image_path)
     
     if not image_path.exists():
         return jsonify({

@@ -1,5 +1,6 @@
 import os
 from config import config
+from logger import log
 
 last_mtime = 0
 
@@ -11,6 +12,6 @@ def SystemSettingsReloadCheckService():
     mtime = os.path.getmtime(settings_path)
 
     if mtime != last_mtime:
-        print("変更がある為読み直します")
+        log.info("変更がある為読み直します")
         config.reload()
         last_mtime = mtime

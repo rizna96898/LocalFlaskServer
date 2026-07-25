@@ -5,6 +5,7 @@ from flask import jsonify
 from pathlib import Path
 from helpers import file_utils
 from helpers import string_utils
+from logger import log
 
 class ChatSettings:
     def __init__(self):
@@ -91,7 +92,7 @@ class ChatSettings:
         save_dir = Path(base_chat_path) / "worlds" / "settings"
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        print("data", payload)
+        log.info("data", payload)
         world_form_data = {
             "世界名": world_name,
             "登場人物": include_data,
@@ -176,10 +177,10 @@ class ChatSettings:
         player_name = payload.get("player_name", "").strip()
         content = payload.get("content", "")
 
-        print("base_chat_path", base_chat_path)
-        print("player_id", player_id)
-        print("player_name", player_name)
-        print("content", content)
+        log.info("base_chat_path", base_chat_path)
+        log.info("player_id", player_id)
+        log.info("player_name", player_name)
+        log.info("content", content)
         
         if not base_chat_path:
             return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400

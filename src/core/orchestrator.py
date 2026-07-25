@@ -17,15 +17,13 @@ from services.template import template
 # プロンプト構築
 from usecases.chat_execute import ChatExecute
 from services.chat.chat_settings import ChatSettings
+from logger import log
 # app.pyから呼ばれる処理。
 class ChatOrchestrator:
     def __init__(self):
         self.model_handling_service = None
-        #self.memory_manager = MemoryManager()
         self.chat_execute = ChatExecute()
         self.chat_settings = ChatSettings()
-        #self.chat_utils = ChatUtils()
-        # print("[Orchestrator] Initialized")
 
     # folder選択ウィンドウを表示（したかったけど今は使えない）
     def select_base_path(self, payload):
@@ -96,7 +94,7 @@ class ChatOrchestrator:
 
         image_path = save_dir / filename
 
-        print(image_path)
+        log.info(image_path)
         
         if not image_path.exists():
             return jsonify({
@@ -167,11 +165,12 @@ class ChatOrchestrator:
     
     # 新しいチャット
     def new_chat(self, payload):
+
         result = self.chat_execute.new_chat(payload)
         response, status = result
-        print("status =", status)
-        print("json   =", response.get_json())
-        print("text   =", response.get_data(as_text=True))
+        log.info("status =", status)
+        log.info("json   =", response.get_json())
+        log.info("text   =", response.get_data(as_text=True))
         return result
       
     # 発言

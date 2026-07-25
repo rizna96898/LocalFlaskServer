@@ -18,6 +18,7 @@ from constant import (
 )
 from helpers.string_utils import normalize_newlines
 from helpers import file_utils
+from logger import log
 
 class PromptBuilder:
 
@@ -25,13 +26,13 @@ class PromptBuilder:
         """promptsフォルダからYAMLを読み込む"""
         path = filePath / filename
         if not path.exists():
-            print(f"[WARN] Prompt file not found: {path}")
+            log.info(f"[WARN] Prompt file not found: {path}")
             return {}
         try:
             with open(path, encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"[ERROR] Failed to load prompt {filename}: {e}")
+            log.info(f"[ERROR] Failed to load prompt {filename}: {e}")
             return {}
 
     def _join_sections(self, *parts: str) -> str:

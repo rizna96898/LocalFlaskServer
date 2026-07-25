@@ -12,17 +12,17 @@ from threading import Thread
 from config import config
 from PIL import Image
 from helpers.file_utils import save_json_file, load_yaml_file, save_yaml_file
-
+from logger import log
 
 class WorldManager:
     def __init__(self):
         self.characters_dir = Path(config.CHARACTERS_DIR)
-        print(f"[WorldManager] キャラクターカードフォルダ: {self.characters_dir}")
+        log.info(f"[WorldManager] キャラクターカードフォルダ: {self.characters_dir}")
 
     def find_character_by_name(self, name: str) -> Optional[Dict]:
         """名前から.pngカードを検索して情報を返す"""
         if not self.characters_dir.exists():
-            print(f"[ERROR] キャラクターカードフォルダが見つかりません")
+            log.info(f"[ERROR] キャラクターカードフォルダが見つかりません")
             return None
 
         search_name = name.replace(" ", "").replace("　", "").replace("\u3000", "").lower()
@@ -36,7 +36,7 @@ class WorldManager:
                 card_name = card_data.get("name", "").replace(" ", "").replace("　", "").replace("\u3000", "").lower()
 
                 if search_name in card_name or card_name in search_name:
-                    print(f"[WorldManager] キャラカード発見: {card_data.get('name')} ({file.name})")
+                    log.info(f"[WorldManager] キャラカード発見: {card_data.get('name')} ({file.name})")
 
                     return {
                         "name": card_data.get("name", "").strip(),
@@ -48,9 +48,9 @@ class WorldManager:
                         "file_path": str(file)
                     }
             except Exception as e:
-                print(f"[WARN] カード処理失敗 {file.name}: {e}")
+                log.info(f"[WARN] カード処理失敗 {file.name}: {e}")
 
-        print(f"[WorldManager] 該当キャラが見つかりませんでした: {name}")
+        log.info(f"[WorldManager] 該当キャラが見つかりませんでした: {name}")
         return None
 
     def extract_json_from_png(self, png_path: Path) -> Optional[Dict]:
@@ -92,7 +92,7 @@ class WorldManager:
                 pos += length + 12
 
         except Exception as e:
-            print(f"[WARN] PNG抽出失敗 {png_path.name}: {e}")
+            log.info(f"[WARN] PNG抽出失敗 {png_path.name}: {e}")
 
         return None
 
@@ -100,11 +100,11 @@ class WorldManager:
         """会話中に新しいキャラが登場したら、非同期で解析してキャッシュする"""
         def task():
             try:
-                print(f"[WorldManager] 非同期解析開始: {character_name}")
+                log.info(f"[WorldManager] 非同期解析開始: {character_name}")
 
                 card = self.find_character_by_name(character_name)
                 if not card:
-                    print(f"[WorldManager] キャラカード未発見: {character_name}")
+                    log.info(f"[WorldManager] キャラカード未発見: {character_name}")
                     return
 
                 # char_cardフォルダを作成
@@ -126,9 +126,9 @@ class WorldManager:
                     memory["world_relation"].append(character_name)
 
                 save_yaml_file(memory_path, memory)
-                print(f"[WorldManager] キャッシュ保存完了: {character_name}")
+                log.info(f"[WorldManager] キャッシュ保存完了: {character_name}")
 
             except Exception as e:
-                print(f"[WorldManager] 非同期処理エラー: {e}")
+                log.info(f"[WorldManager] 非同期処理エラー: {e}")
 
         Thread(target=task, daemon=True).start()

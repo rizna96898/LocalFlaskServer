@@ -19,8 +19,7 @@ from flask_cors import CORS
 from config import config
 from helpers import response_checker
 from core.orchestrator import ChatOrchestrator
-
-# print(f"[DEBUG] Root: {ROOT_DIR}")
+from logger import log
 
 # flaskの開始
 app = Flask(__name__)
@@ -158,6 +157,7 @@ def chat_startup():
 def new_chat():
     if request.method == "OPTIONS":
         return "", 200
+
     return orchestrator.new_chat(request.get_json())
 
 # 発言
@@ -165,6 +165,7 @@ def new_chat():
 def chat():
     if request.method == "OPTIONS":
         return "", 200
+
     return orchestrator.chat(request.get_json())
 
 # 再送。チャット欄の最終発言を送信し直す
@@ -180,6 +181,6 @@ def check_stability():
     return orchestrator.check_stability(request.get_json())
 
 if __name__ == "__main__":
-    print(f"Starting RP Backend on http://0.0.0.0:{config.PORT}")
+    log.info(f"Starting RP Backend on http://0.0.0.0:{config.PORT}")
 
     app.run(host="0.0.0.0", port=5000, debug=False)

@@ -27,11 +27,13 @@ from helpers import response_checker
 from memory_builders import use_memory_constant
 from memory_builders import lord_init_files
 from services.status import status_manager
+from logger import log
+
 class MemoryManager:
     def __init__(self):
         self.prompt_builder = PromptBuilder()
         self.model_handling_service = ModelHandlingService("local")
-        # print("[MemoryManager] Initialized")
+        # log.info("[MemoryManager] Initialized")
 
     # 問い合わせサービスへのクッション関数
     def send_prompt(self, send_data: Dict):
@@ -50,7 +52,12 @@ class MemoryManager:
 
     # 初期記憶の非同期作成
     def create_initial_memory(self, session_id: str) -> str:
-        print(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
+        log.info(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
+
+        from datetime import datetime
+        log.info("chat entered memory_manager.py")
+        with open(r"E:\LocalFlaskServer\debug_chat.log", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now()} chat entered memory_manager.py\n")
 
         try:
             file_utils.mark_prepare_processing(session_id, "new_chat")
@@ -70,7 +77,7 @@ class MemoryManager:
             
             # world_idで世界設定を読み込む
             world_file_path = config.SESSIONS_DIR / session_id / f"{world_id}_world.yaml"
-            print("world_file_path", world_file_path)
+            log.info("world_file_path", world_file_path)
             world_file_data = file_utils.load_yaml_file(world_file_path)
 
             # 記憶作成
@@ -78,8 +85,8 @@ class MemoryManager:
 
             return world_file_data["開始メッセージ"]
         except Exception as e:
-            print(f"[CREATE INITIAL MEMORY ERROR] {type(e).__name__}: {e}")
-
+            log.info(f"[CREATE INITIAL MEMORY ERROR] {type(e).__name__}: {e}")
+    
    # 上から呼ばれてる非同期処理
     def _run_memory_async(self, session_id: str, operation: str, world_file_data: Dict) -> str:
         def task():
@@ -87,7 +94,7 @@ class MemoryManager:
 
             # 世界情報の作成
             try:
-                print(f"[MEMORY] {operation}処理を実行中... session_id={session_id}")
+                log.info(f"[MEMORY] {operation}処理を実行中... session_id={session_id}")
 
                 character = world_file_data["登場人物"]["世界の登場人物"]
                 characters_text = json.dumps(
@@ -100,8 +107,8 @@ class MemoryManager:
                 story = "【シナリオ】\n" + story
                 start_message = "【開始メッセージ】\n" + world_file_data["開始メッセージ"]
 
-                print("character", characters_text)
-                print("story", story)
+                log.info("character", characters_text)
+                log.info("story", story)
 
                 if operation == "create":
                     current_stage = "world"
@@ -121,7 +128,7 @@ class MemoryManager:
                         if not isinstance(parsed_yaml, dict):
                             parsed_yaml = {}
                         if response_checker.is_invalid_world_memory(parsed_yaml):
-                            print("[WARN] world_relationships is empty. retry once.")
+                            log.info("[WARN] world_relationships is empty. retry once.")
                             response_text = self.send_prompt(parameters)
 
                             response_text = string_utils.strip_code_block(response_text)
@@ -129,10 +136,10 @@ class MemoryManager:
                             if not isinstance(parsed_yaml, dict):
                                 parsed_yaml = {}
 
-                            print("２回目？返却yamlの内容？\n", parsed_yaml)
+                            log.info("２回目？返却yamlの内容？\n", parsed_yaml)
                     except Exception as e:
-                        print(f"[WORLD ERROR] YAML parse failed: {e}")
-                        print(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
+                        log.info(f"[WORLD ERROR] YAML parse failed: {e}")
+                        log.info(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
                         parsed_yaml = {}
                     # 何のために必要なのか忘れた
                     player_id = "kyuya"
@@ -152,15 +159,15 @@ class MemoryManager:
                     )
 
                     if not world_relationships:
-                        print(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
-                        print(f"[WORLD ERROR] parsed_yaml: {parsed_yaml!r}")
+                        log.info(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
+                        log.info(f"[WORLD ERROR] parsed_yaml: {parsed_yaml!r}")
                         raise ValueError("world_relationships is empty")
 
                     world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
 
-                    print("[DEBUG] normalized_memory.現在の状態 =", normalized_memory.get("現在の状態"))
-                    print("[DEBUG] normalized_memory.世界の状態 =", normalized_memory.get("世界の状態"))
-                    print("[DEBUG] world_memory_path =", world_memory_path)
+                    log.info("[DEBUG] normalized_memory.現在の状態 =", normalized_memory.get("現在の状態"))
+                    log.info("[DEBUG] normalized_memory.世界の状態 =", normalized_memory.get("世界の状態"))
+                    log.info("[DEBUG] world_memory_path =", world_memory_path)
 
                     saved = file_utils.save_yaml_file(world_memory_path, normalized_memory)
                     if not saved:
@@ -171,9 +178,9 @@ class MemoryManager:
                     pass
 
             except Exception as e:
-                print(f"[MEMORY LOGIC ERROR] {type(e).__name__}: {e}")
+                log.info(f"[MEMORY LOGIC ERROR] {type(e).__name__}: {e}")
                 import traceback
-                print(traceback.format_exc())
+                log.info(traceback.format_exc())
 
                 file_utils.mark_prepare_error(
                     session_id,
@@ -203,9 +210,9 @@ class MemoryManager:
                     )
 
             except Exception as e:
-                print(f"[CHARACTER LOGIC ERROR] {type(e).__name__}: {e}")
+                log.info(f"[CHARACTER LOGIC ERROR] {type(e).__name__}: {e}")
                 import traceback
-                print(traceback.format_exc())
+                log.info(traceback.format_exc())
 
                 file_utils.mark_prepare_error(
                     session_id,
@@ -226,8 +233,8 @@ class MemoryManager:
         base_file_obj: dict[str, Any] = {},
         world_memory_data: dict[str, Any] = {},
     ):
-        print("_run_character_memory_create_sync start")
-        # print(f"[CHAR MEMORY] relation_names = {relation_names}")
+        log.info("_run_character_memory_create_sync start")
+        # log.info(f"[CHAR MEMORY] relation_names = {relation_names}")
 
         session_dir = config.SESSIONS_DIR / session_id
         session_char_dir = session_dir / "character"
@@ -245,11 +252,11 @@ class MemoryManager:
                 # 作成対象はキャラのみ
                 # 将来的にサブキャラも判定するかも
                 if character["参照種別"] != "character":
-                    print(f"[CHAR MEMORY] skip mob: {char_id}")
+                    log.info(f"[CHAR MEMORY] skip mob: {char_id}")
                     continue
                 
                 # キャラの状況一覧を問い合わせ
-                print("[CHAR MEMORY MIDDLE SUMMERY] start")
+                log.info("[CHAR MEMORY MIDDLE SUMMERY] start")
                 temp_file = self.proc_middle_summery(base_file_obj,
                                                      character,
                                                      char_id,
@@ -258,30 +265,30 @@ class MemoryManager:
                                                      start_message,
                                                      temp_dir,
                                                      session_id,)
-                print("[CHAR MEMORY MIDDLE SUMMERY] end")
+                log.info("[CHAR MEMORY MIDDLE SUMMERY] end")
 
                 # 現在の状態(current_state)の作成
                 # 場所(location)の特定
-                print(f"[CHAR MEMORY PLACE] start: ")
+                log.info(f"[CHAR MEMORY PLACE] start: ")
                 location = self.proc_middle_location(base_file_obj, temp_file,)
-                print(f"[CHAR MEMORY PLACE] end: ")
+                log.info(f"[CHAR MEMORY PLACE] end: ")
 
                 # キャラの状況一覧から、分類を判定
-                print(f"[CHAR MEMORY CATEGORIZE] start: ")
+                log.info(f"[CHAR MEMORY CATEGORIZE] start: ")
                 temp_file_path = self.proc_middle_categorize(temp_file,
                                                              base_file_obj,
                                                              temp_dir,
                                                              char_id,
                                                              session_id)
-                print(f"[CHAR MEMORY CATEGORIZE] end: ")
+                log.info(f"[CHAR MEMORY CATEGORIZE] end: ")
 
                 temp_file_data = file_utils.load_yaml_file(temp_file_path) or {}
                 action = []
                 status = []
                 mood = []
                 for temp_file_str in temp_file_data:
-                    print('temp_file_str["要約元"]', temp_file_str["要約元"])
-                    print('temp_file_str["分類"]', temp_file_str["分類"])
+                    log.info('temp_file_str["要約元"]', temp_file_str["要約元"])
+                    log.info('temp_file_str["分類"]', temp_file_str["分類"])
                     match temp_file_str["分類"]:
                         case "行動":
                             action.append(temp_file_str["要約元"])
@@ -292,24 +299,24 @@ class MemoryManager:
 
                 # キャラの状況一覧から、分類を判定
                 # 服装を判定
-                print(f"[CHAR MEMORY  CLOTHING] start: ")
+                log.info(f"[CHAR MEMORY  CLOTHING] start: ")
                 clothing_data = self.proc_middle_clothing(                                         session_char_dir,
                                                           base_file_obj,
                                                           char_id,)
-                print(f"[CHAR MEMORY CLOTHING] end: ")
+                log.info(f"[CHAR MEMORY CLOTHING] end: ")
 
                 # 所持品を判定
-                print(f"[CHAR MEMORY ITEMS] start: ")
+                log.info(f"[CHAR MEMORY ITEMS] start: ")
                 item_data = self.proc_middle_items(                                         session_char_dir,
                                                           base_file_obj,
                                                           char_id,
                                                           clothing_data,
                                                           location,
                                                           temp_file)
-                print(f"[CHAR MEMORY ITEMS] end: ")
+                log.info(f"[CHAR MEMORY ITEMS] end: ")
 
                 # 意識（forcus_target）の特定（多分作成済み）
-                print(f"[CHAR MEMORY TARGET] start: ")
+                log.info(f"[CHAR MEMORY TARGET] start: ")
                 
                 target_data = self.proc_middle_target(                                         base_file_obj,
                                                           character["表示名"],
@@ -317,15 +324,15 @@ class MemoryManager:
                                                           start_message)
                 target_list = []
                 target_list.append(target_data["相手"])
-                print(f"[CHAR MEMORY TARGET] end: ")
+                log.info(f"[CHAR MEMORY TARGET] end: ")
 
                 # 所持金（currency）の特定
-                print(f"[CHAR MEMORY CURRENCY] start: ")
+                log.info(f"[CHAR MEMORY CURRENCY] start: ")
                 currency_data = self.proc_middle_currency(                                         session_char_dir,
                                                         base_file_obj,
                                                         char_id,
                                                         start_message,)
-                print(f"[CHAR MEMORY CURRENCY] end: ")
+                log.info(f"[CHAR MEMORY CURRENCY] end: ")
 
                 character_memory_obj = {}
                 character_memory_obj["現在の状態"] = {}
@@ -339,22 +346,22 @@ class MemoryManager:
                 character_memory_obj["現在の状態"]["所持品"] = item_data["所持品"]
                 character_memory_obj["現在の状態"]["金額"] = currency_data
 
-                print("character_memory_save start");
+                log.info("character_memory_save start");
                 character_memory_path = config.SESSIONS_DIR / session_id / "character" / f"{char_id}_memory.yaml"
                 saved = file_utils.save_yaml_file(character_memory_path, character_memory_obj)
                 if not saved:
                     raise RuntimeError(f"character memory save failed: {character_memory_path}")
-                print("character_memory_save end");
+                log.info("character_memory_save end");
                 continue
             except Exception as e:
-                print(f"[CHAR MEMORY ERROR] {type(e).__name__}: {e}")
+                log.info(f"[CHAR MEMORY ERROR] {type(e).__name__}: {e}")
                 import traceback
-                print(traceback.format_exc())
+                log.info(traceback.format_exc())
                 raise
 
         
-        print("セッションキャラディレクトリ", session_char_dir);
-        print("_run_character_memory_create_sync end")
+        log.info("セッションキャラディレクトリ", session_char_dir);
+        log.info("_run_character_memory_create_sync end")
 
     # 要約の問い合わせ
     def proc_middle_summery(self, 
@@ -367,27 +374,27 @@ class MemoryManager:
                             temp_dir: str = "",
                             session_id: str = ""):
         
-        print("[CHAR MEMORY MIDDLE SUMMERY] replace start")
+        log.info("[CHAR MEMORY MIDDLE SUMMERY] replace start")
         result = self.replace_middle_summery(base_file_obj,
                                              character,
                                              char_id,
                                              scenario,
                                              scenario_parameter,
                                              start_message,)              
-        print("[CHAR MEMORY MIDDLE SUMMERY] replace end")
+        log.info("[CHAR MEMORY MIDDLE SUMMERY] replace end")
         
-        print("[CHAR MEMORY MIDDLE SUMMERY] send message start")
+        log.info("[CHAR MEMORY MIDDLE SUMMERY] send message start")
         parameters = use_memory_constant.get_character_midle_summery_send_parameters(result["system_prompt"], result["template_prompt"])
         response_text = self.send_prompt(parameters)
         response_text = string_utils.strip_code_block(response_text)
         list_input = string_utils.extract_list_items(response_text)
-        print("[CHAR MEMORY MIDDLE SUMMERY] send message end")
+        log.info("[CHAR MEMORY MIDDLE SUMMERY] send message end")
         
         # config.SESSIONS_DIR = files/sessions 前提なら、プロジェクト直下の temp
         temp_file = temp_dir / f"{char_id}_{session_id}_middle.yaml"
         temp_dir.mkdir(parents=True, exist_ok=True)
         # 書き込み
-        print(f"[CHAR MEMORY MIDDLE SUMMERY] saved: {temp_file}")
+        log.info(f"[CHAR MEMORY MIDDLE SUMMERY] saved: {temp_file}")
         with temp_file.open("w", encoding="utf-8") as f:
             yaml.safe_dump(list_input, f, allow_unicode=True, sort_keys=False)
 
@@ -428,15 +435,15 @@ class MemoryManager:
                 data = []
 
             # ② 追加
-            print("★ 書き込み前", len(data))
+            log.info("★ 書き込み前", len(data))
             data.extend(categorized_result)
-            print("★ 書き込み後", len(data))
+            log.info("★ 書き込み後", len(data))
 
             # ③ 上書き
             with temp_file_path.open("w", encoding="utf-8") as f:
                 yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
         
-        print(f"[CHAR MEMORY CATEGORIZE] saved: {temp_file_path}")
+        log.info(f"[CHAR MEMORY CATEGORIZE] saved: {temp_file_path}")
 
         return temp_file_path
     
@@ -464,7 +471,7 @@ class MemoryManager:
 
         response_text = self.send_prompt(parameters)
         response_text = string_utils.strip_code_block(response_text)
-        print("response_text", response_text)
+        log.info("response_text", response_text)
         return response_text
 
     # 服装の問い合わせ
@@ -492,7 +499,7 @@ class MemoryManager:
         response_text = self.send_prompt(parameters)
         response_text = string_utils.strip_code_block(response_text)
         
-        print("response_text", response_text)
+        log.info("response_text", response_text)
         return yaml.safe_load(response_text) or {}
 
     # 所持品の問い合わせ
@@ -540,7 +547,7 @@ class MemoryManager:
         response_text = self.send_prompt(parameters)
         response_text = string_utils.strip_code_block(response_text)
         
-        print("返却前全文", response_text)
+        log.info("返却前全文", response_text)
         return yaml.safe_load(response_text) or {}
 
     # 意識を誰に向けているか問い合わせ
@@ -565,13 +572,13 @@ class MemoryManager:
 
         temp_str = temp_str + "\n" + tail_str
 
-        print("置換後", temp_str)
+        log.info("置換後", temp_str)
         parameters = use_memory_constant.get_character_midle_target_send_parameters(system_prompt, temp_str)
 
         response_text = self.send_prompt(parameters)
         response_text = string_utils.strip_code_block(response_text)
         
-        print("返却前全文", response_text)
+        log.info("返却前全文", response_text)
         return yaml.safe_load(response_text) or {}
 
     # 所持金の問い合わせ
@@ -605,7 +612,7 @@ class MemoryManager:
         response_text = self.send_prompt(parameters)
         response_text = string_utils.strip_code_block(response_text)
         
-        print("返却前全文", response_text)
+        log.info("返却前全文", response_text)
         return yaml.safe_load(response_text) or {}
 
     # TODO 変動パラメータの作成（未実装、予定）
@@ -678,7 +685,7 @@ class MemoryManager:
 
     # 次の話者確定（使ってない可能性ある）
     # def create_target_speakers(self, session_id: str, body:  Dict):
-    #     print(f"[TARGET SPEAKERS] session_id={session_id} → 発言対象確定を開始")
+    #     log.info(f"[TARGET SPEAKERS] session_id={session_id} → 発言対象確定を開始")
     #     self._run_create_target_speakers(session_id, body)
     #     return ""
 
@@ -686,8 +693,8 @@ class MemoryManager:
     # def _run_create_target_speakers(self, session_id: str, body: Dict):
     #     def task():
     #         try:
-    #             # print("session_id:", session_id, type(session_id))
-    #             # print("body:", body, type(body))
+    #             # log.info("session_id:", session_id, type(session_id))
+    #             # log.info("body:", body, type(body))
 
     #             # プレイヤーの発言が誰の物かを確認するプロンプトを投げる
     #             # yamlのロード
@@ -698,20 +705,20 @@ class MemoryManager:
     #                 config.PREPROCESS / PromptsPreprocess.PLAYER_IDENTIFYCATION
     #             ) or {}
 
-    #             print("prompt_path", config.BOOTSTRAP / PromptsPreprocess.PLAYER_IDENTIFYCATION)
-    #             print("prompt_data", prompt_data)
+    #             log.info("prompt_path", config.BOOTSTRAP / PromptsPreprocess.PLAYER_IDENTIFYCATION)
+    #             log.info("prompt_data", prompt_data)
 
     #             world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])
 
-    #             print("current participantsの編集後文字列", world_participants)
-    #             # print("実行プロンプト原文", prompt_data)
+    #             log.info("current participantsの編集後文字列", world_participants)
+    #             # log.info("実行プロンプト原文", prompt_data)
     #             system_prompt = prompt_data["system"]
     #             template_prompt = prompt_data["template"]
 
     #             template_prompt = template_prompt.replace("{characters}", world_participants)
     #             template_prompt = template_prompt.replace("{player_message}", body.get("message", ""))
                 
-    #             print("置換後プロンプト全文", template_prompt)
+    #             log.info("置換後プロンプト全文", template_prompt)
     #             #どれだけ自由に出力させるか。
     #             temperature = 0.5
     #             #出力候補の「確率の合計」でカット
@@ -737,17 +744,17 @@ class MemoryManager:
     #             parsed = yaml.safe_load(string_utils.strip_code_block(result)) or {}
     #             target = parsed.get("target_speakers")
 
-    #             print("今回の発話対象", target)
+    #             log.info("今回の発話対象", target)
 
     #             name = body.get("player")
     #             player_name = name.split(": ", 1)[1].split("：", 1)[0]
 
-    #             print("player_name", player_name)
+    #             log.info("player_name", player_name)
     #             character_path = Path(config.SESSIONS_DIR / session_id / "character")
 
     #             player_path = file_utils.find_character_file(player_name, character_path)
 
-    #             print("player_path", player_path)
+    #             log.info("player_path", player_path)
 
     #             player_obj = file_utils.load_yaml_file(player_path)
 
@@ -777,10 +784,10 @@ class MemoryManager:
     #                 mob_count=mob_count,
     #             )
 
-    #             print(f"[CREATE TARGET SPEAKERS UPDATE] ")
+    #             log.info(f"[CREATE TARGET SPEAKERS UPDATE] ")
 
     #         except Exception as e:
-    #             print(f"[CREATE TARGET SPEAKERS ERROR] {type(e).__name__}: {e}")
+    #             log.info(f"[CREATE TARGET SPEAKERS ERROR] {type(e).__name__}: {e}")
 
     #     Thread(target=task, daemon=True).start()
     
@@ -795,23 +802,23 @@ class MemoryManager:
     # ):
     #     def task():
     #         try:
-    #             print("[CHAR UPDATE] _run_character_memory_update_async start")
+    #             log.info("[CHAR UPDATE] _run_character_memory_update_async start")
 
     #             session_char_dir = config.SESSIONS_DIR / session_id / "character"
     #             session_char_dir.mkdir(parents=True, exist_ok=True)
 
     #             char_name = character_name.strip()
     #             if not char_name:
-    #                 print("[CHAR UPDATE] skip empty character_name")
+    #                 log.info("[CHAR UPDATE] skip empty character_name")
     #                 return
 
     #             character_file_path = file_utils.find_character_yaml_file(char_name, session_char_dir)
     #             if not character_file_path:
-    #                 print(f"[CHAR UPDATE] character file not found: {char_name}")
+    #                 log.info(f"[CHAR UPDATE] character file not found: {char_name}")
     #                 return
     #             memory_file_path = file_utils.find_character_memory_file(char_name, session_char_dir)
     #             if not memory_file_path:
-    #                 print(f"[CHAR UPDATE] memory file not found: {char_name}")
+    #                 log.info(f"[CHAR UPDATE] memory file not found: {char_name}")
     #                 return
 
     #             character_file = file_utils.load_yaml_file(character_file_path) or {}
@@ -843,7 +850,7 @@ class MemoryManager:
     #                 if not isinstance(parsed_yaml, dict):
     #                     parsed_yaml = {}
     #             except Exception as e:
-    #                 print(f"[CHAR UPDATE] YAML parse failed: {char_name}: {e}")
+    #                 log.info(f"[CHAR UPDATE] YAML parse failed: {char_name}: {e}")
     #                 parsed_yaml = {}
 
     #             new_memory = {
@@ -857,10 +864,10 @@ class MemoryManager:
     #             merged_memory = string_utils._merge_memory_data(old_memory, new_memory)
     #             file_utils.save_yaml_file(memory_file_path, merged_memory)
 
-    #             print(f"[CHAR UPDATE] saved: {memory_file_path.name}")
+    #             log.info(f"[CHAR UPDATE] saved: {memory_file_path.name}")
 
     #         except Exception as e:
-    #             print(f"[CHAR UPDATE ERROR] {type(e).__name__}: {e}")
+    #             log.info(f"[CHAR UPDATE ERROR] {type(e).__name__}: {e}")
 
     #     Thread(target=task, daemon=True).start()
 
@@ -873,7 +880,7 @@ class MemoryManager:
     #     last_user_content: str,
     #     last_assistant_content: str,
     # ):
-    #     print(f"[MEMORY] session_id={session_id} char={character_name} → 記憶更新を開始")
+    #     log.info(f"[MEMORY] session_id={session_id} char={character_name} → 記憶更新を開始")
     #     self._run_memory_async(
     #         body=body,
     #         session_id=session_id,
@@ -889,25 +896,25 @@ class MemoryManager:
     #         session_char_dir = config.SESSIONS_DIR / session_id / "character"
     #         session_char_dir.mkdir(parents=True, exist_ok=True)
 
-    #         print(f"[WORLD] === character sync start ===")
-    #         print(f"[WORLD] CHAR DIR: {st_char_dir}")
-    #         print(f"[WORLD] SESSION DIR: {session_char_dir}")
+    #         log.info(f"[WORLD] === character sync start ===")
+    #         log.info(f"[WORLD] CHAR DIR: {st_char_dir}")
+    #         log.info(f"[WORLD] SESSION DIR: {session_char_dir}")
 
     #         # モブ用テンプレート
     #         mob_template_path = config.TEMPLATES_DIR / Bootstrap.SUB_CHARACTER_TEMPLATE
-    #         print("[WORLD] TEMPLATE_PATH")
+    #         log.info("[WORLD] TEMPLATE_PATH")
     #         mob_template_data = file_utils.load_yaml_file(mob_template_path) or {}
     #         if not isinstance(mob_template_data, dict):
     #             mob_template_data = {}
 
     #         for name in world_relation:
     #             if not isinstance(name, str):
-    #                 print("[WORLD] skip: not string")
+    #                 log.info("[WORLD] skip: not string")
     #                 continue
 
     #             char_name = name.strip()
     #             if not char_name:
-    #                 print("[WORLD] skip: empty name")
+    #                 log.info("[WORLD] skip: empty name")
     #                 continue
 
     #             dst_file = session_char_dir / f"{char_name}.yaml"
@@ -923,7 +930,7 @@ class MemoryManager:
     #                 yaml_data = file_utils.load_yaml_from_character_description(raw_data)
 
     #                 if not yaml_data:
-    #                     print(f"[WORLD] description YAML not found or invalid: {char_name}")
+    #                     log.info(f"[WORLD] description YAML not found or invalid: {char_name}")
     #                     yaml_data = {
     #                         "名前": {
     #                             "表示名": raw_data.get("name") or char_name,
@@ -931,17 +938,17 @@ class MemoryManager:
     #                     }
 
     #                 file_utils.save_yaml_file(dst_file, yaml_data)
-    #                 print(f"[WORLD] saved character card yaml: {dst_file}")
+    #                 log.info(f"[WORLD] saved character card yaml: {dst_file}")
     #                 continue
 
     #             # --------------------------------------------------
     #             # 2. キャラカードが存在しない場合
     #             #    モブ用テンプレートに名前だけ入れて保存する
     #             # --------------------------------------------------
-    #             print(f"[WORLD] {char_name} no match → create mob character yaml")
+    #             log.info(f"[WORLD] {char_name} no match → create mob character yaml")
 
     #             if dst_file.exists():
-    #                 print(f"[MOB] skip existing yaml: {dst_file}")
+    #                 log.info(f"[MOB] skip existing yaml: {dst_file}")
     #                 continue
 
     #             # テンプレートを破壊しないように deepcopy
@@ -957,12 +964,12 @@ class MemoryManager:
     #             data["名前"]["表示名"] = char_name
 
     #             file_utils.save_yaml_file(dst_file, data)
-    #             print(f"[MOB] saved character yaml: {dst_file}")
+    #             log.info(f"[MOB] saved character yaml: {dst_file}")
 
-    #         print(f"[WORLD] === character sync end ===")
+    #         log.info(f"[WORLD] === character sync end ===")
 
     #     except Exception as e:
-    #         print(f"[WORLD ERROR] {e}")
+    #         log.info(f"[WORLD ERROR] {e}")
 
     # 登場人物の初期記憶作成
     # def _run_character_memory_create_async(
@@ -1034,7 +1041,7 @@ class MemoryManager:
     #     if not saved:
     #         raise RuntimeError(f"character summary save failed: {summary_file}")
 
-    #     print(f"[CHAR SUMMARY] saved: {summary_file.name}")
+    #     log.info(f"[CHAR SUMMARY] saved: {summary_file.name}")
 
 
     # def extract_character_parameters_from_mes_example(self, mes_example: str, char_name: str) -> list[dict]:
@@ -1049,7 +1056,7 @@ class MemoryManager:
     #     try:
     #         parsed = yaml.safe_load(mes_example) or {}
     #     except Exception as e:
-    #         print(f"[PARAM WARN] mes_example parse failed: {e}")
+    #         log.info(f"[PARAM WARN] mes_example parse failed: {e}")
     #         return []
 
     #     if not isinstance(parsed, dict):

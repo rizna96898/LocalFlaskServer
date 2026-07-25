@@ -15,6 +15,7 @@ from helpers import file_utils
 import base64
 import time
 from services.status import status_manager
+from logger import log
 
 def literal_str_representer(dumper, data):
     return dumper.represent_scalar(
@@ -65,9 +66,7 @@ def str_presenter(dumper, data):
 def save_yaml_file(file_path: Path, data: Dict[str, Any]) -> bool:
     """YAMLファイルを保存"""
     try:
-        # print("save_yaml_file start");
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        # print(f"[DEBUG] save target = {file_path}")
 
         with open(file_path, "w", encoding="utf-8") as f:
             yaml.dump(
@@ -81,7 +80,7 @@ def save_yaml_file(file_path: Path, data: Dict[str, Any]) -> bool:
             )
         return True
     except Exception as e:
-        print(f"[ERROR] Failed to save YAML {file_path}: {e}")
+        log.info(f"[ERROR] Failed to save YAML {file_path}: {e}")
         return False
 
 def load_yaml_file(file_path: Path) -> Dict[str, Any]:
@@ -92,7 +91,7 @@ def load_yaml_file(file_path: Path) -> Dict[str, Any]:
         with open(file_path, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except Exception as e:
-        print(f"[ERROR] Failed to load YAML {file_path}: {e}")
+        log.info(f"[ERROR] Failed to load YAML {file_path}: {e}")
         return {}
 
 def _load_character_data(file_path):
@@ -121,7 +120,7 @@ def _load_character_data(file_path):
                     key = key_bytes.decode("ascii", errors="ignore")
                     value = value_bytes.decode("utf-8", errors="ignore")
 
-                    #print(f"[CHAR LOAD] png chunk key: {key}")
+                    #log.info(f"[CHAR LOAD] png chunk key: {key}")
 
                     if key in ["chara", "ccv3", "parameters"]:
                         # 1. data: 形式なら prefix を除去
@@ -135,7 +134,7 @@ def _load_character_data(file_path):
                             if isinstance(card_data, dict):
                                 return card_data
                         except Exception as e:
-                            print(f"[CHAR LOAD] base64 decode failed: {e}")
+                            log.info(f"[CHAR LOAD] base64 decode failed: {e}")
 
                         # 3. そのまま json も試す
                         try:
@@ -143,7 +142,7 @@ def _load_character_data(file_path):
                             if isinstance(card_data, dict):
                                 return card_data
                         except Exception as e:
-                            print(f"[CHAR LOAD] direct json failed: {e}")
+                            log.info(f"[CHAR LOAD] direct json failed: {e}")
 
                 pos += length + 12
 
@@ -152,7 +151,7 @@ def _load_character_data(file_path):
         return {}
 
     except Exception as e:
-        print(f"[CHAR LOAD ERROR] {file_path}: {e}")
+        log.info(f"[CHAR LOAD ERROR] {file_path}: {e}")
         return {}
 
 def find_character_yaml_file(char_name: str, session_char_dir: Path):
@@ -216,14 +215,14 @@ def apply_dynamic_params_to_characters(session_id: str, dynamic_list: list[dict]
 
         memory_file = file_utils.find_character_memory_file(target, session_char_dir)
         if not memory_file:
-            print(f"[DYNAMIC PARAM] target not found: {target}")
+            log.info(f"[DYNAMIC PARAM] target not found: {target}")
             continue
 
         data = file_utils.load_yaml_file(memory_file) or {}
         data["param_data"] = param_data
         file_utils.save_yaml_file(memory_file, data)
 
-        #print(f"[DYNAMIC PARAM] applied → {memory_file.name}")
+        #log.info(f"[DYNAMIC PARAM] applied → {memory_file.name}")
 
 #ファイルから会話履歴を読み込み
 def load_history(directory_full_path: str) -> list:
@@ -276,9 +275,9 @@ def build_character_comment_system_message(
       1. 文字列そのもの
       2. dict で system / prompt / template / content のいずれかを持つ
     """
-    # print("session_id", session_id)
-    # print("character_name", character_name)
-    # print("sessions_dir", sessions_dir)
+    # log.info("session_id", session_id)
+    # log.info("character_name", character_name)
+    # log.info("sessions_dir", sessions_dir)
     memory = get_character_memory(session_id, character_name, sessions_dir)
     if not memory:
         raise ValueError(f"character memory not found: {character_name}")
@@ -331,7 +330,7 @@ def load_character_memories(
     character_memory_dir = sessions_dir / session_id / "character"
     result: dict[str, dict[str, Any]] = {}
 
-    # print("読み込み対象のyamlファイル名", character_memory_dir)
+    # log.info("読み込み対象のyamlファイル名", character_memory_dir)
 
     if not character_memory_dir.exists():
         return result
@@ -341,14 +340,14 @@ def load_character_memories(
             with yaml_file.open("r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"[CHAR MEMORY LOAD ERROR] {yaml_file}: {e}")
+            log.info(f"[CHAR MEMORY LOAD ERROR] {yaml_file}: {e}")
             continue
 
         raw_name = yaml_file.stem.removesuffix("_memory")
         char_name = string_utils._normalize_name(raw_name)
 
         if char_name in result:
-            print(
+            log.info(
                 f"[CHAR MEMORY WARN] duplicate: raw={raw_name}, normalized={char_name}"
             )
 
@@ -397,11 +396,11 @@ def wait_until_prepare_status(
         complete_stage = data.get("complete_stage")
 
         if status == "error":
-            print(f"[WAIT] prepare_status error: session_id={session_id}, data={data}")
+            log.info(f"[WAIT] prepare_status error: session_id={session_id}, data={data}")
             return False
 
         if status == "ready" and complete_stage == target_stage:
-            print(f"[WAIT] prepare_status ready: session_id={session_id}, target_stage={target_stage}")
+            log.info(f"[WAIT] prepare_status ready: session_id={session_id}, target_stage={target_stage}")
             return True
 
         time.sleep(interval_sec)
@@ -427,8 +426,8 @@ def load_yaml_from_character_description(card_data: dict) -> dict:
             return parsed
         return {}
     except Exception as e:
-        print(f"[CHAR CARD YAML ERROR] description parse failed: {e}")
-        print(f"[CHAR CARD YAML ERROR] head={text[:300]!r}")
+        log.info(f"[CHAR CARD YAML ERROR] description parse failed: {e}")
+        log.info(f"[CHAR CARD YAML ERROR] head={text[:300]!r}")
         return {}
     
 # 世界情報から日付持ってきてる

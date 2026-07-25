@@ -15,6 +15,7 @@ class ChatUtils:
 
     # 新規セッション作成
     def create_new_session(self, body: Dict) -> str:
+
         # """新規チャット作成（/new_chat）"""
         session_id = body.get("session_id") or str(uuid4())
 
@@ -28,18 +29,18 @@ class ChatUtils:
     # 呼ばないならここに無くて良い
     # 前処理。入り口
     def chat_prepare(self, payload):
-        print("前処理のログ")
+        log.info("前処理のログ")
 
         try:
             # Yamlの設定に変更があれば読み直しておく
             system_settings_reload_service.SystemSettingsReloadCheckService()
 
             # デバッグログ（必要に応じて残す）
-            # print("=== Request Headers ===")
+            # log.info("=== Request Headers ===")
             # for key, value in request.headers.items():
-            #     print(f"{key}: {value}")
-            # print("=====================")
-            # print("body全量:", body)
+            #     log.info(f"{key}: {value}")
+            # log.info("=====================")
+            # log.info("body全量:", body)
 
             # 前処理します
             # TODO 1文字は恐らく判別出来ないから何もしない
@@ -49,20 +50,20 @@ class ChatUtils:
             return "", 200
 
         except Exception as e:
-            print(f"[ERROR] /v1/chat/prepare: {e}")
+            log.info(f"[ERROR] /v1/chat/prepare: {e}")
             return jsonify({"error": "Internal server error"}), 500
 
     # 前処理
     def chat_pretreatment(self, body: Dict) -> Dict:
-        print("[ORCH] chat_pretreatment start")
+        log.info("[ORCH] chat_pretreatment start")
 
         session_id = body.get("session_id")
 
         try:
-            print(f"[ORCH] session_id={session_id}")
+            log.info(f"[ORCH] session_id={session_id}")
 
             if not session_id:
-                print("[ERROR] chat_pretreatment: session_id取得エラー")
+                log.info("[ERROR] chat_pretreatment: session_id取得エラー")
                 return {
                     "response": {
                         "error": "session_idが何らかの理由で取れなかったので新しいチャットを開始してください。"
@@ -77,9 +78,9 @@ class ChatUtils:
             return response_checker.response_ok(body)
 
         except Exception as e:
-            print(f"[ERROR] chat_pretreatment: {e}")
+            log.info(f"[ERROR] chat_pretreatment: {e}")
             import traceback
-            print(traceback.format_exc())
+            log.info(traceback.format_exc())
 
             if session_id:
                 file_utils.mark_prepare_error(
@@ -93,7 +94,7 @@ class ChatUtils:
 
     # 後処理。入り口
     def chat_after(self, payload):
-        print("後処理のログ")
+        log.info("後処理のログ")
 
         try:
             # Yamlの設定に変更があれば読み直しておく
@@ -113,13 +114,13 @@ class ChatUtils:
             return self.chat_post_processing(payload), 200
 
         except Exception as e:
-            print(f"[ERROR] /v1/chat/after: {e}")
+            log.info(f"[ERROR] /v1/chat/after: {e}")
             error_response
             return exception_proc.error_response("Internal server error", 500), 500
 
     # 後処理
     def chat_post_processing(self, body: Dict) -> Dict:
-        print("[ORCH] chat_post_processing start")
+        log.info("[ORCH] chat_post_processing start")
 
         session_id = body.get("session_id")
 
@@ -140,7 +141,7 @@ class ChatUtils:
             return response_checker.response_ok(None)
 
         except Exception as e:
-            print(f"[ERROR] chat_post_processing: {e}")
+            log.info(f"[ERROR] chat_post_processing: {e}")
             if session_id:
                 file_utils.mark_prepare_error(
                     session_id,

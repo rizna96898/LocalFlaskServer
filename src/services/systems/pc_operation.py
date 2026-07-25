@@ -1,4 +1,5 @@
 from helpers import response_checker
+from logger import log
 
 def select_base_path(self, payload):
     # 注意:
@@ -44,7 +45,7 @@ def open_system_yaml(self, payload):
     except Exception as exc:
         import traceback
         traceback.print_exc()          # ←追加
-        print(repr(exc))               # ←追加
+        log.info(repr(exc))               # ←追加
         return response_checker._json_error(
             f"ファイル読み込み失敗: {exc}",
             status=500,

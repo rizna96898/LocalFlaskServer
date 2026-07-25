@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from helpers import string_utils
+from logger import log
 
 class LiteralString(str):
     pass
@@ -316,16 +317,6 @@ def normalize_relationship_item(text: str) -> str:
     text = re.sub(r"：\s*", "：", text)
     return text
 
-# def build_characters_text(participants: list[str]) -> str:
-#     lines = []
-#     for p in participants:
-#         if "：" in p:
-#             name, role = p.split("：", 1)
-#             lines.append(f"- {name} : {role}")
-#         else:
-#             lines.append(f"- {p}")
-#     return "\n".join(lines)
-
 def extract_dynamic_params_from_mes_example(mes_example: str) -> list[dict]:
     import yaml
 
@@ -349,7 +340,7 @@ def extract_dynamic_params_from_mes_example(mes_example: str) -> list[dict]:
         return []
 
     except Exception as e:
-        print(f"[DYNAMIC PARAM] parse error: {e}")
+        log.info(f"[DYNAMIC PARAM] parse error: {e}")
         return []
 
 def get_reversed_user_message(messages:list[str]) -> str:
@@ -608,7 +599,7 @@ def normalize_person_list(value: Any) -> list[dict[str, Any]]:
 
     for item in value:
         normalized = normalize_person_item(item)
-        print("normalized", normalized)
+        log.info("normalized", normalized)
         if not normalized:
             continue
 

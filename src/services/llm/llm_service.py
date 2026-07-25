@@ -32,10 +32,10 @@ class ModelHandlingService:
                 model_path=str(model_file_path / model_file_name),
                 n_ctx=4096,
                 n_gpu_layers=-1,  # GPUに載せる。重ければ数値指定
-                verbose=True,
+                verbose=False,
                 reasoning=False
             )
-            print("ローカルモデルの読み込み完了", str(model_file_path / model_file_name))
+            log.info("ローカルモデルの読み込み完了", str(model_file_path / model_file_name))
             self.impl = LocalModelService(llm=self.llm)
 
         else:
@@ -54,9 +54,6 @@ class ModelHandlingService:
         logit_bias: Optional[Dict[str, int]] = None,
         **kwargs,
     ):
-        
-        print(sys.stdout)
-        print(sys.stderr)
 
         max_tokens = self._get_default_max_tokens(task_type)
 
@@ -104,14 +101,10 @@ class LocalModelService:
         """
         LocalModelにメッセージを送信し、応答のcontent部分を返す
         """
-
-        print(sys.stdout)
-        print(sys.stderr)
+        log.info("[LOCALMODEL] send_message start")
 
         # パラメータの優先順位: 引数 > config
         model_name = config.LOCALMODEL_NAME
-        temp = temperature if temperature is not None else self.temperature
-        tokens = max_tokens if max_tokens is not None else self.max_tokens
 
         # system_promptがある場合は先頭に追加
         payload_messages = []
@@ -122,15 +115,15 @@ class LocalModelService:
 
         started_at = time.time()
 
-        print(payload_messages)
+        log.info(payload_messages)
         prompt = messages_to_prompt(payload_messages)
 
-        print("=== LOCAL PROMPT TAIL ===")
-        print("[LOCALMODEL] 送信予定文", prompt)
-        print("=========================")
+        log.info("=== LOCAL PROMPT TAIL ===")
+        log.info("[LOCALMODEL] 送信予定文", prompt)
+        log.info("=========================")
         
         try:
-            print(f"[LOCALMODEL] send_message start: model={model_name}, started_at={started_at}")
+            log.info(f"[LOCALMODEL] send_message start: model={model_name}, started_at={started_at}")
 
             log.debug_dump_all(
                 prompt,
@@ -144,9 +137,11 @@ class LocalModelService:
                     "logit_bias": logit_bias,
                 }
             )
-            # print(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
+            # log.info(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
             # llmのリセット
             self.llm.reset()
+
+            start = time.perf_counter()
 
             response = self.llm(
                 prompt=prompt,
@@ -158,11 +153,13 @@ class LocalModelService:
                 stop=stop,
                 logit_bias=logit_bias,
             )
-            print("返信結果全部", response)
-            print(f"[LOCALMODEL] send_message end: model={model_name}, ended_at={time.time()}")
+
+            elapsed = time.perf_counter() - start
+
+            log.info("返信結果全部", response)
+            log.info(f"[LOCALMODEL] send_message end: model={model_name}, ended_at={time.time()}")
 
             choice = response["choices"][0]
-
             content = choice.get("text")
 
             # Noneチェック
@@ -170,6 +167,16 @@ class LocalModelService:
                 raise ValueError(
                     f"[LOCALMODEL] content is None | response={response}"
                 )
+
+            response_text = content.strip()
+            usage = response.get("usage", {})
+
+            log.performance(model_name,
+            elapsed,
+            usage.get("prompt_tokens", 0),
+            usage.get("completion_tokens", 0),
+            usage.get("total_tokens", 0),
+            len(response_text),)
 
             # 空文字チェック（今回まさにこれで落ちてた）
             content = content.strip()
@@ -191,42 +198,42 @@ class LocalModelService:
                     if content:
                         break
 
-                    print(f"[LOCALMODEL] empty content retry={retry+1}")
+                    log.info(f"[LOCALMODEL] empty content retry={retry+1}")
 
                 if not content:
                     raise ValueError(f"[LOCALMODEL] empty content after retry | response={response}")
 
             result = content.strip()
             result = string_utils.cleanup_model_output(result)
-            # print(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
+            # log.info(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
 
-            print("[LOCALMODEL] 最終生成結果返答文字列：", result)
+            log.info("[LOCALMODEL] 最終生成結果返答文字列：", result)
             return result
 
         except requests.exceptions.Timeout as e:
-            print(f"[LOCALMODEL TIMEOUT] elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
+            log.info(f"[LOCALMODEL TIMEOUT] elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
             raise
 
         except requests.exceptions.RequestException as e:
-            print(f"[ERROR] LOCALMODEL request failed: elapsed={time.time() - started_at:.2f}s: {e}")
+            log.info(f"[ERROR] LOCALMODEL request failed: elapsed={time.time() - started_at:.2f}s: {e}")
             if hasattr(e, "response") and e.response is not None:
-                print(f"Status Code: {e.response.status_code}")
+                log.info(f"Status Code: {e.response.status_code}")
                 try:
-                    print(f"Response: {e.response.json()}")
+                    log.info(f"Response: {e.response.json()}")
                 except Exception:
-                    print(f"Response text: {e.response.text}")
+                    log.info(f"Response text: {e.response.text}")
             raise
 
         except (KeyError, IndexError, TypeError) as e:
-            print(f"[ERROR] Failed to parse LOCALMODEL response: elapsed={time.time() - started_at:.2f}s: {e}")
+            log.info(f"[ERROR] Failed to parse LOCALMODEL response: elapsed={time.time() - started_at:.2f}s: {e}")
             raise Exception(f"LOCALMODEL response parsing error: {e}")
 
         except Exception as e:
-            print(f"[ERROR] Unexpected error in send_message: elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
+            log.info(f"[ERROR] Unexpected error in send_message: elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
             raise
 
         finally:
-            print(f"[LOCALMODEL] send_message end")
+            log.info(f"[LOCALMODEL] send_message finally")
 
 
     def send_with_system(self, messages: List[Dict], system_prompt: str, **kwargs) -> str:
@@ -252,7 +259,7 @@ class OpenRouterService:
 
         # APIキーの確認
         if not self.api_key or self.api_key == "dummy":
-            print("[WARN] OpenRouter APIキーが設定されていません。system_settings.yamlを確認してください。")
+            log.info("[WARN] OpenRouter APIキーが設定されていません。system_settings.yamlを確認してください。")
 
     def send_message(
         self,
@@ -297,30 +304,30 @@ class OpenRouterService:
         started_at = time.time()
 
         try:
-            print(f"[OPENROUTER] send_message start: model={target_model}, started_at={started_at}")
+            log.info(f"[OPENROUTER] send_message start: model={target_model}, started_at={started_at}")
 
-            # print(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
+            # log.info(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
             response = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=self.headers,
                 json=payload,
                 timeout=(10, 90)   # connect timeout, read timeout
             )
-            # print(f"[OPENROUTER] requests.post end: elapsed={time.time() - started_at:.2f}s")
-            print(f"[OPENROUTER] send_message end: model={target_model}, ended_at={time.time()}")
+            # log.info(f"[OPENROUTER] requests.post end: elapsed={time.time() - started_at:.2f}s")
+            log.info(f"[OPENROUTER] send_message end: model={target_model}, ended_at={time.time()}")
 
-            # print(f"[OPENROUTER] raise_for_status start: elapsed={time.time() - started_at:.2f}s, status={response.status_code}")
+            # log.info(f"[OPENROUTER] raise_for_status start: elapsed={time.time() - started_at:.2f}s, status={response.status_code}")
             response.raise_for_status()
-            # print(f"[OPENROUTER] raise_for_status end: elapsed={time.time() - started_at:.2f}s")
+            # log.info(f"[OPENROUTER] raise_for_status end: elapsed={time.time() - started_at:.2f}s")
 
-            # print(f"[OPENROUTER] response.json start: elapsed={time.time() - started_at:.2f}s")
+            # log.info(f"[OPENROUTER] response.json start: elapsed={time.time() - started_at:.2f}s")
             data = response.json()
-            # print(f"[OPENROUTER] response.json end: elapsed={time.time() - started_at:.2f}s")
+            # log.info(f"[OPENROUTER] response.json end: elapsed={time.time() - started_at:.2f}s")
 
             if "choices" not in data:
                 raise Exception(f"OpenRouter response missing 'choices': {data}")
             
-            # print(f"[OPENROUTER] content extract start: elapsed={time.time() - started_at:.2f}s")
+            # log.info(f"[OPENROUTER] content extract start: elapsed={time.time() - started_at:.2f}s")
             
             choices = data.get("choices") or []
             choice0 = choices[0] if choices else {}
@@ -337,37 +344,37 @@ class OpenRouterService:
                     f"response={data!r}"
                 )
 
-            # print(f"[OPENROUTER] content extract end: elapsed={time.time() - started_at:.2f}s")
+            # log.info(f"[OPENROUTER] content extract end: elapsed={time.time() - started_at:.2f}s")
 
             result = content.strip()
-            # print(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
+            # log.info(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
 
             return result
 
         except requests.exceptions.Timeout as e:
-            print(f"[OPENROUTER TIMEOUT] elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
+            log.info(f"[OPENROUTER TIMEOUT] elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
             raise
 
         except requests.exceptions.RequestException as e:
-            print(f"[ERROR] OpenRouter API request failed: elapsed={time.time() - started_at:.2f}s: {e}")
+            log.info(f"[ERROR] OpenRouter API request failed: elapsed={time.time() - started_at:.2f}s: {e}")
             if hasattr(e, "response") and e.response is not None:
-                print(f"Status Code: {e.response.status_code}")
+                log.info(f"Status Code: {e.response.status_code}")
                 try:
-                    print(f"Response: {e.response.json()}")
+                    log.info(f"Response: {e.response.json()}")
                 except Exception:
-                    print(f"Response text: {e.response.text}")
+                    log.info(f"Response text: {e.response.text}")
             raise
 
         except (KeyError, IndexError, TypeError) as e:
-            print(f"[ERROR] Failed to parse OpenRouter response: elapsed={time.time() - started_at:.2f}s: {e}")
+            log.info(f"[ERROR] Failed to parse OpenRouter response: elapsed={time.time() - started_at:.2f}s: {e}")
             raise Exception(f"OpenRouter response parsing error: {e}")
 
         except Exception as e:
-            print(f"[ERROR] Unexpected error in send_message: elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
+            log.info(f"[ERROR] Unexpected error in send_message: elapsed={time.time() - started_at:.2f}s: {type(e).__name__}: {e}")
             raise
 
         finally:
-            print(f"[OPENROUTER] send_message end")
+            log.info(f"[OPENROUTER] send_message end")
 
 
     def send_with_system(self, messages: List[Dict], system_prompt: str, **kwargs) -> str:
@@ -446,7 +453,7 @@ def check_stability(self, payload):
         }), 200
 
     except Exception as e:
-        print(f"[ERROR] check_stability: {e}")
+        log.info(f"[ERROR] check_stability: {e}")
         return jsonify({
             "ok": False,
             "message": f"チェック中にエラー: {str(e)}"

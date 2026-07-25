@@ -1,6 +1,7 @@
 import os
 from llama_cpp import Llama
 from helpers import file_utils
+from logger import log
 
 current_model_path = None
 llm_instance = None
@@ -19,7 +20,7 @@ def get_llm():
         new_path = settings["model"]["path"]
 
         if new_path != current_model_path:
-            print(f"モデル切替: {current_model_path} → {new_path}")
+            log.info(f"モデル切替: {current_model_path} → {new_path}")
             llm_instance = None  # 古いモデル解放
             llm_instance = Llama(model_path=new_path)
             current_model_path = new_path

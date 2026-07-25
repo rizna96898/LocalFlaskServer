@@ -26,6 +26,7 @@ from services.status import status_manager
 from usecases import chat_execute
 import os
 import sys
+from logger import log
 
 class ChatExecute:
     def __init__(self):
@@ -164,8 +165,8 @@ class ChatExecute:
                     deleted_session_ids.append(session_id)
 
             except Exception as error:
-                print(f"セッション削除失敗: {session_id}")
-                print(error)
+                log.info(f"セッション削除失敗: {session_id}")
+                log.info(error)
 
                 failed_session_ids.append(session_id)
 
@@ -216,9 +217,9 @@ class ChatExecute:
 
     def selected_message(self, payload):
         session_id = payload.get("session_id")
-        print("session_id", session_id, flush=True)
+        log.info("session_id", session_id)
         line_Id = int(payload.get("line_id"))
-        print("line_Id", line_Id, flush=True)
+        log.info("line_Id", line_Id)
 
         # メッセージ取得基準値
         min_no = (line_Id - 1) * 10
@@ -229,7 +230,7 @@ class ChatExecute:
         historyList = file_utils.load_history(session_dir)
 
         for i in range(min_no, max_no):
-            print("内容", historyList[i], flush=True)
+            log.info("内容", historyList[i])
             index = str(i + 1)
             message_obj = {}
             message_obj["message"] = historyList[i]["message"]
@@ -284,12 +285,12 @@ class ChatExecute:
         for characters_info in world_characters:
             character_id = characters_info.get("参照ID")
             if characters_info.get("参照種別") == "player":
-                print("プレイヤー用")
+                log.info("プレイヤー用")
                 src = copy_source_players_dir / f"{character_id}_setting.yaml"
                 copy2(src, copy_dst_char_dir)
             
             if characters_info.get("参照種別") == "character":
-                print("メインキャラ用")
+                log.info("メインキャラ用")
                 src = copy_source_character_dir / f"{character_id}_setting.yaml"
                 src_ico = copy_source_character_ico_dir / f"{character_id}" / f"{character_id}.png"
                 src_sta = copy_source_character_sta_dir / f"{character_id}" / f"{character_id}_standing.png"
@@ -299,7 +300,7 @@ class ChatExecute:
                 copy2(src_sta, copy_dst_sta_dir)
             
             if characters_info.get("参照種別") == "inline":
-                print("その他作成する必要あり")
+                log.info("その他作成する必要あり")
                 #templateを一旦コピー
                 copy2(
                     copy_source_temp_file_path,
@@ -317,7 +318,7 @@ class ChatExecute:
                 sub_char_yaml["名前"]["識別子"] = sub_character_id
                 #保存
                 file_utils.save_yaml_file(copy_dst_char_dir / f"{character_id}.yaml", sub_char_yaml)
-            print("その他作成する必要なし")
+            log.info("その他作成する必要なし")
         
         #sessions_listの最終行へ追記
         sessions_list_path = config.SYSTEM_DIR / "sessions_list.yaml"
@@ -363,7 +364,7 @@ class ChatExecute:
                 sort_keys=False
             )
             
-        print("初期ファイル用意完了", copy_dst_dir.as_uri())
+        log.info("初期ファイル用意完了", copy_dst_dir.as_uri())
         return jsonify({
             "status": "ok",
             "session_id": session_id,
@@ -374,7 +375,7 @@ class ChatExecute:
 
     # ニューチャットの入り口
     def new_chat(self, payload):
-        print("ニューチャット開始")
+        log.info("ニューチャット開始")
 
         try:
             start_message = self.chat_utils.create_new_session(payload)
@@ -399,7 +400,7 @@ class ChatExecute:
 
             file_utils.save_history(session_dir, history)
 
-            print("ニューチャット終了")
+            log.info("ニューチャット終了")
             return response_checker.chat_response_ok(
                 payload,
                 "1",
@@ -407,26 +408,22 @@ class ChatExecute:
                 icon_data
             ), 200
         except Exception as e:
-            print(f"[ERROR] /new_chat: {e}")
+            log.info(f"[ERROR] /new_chat: {e}")
             return exception_proc.error_response(str(e), 500)
 
     # 多分トータルのチャットハンドラーが必要になる（と思ってる）
 
     # チャット処理。入り口
     def chat(self, payload):
+
+        from datetime import datetime
+        log.info("chat chat_execute.py")
+        with open(r"E:\LocalFlaskServer\debug_chat.log", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now()} chat chat_execute.py\n")
+
         os.write(1, b"=== FD1 stdout test ===\n")
         os.write(2, b"=== FD2 stderr test ===\n")
-
-        sys.stdout.write("=== sys.stdout.write test ===\n")
-        sys.stdout.flush()
-
-        sys.stderr.write("=== sys.stderr.write test ===\n")
-        sys.stderr.flush()
-
-        print("=== print stdout test ===", flush=True)
-        print("=== print stderr test ===", file=sys.stderr, flush=True)
-        print("=== /session_start 到達 ===", flush=True)
-        print("チャット開始")
+        log.info("チャット開始")
         try:
             # start_message = orchestrator.create_new_session(body)
 
@@ -448,12 +445,12 @@ class ChatExecute:
 
             file_utils.save_history(session_dir, history)
 
-            print("チャット終了")
-            # print("body全量", body)
+            log.info("チャット終了")
+            # log.info("body全量", body)
             return response_checker.chat_response_ok(payload, "1", message, icon_data), 200
 
         except Exception as e:
-            print(f"[ERROR] /chat: {e}")
+            log.info(f"[ERROR] /chat: {e}")
             return jsonify({"error": str(e)}), 500
 
     # 多分要らないのでコメントアウト。上の入り口に移植
@@ -472,7 +469,7 @@ class ChatExecute:
     #         result = {}
 
     #         if body.get("first_flag") == "first":
-    #             print("１回目のログ")
+    #             log.info("１回目のログ")
 
     #             error_response = _wait_chat_stage_or_response(
     #                 session_id,
@@ -485,7 +482,7 @@ class ChatExecute:
     #             result = orchestrator.handle_chat_completion(body, allow_image)
 
     #         else:
-    #             print("２回目のログ")
+    #             log.info("２回目のログ")
 
     #             error_response = _wait_chat_stage_or_response(
     #                 session_id,
@@ -500,14 +497,14 @@ class ChatExecute:
     #         return jsonify(result["response"]), result.get("status_code", 200)
 
     #     except Exception as e:
-    #         print(f"[ERROR] /v1/chat/completions: {e}")
+    #         log.info(f"[ERROR] /v1/chat/completions: {e}")
     #         import traceback
-    #         print(traceback.format_exc())
+    #         log.info(traceback.format_exc())
     #         return jsonify({"error": "Internal server error"}), 500
 
     # 再送。入り口
     def re_chat(self, payload):
-        print("再送開始")
+        log.info("再送開始")
 
         try:            
             session_id = payload.get("session_id")
@@ -527,12 +524,12 @@ class ChatExecute:
 
             file_utils.save_history(session_dir, history)
 
-            print("再送終了")
-            # print("body全量", body)
+            log.info("再送終了")
+            # log.info("body全量", body)
             return response_checker.chat_response_ok(payload, "1", message, icon_data), 200
 
         except Exception as e:
-            print(f"[ERROR] /chat: {e}")
+            log.info(f"[ERROR] /chat: {e}")
             return jsonify({"error": str(e)}), 500
 
     # メインプレイヤーチャット（予定）
@@ -605,9 +602,9 @@ class ChatExecute:
             return result
 
         except Exception as e:
-            print(f"[ERROR] handle_chat_completion: {e}")
+            log.info(f"[ERROR] handle_chat_completion: {e}")
             import traceback
-            print(traceback.format_exc())
+            log.info(traceback.format_exc())
 
             if session_id:
                 file_utils.mark_prepare_error(
@@ -621,10 +618,10 @@ class ChatExecute:
         
     # サブキャラクターチャット（予定）
     def handle_mob_chat_completion(self, body: Dict, allow_image: bool = False) -> Dict:
-        print("[ORCH] handle_mob_chat_completion start")
+        log.info("[ORCH] handle_mob_chat_completion start")
 
         session_id = body.get("session_id")
-        print(f"[ORCH] session_id={session_id}")
+        log.info(f"[ORCH] session_id={session_id}")
 
         try:
             if not session_id:
@@ -685,9 +682,9 @@ class ChatExecute:
             return result
 
         except Exception as e:
-            print(f"[ERROR] handle_mob_chat_completion: {e}")
+            log.info(f"[ERROR] handle_mob_chat_completion: {e}")
             import traceback
-            print(traceback.format_exc())
+            log.info(traceback.format_exc())
 
             if session_id:
                 file_utils.mark_prepare_error(
@@ -704,7 +701,7 @@ class ChatExecute:
 
     # キャラクター情報用意
     def _sync_character_if_changed(self, session_id: str, body: Dict):
-        print("_sync_character_if_changed start")
+        log.info("_sync_character_if_changed start")
         """SillyTavernから来たメインキャラクター情報を session の world.yaml に同期
         役割:
         - 主人公 / メインキャラの最新カード情報を session 側へ持ってくる
@@ -712,7 +709,7 @@ class ChatExecute:
         """
         
         character_file = config.SESSIONS_DIR / session_id / "world.yaml"
-        # print(f"[DEBUG] load target = {character_file}")
+        # log.info(f"[DEBUG] load target = {character_file}")
         current = file_utils.load_yaml_file(character_file) or {}
 
         new_data = {
@@ -724,18 +721,18 @@ class ChatExecute:
             "mes_example": string_utils.clean_for_save(body.get("mes_example", "")),
         }
 
-        # print("比較元内容（ファイルの中)", current);
-        # print("比較先内容（bodyの中）", new_data);
-        # print("比較結果", has_changes(current, new_data));
+        # log.info("比較元内容（ファイルの中)", current);
+        # log.info("比較先内容（bodyの中）", new_data);
+        # log.info("比較結果", has_changes(current, new_data));
         if data_utils.has_changes(current, new_data):
-            # print("has_changes start")
+            # log.info("has_changes start")
             updated = data_utils.merge_character_data(current, new_data)
             success = file_utils.save_yaml_file(character_file, updated)
             if success:
-                print(f"[CHARACTER] Updated for session {session_id}")
+                log.info(f"[CHARACTER] Updated for session {session_id}")
             else:
-                print(f"[WARN] Failed to update character.yaml for {session_id}")
-        print("_sync_character_if_changed end")
+                log.info(f"[WARN] Failed to update character.yaml for {session_id}")
+        log.info("_sync_character_if_changed end")
 
     # 最終応答作成
     def _generate_response(self, session_id: str, messages: list, system_prompt: str) -> str:
@@ -765,7 +762,7 @@ class ChatExecute:
             return response_text
 
         except Exception as e:
-            print(f"[ERROR] _generate_response: {e}")
+            log.info(f"[ERROR] _generate_response: {e}")
             return "すみません、今ちょっと調子が悪いみたいです…"
 
     # 発言対象確定
@@ -790,7 +787,7 @@ class ChatExecute:
         template_prompt = template_prompt.replace("{player_message}", player_message)
         template_prompt = template_prompt.replace("{player_answer}", response_text)
 
-        print("置換後プロンプト全文", template_prompt)
+        log.info("置換後プロンプト全文", template_prompt)
         # model_handling_service = ModelHandlingService("openrouter")
         result = llm_service.get_model_handling_service.send_message(
             messages=[{"role": "user", "content": template_prompt}],
@@ -803,7 +800,7 @@ class ChatExecute:
         if isinstance(target_speakers, str):
             target_speakers = [target_speakers]
 
-        print("今回の発話対象：", target_speakers)
+        log.info("今回の発話対象：", target_speakers)
         return target_speakers
 
     # 関数名からメインチャットを作ってるのはわかるけど、処理の流れが良く判んない
@@ -818,13 +815,13 @@ class ChatExecute:
         world_data = file_utils.load_yaml_file(world_file) or {}
 
         player_name = world_data.get("player_name")
-        print("プレイヤー名：", player_name)
+        log.info("プレイヤー名：", player_name)
 
         player_path = file_utils.find_character_file(player_name, char_dir)
         player_data = file_utils.load_yaml_file(player_path) or {}
 
         character_name = player_data.get("last_target")
-        print("誰向けの発言か", character_name)
+        log.info("誰向けの発言か", character_name)
 
         world_time = file_utils.get_world_time(world_data)
 
@@ -840,7 +837,7 @@ class ChatExecute:
         character_full_name = character_data.get("name", character_name)
 
         memory_path = file_utils.find_character_memory_file(character_full_name, char_dir)
-        print("load target", memory_path)
+        log.info("load target", memory_path)
 
         character_memory_data = file_utils.load_yaml_file(memory_path) or {}
 

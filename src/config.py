@@ -1,6 +1,7 @@
 # src/config.py
 from pathlib import Path
 import yaml   # ← これに変える
+from logger import log
 
 # プロジェクトルート
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -44,7 +45,7 @@ class Config:
         self.CHARACTERS_DIR = self.settings.get("characters_dir", "no set directory")
 
         if not self.OPENROUTER_API_KEY or str(self.OPENROUTER_API_KEY).strip() in ["", "dummy"]:
-            print("[WARN] openrouter_api_key が設定されていません。files/settings/system_settings.yaml を確認してください。")
+            log.info("[WARN] openrouter_api_key が設定されていません。files/settings/system_settings.yaml を確認してください。")
 
         self.LOCALMODEL_USE_FLAG = self.settings.get("local_model_use_flag")
         self.LOCALMODEL_PATH = self.settings.get("local_model_path")
@@ -55,14 +56,14 @@ class Config:
         settings_file = self.SETTINGS_DIR / "system_settings.yaml"
 
         if not settings_file.exists():
-            print(f"[WARN] settings file not found: {settings_file}")
+            log.info(f"[WARN] settings file not found: {settings_file}")
             return {}
 
         try:
             with open(settings_file, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"[ERROR] settings load failed: {e}")
+            log.info(f"[ERROR] settings load failed: {e}")
             return {}
 
     def reload(self):
