@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2つのリポジトリは次の点で結合しているので、片方を変えるときはもう片方も確認する。
 
 - **APIパス**: `src/app.py` のルートと、Web側 `js/constant.js` の `API_PATHS` が1対1で対応する。追加・改名は両方に入れる。
-- **設定ファイルの実体はWeb側にある**: 世界・キャラクター・プレイヤーのYAMLと画像は `LLM_CHAT_CONSOLE` 配下（`worlds/`、`characters/`、`players/`）に保存される。サーバーはリクエストで受け取る `base_chat_path` / `base_path`（Web側の置き場所）を使ってそこを直接読み書きする。
+- **設定ファイルの実体はWeb側にある**: 世界・キャラクター・プレイヤーのYAMLと画像は `LLM_CHAT_CONSOLE` 配下（`worlds/`、`characters/`、`players/`）に保存される。サーバーはリクエストで受け取る `base_chat_path`（Web側の置き場所）を使ってそこを直接読み書きする。`base_path` は LocalFlaskServer 自身の置き場所で、設定画面のAPIだけが使う。
 - **YAMLのキーは日本語**: `登場人物` → `世界の登場人物`、`参照ID`、`参照種別`（`player` / `character` / `inline`）、`世界名`、`開始メッセージ`、`シナリオ本文` → `現在` など。Web側のテンプレートYAMLとサーバー側の読み取りコードでキー名を揃える。
 
 ## 実行
@@ -81,5 +81,5 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 - `chat_execute.py` の `icon_data` や履歴の話者は `shirai_yui` / `白井　結` で固定。
 - `/re_chat` はモデルを呼ばず固定文を返す。
 - 発言の前処理・後処理、キャラクター記憶の更新、モブ会話は未実装。以前の作りかけはコミット `eca2ea0` 以前の履歴にある。
-- レスポンスの形が統一されていない（`{"ok": true}`、`{"status": "ok"}`、`{"result": "error"}`、`{"error": ...}`）。Web側の `requestJson` は `ok === false` と `status === "error"` をエラーとして扱う。新しく書くときは `response_checker` の関数を使う。
+- レスポンスの形は、成功 `{"ok": true, ...}`、失敗 `{"ok": false, "message": "..."}` ＋HTTPステータスに統一している。`response_checker` の `response_ok` / `response_error` で返し、`jsonify` を直接書かない（`services/world/world_settings.py` と `services/template/template.py` は同じ形を `jsonify` で直接書いている）。
 - ルートの `構成.txt` は初期の構想で、現在のフォルダ構成とは一致しない。

@@ -4,7 +4,6 @@ import time
 import shutil
 from typing import Dict, Any, Iterable
 from datetime import datetime
-from flask import jsonify
 from config import config
 from shutil import copy2
 from helpers import file_utils
@@ -39,10 +38,7 @@ class ChatExecute:
             world_id = payload.get("world_id")
 
             if not world_id:
-                return jsonify({
-                    "result": "error",
-                    "message": "world_id がありません"
-                }), 400
+                return response_checker.response_error("world_id がありません", 400)
 
             sessions_list_path = config.SYSTEM_DIR / "sessions_list.yaml"
 
@@ -61,15 +57,9 @@ class ChatExecute:
                 if session.get("world_id") == world_id
             ]
 
-            return jsonify({
-                "result": "ok",
-                "sessions": world_sessions
-            })
+            return response_checker.response_ok(sessions=world_sessions)
         except Exception as e:
-            return jsonify({
-                "result": "error",
-                "message": str(e)
-            }), 500
+            return response_checker.response_error(str(e), 500)
 
     def world_start(self, payload):
         try:
@@ -78,16 +68,10 @@ class ChatExecute:
             world_name = payload.get("world_name")
 
             if not world_id:
-                return jsonify({
-                    "result": "error",
-                    "message": "world_id がありません"
-                }), 400
+                return response_checker.response_error("world_id がありません", 400)
 
             if not world_name:
-                return jsonify({
-                    "result": "error",
-                    "message": "world_name がありません"
-                }), 400
+                return response_checker.response_error("world_name がありません", 400)
 
             sessions_list_path = config.SYSTEM_DIR / "sessions_list.yaml"
 
@@ -106,18 +90,14 @@ class ChatExecute:
                 if session.get("world_id") == world_id
             ]
 
-            return jsonify({
-                "result": "ok",
-                "world_id": world_id,
-                "world_name": world_name,
-                "sessions": world_sessions
-            })
+            return response_checker.response_ok(
+                world_id=world_id,
+                world_name=world_name,
+                sessions=world_sessions,
+            )
 
         except Exception as e:
-            return jsonify({
-                "result": "error",
-                "message": str(e)
-            }), 500
+            return response_checker.response_error(str(e), 500)
 
     def delete_session(self, payload):
         session_ids = payload.get("session_ids")
@@ -135,10 +115,7 @@ class ChatExecute:
                     with sessions_list_path.open("r", encoding="utf-8") as f:
                         sessions_data = yaml.safe_load(f) or {}
                 else:
-                    return jsonify({
-                        "status": "ok",
-                        "session_id": session_id
-                    }), 200
+                    return response_checker.response_ok(session_id=session_id)
 
                 # session削除
                 sessions_data["sessions"] = [
@@ -169,11 +146,10 @@ class ChatExecute:
 
                 failed_session_ids.append(session_id)
 
-        return jsonify({
-            "status": "ok",
-            "deleted_session_ids": deleted_session_ids,
-            "failed_session_ids": failed_session_ids
-        }), 200
+        return response_checker.response_ok(
+            deleted_session_ids=deleted_session_ids,
+            failed_session_ids=failed_session_ids,
+        )
 
     def selected_session(self, payload):
 
@@ -208,11 +184,10 @@ class ChatExecute:
             }
             makeHistoryList.append(history)
 
-        return jsonify({
-            "status": "ok",
-            "session_id": payload.get("session_id"),
-            "message_list": makeHistoryList
-        }), 200
+        return response_checker.response_ok(
+            session_id=payload.get("session_id"),
+            message_list=makeHistoryList,
+        )
 
     def selected_message(self, payload):
         session_id = payload.get("session_id")
@@ -237,17 +212,16 @@ class ChatExecute:
             message_obj["icon_data"] =  historyList[i]["icon_data"]
             message_list.append(message_obj)
 
-        return jsonify({
-            "status": "ok",
-            "session_id": payload.get("session_id"),
-            "message_list": message_list
-        }), 200
+        return response_checker.response_ok(
+            session_id=payload.get("session_id"),
+            message_list=message_list,
+        )
 
     def chat_startup(self, payload):
         # """新規チャット作成（/new_chat）"""
         session_id = str(uuid4())
         world_id = payload.get("world_id")
-        copy_source_dir = payload.get("base_path")
+        copy_source_dir = payload.get("base_chat_path")
 
         # pathの定義
         copy_source_character_dir = Path(copy_source_dir) / "characters" / "settings"
@@ -367,13 +341,12 @@ class ChatExecute:
             )
             
         log.info("初期ファイル用意完了", copy_dst_dir.as_uri())
-        return jsonify({
-            "status": "ok",
-            "session_id": session_id,
-            "world_id": world_id,
-            "world_name": world_name,
-            "display_name": display_name
-        }), 200
+        return response_checker.response_ok(
+            session_id=session_id,
+            world_id=world_id,
+            world_name=world_name,
+            display_name=display_name,
+        )
 
     # ニューチャットの入り口
     def new_chat(self, payload):
@@ -449,7 +422,7 @@ class ChatExecute:
 
         except Exception as e:
             log.info(f"[ERROR] /chat: {e}")
-            return jsonify({"error": str(e)}), 500
+            return response_checker.response_error(str(e), 500)
 
     # 多分要らないのでコメントアウト。上の入り口に移植
     # def chat_completions():
@@ -528,4 +501,4 @@ class ChatExecute:
 
         except Exception as e:
             log.info(f"[ERROR] /chat: {e}")
-            return jsonify({"error": str(e)}), 500
+            return response_checker.response_error(str(e), 500)

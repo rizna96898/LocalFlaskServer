@@ -7,8 +7,9 @@
 - 画像作成
 """
 
-from flask import jsonify, send_file
+from flask import send_file
 from pathlib import Path
+from helpers import response_checker
 from services.llm import llm_service
 # ヘルパー
 from services.systems import pc_operation
@@ -87,20 +88,14 @@ class ChatOrchestrator:
             filename = f"{character_id}_standing.png"
 
         else:
-            return jsonify({
-                "ok": False,
-                "message": "image_type が不正です"
-            }), 400
+            return response_checker.response_error("image_type が不正です", 400)
 
         image_path = save_dir / filename
 
         log.info(image_path)
         
         if not image_path.exists():
-            return jsonify({
-                "ok": False,
-                "message": "画像が存在しません"
-            }), 404
+            return response_checker.response_error("画像が存在しません", 404)
 
         return send_file(image_path)
 
@@ -123,11 +118,10 @@ class ChatOrchestrator:
 
         file.save(save_path)
 
-        return jsonify({
-            "ok": True,
-            "message": "画像を保存しました",
-            "path": str(save_path)
-        }), 200
+        return response_checker.response_ok(
+            message="画像を保存しました",
+            path=str(save_path),
+        )
 
     # モデルのロードを行う
     def load_model(self, payload):

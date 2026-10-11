@@ -1,5 +1,5 @@
 from typing import Dict, Any, Iterable
-from flask import jsonify
+from helpers import response_checker
 import traceback
 from logger import log
 
@@ -7,7 +7,4 @@ from logger import log
 # ここじゃないけど必要
 def error_response(message: str, status_code: int) -> Dict:
     log.info(traceback.format_exc())
-    return jsonify({
-        "response": {"error": message},
-        "status_code": status_code,
-    })
+    return response_checker.response_error(message, status_code)
