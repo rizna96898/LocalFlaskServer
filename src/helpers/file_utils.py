@@ -11,10 +11,8 @@ from pathlib import Path
 from typing import Dict
 from PIL import Image
 from helpers import string_utils
-from helpers import file_utils
 import base64
 import time
-from services.status import status_manager
 from logger import log
 
 def literal_str_representer(dumper, data):
@@ -29,11 +27,6 @@ yaml.SafeDumper.add_representer(
     literal_str_representer
 )
 
-# セッションディレクトリを作成してPathを返す
-def ensure_session_dir(sessions_dir: Path, session_id: str) -> Path:
-    session_dir = sessions_dir / session_id
-    session_dir.mkdir(parents=True, exist_ok=True)
-    return session_dir
 
 def str_presenter(dumper, data):
     if "\n" in data:
@@ -71,65 +64,6 @@ def load_yaml_file(file_path: Path) -> Dict[str, Any]:
         log.info(f"[ERROR] Failed to load YAML {file_path}: {e}")
         return {}
 
-def _load_character_data(file_path):
-    try:
-        suffix = file_path.suffix.lower()
-
-        if suffix == ".json":
-            with open(file_path, encoding="utf-8") as f:
-                return json.load(f)
-
-        elif suffix == ".png":
-            with open(file_path, "rb") as f:
-                data = f.read()
-
-            pos = 0
-            while True:
-                pos = data.find(b"tEXt", pos)
-                if pos == -1:
-                    break
-
-                length = int.from_bytes(data[pos - 4:pos], "big")
-                chunk_data = data[pos + 4:pos + 4 + length]
-
-                if b"\x00" in chunk_data:
-                    key_bytes, value_bytes = chunk_data.split(b"\x00", 1)
-                    key = key_bytes.decode("ascii", errors="ignore")
-                    value = value_bytes.decode("utf-8", errors="ignore")
-
-                    #log.info(f"[CHAR LOAD] png chunk key: {key}")
-
-                    if key in ["chara", "ccv3", "parameters"]:
-                        # 1. data: 形式なら prefix を除去
-                        if value.startswith("data:"):
-                            value = value.split(",", 1)[1]
-
-                        # 2. base64 → json を試す
-                        try:
-                            decoded = base64.b64decode(value).decode("utf-8")
-                            card_data = json.loads(decoded)
-                            if isinstance(card_data, dict):
-                                return card_data
-                        except Exception as e:
-                            log.info(f"[CHAR LOAD] base64 decode failed: {e}")
-
-                        # 3. そのまま json も試す
-                        try:
-                            card_data = json.loads(value)
-                            if isinstance(card_data, dict):
-                                return card_data
-                        except Exception as e:
-                            log.info(f"[CHAR LOAD] direct json failed: {e}")
-
-                pos += length + 12
-
-            return {}
-
-        return {}
-
-    except Exception as e:
-        log.info(f"[CHAR LOAD ERROR] {file_path}: {e}")
-        return {}
 
 #ファイルから会話履歴を読み込み
 def load_history(directory_full_path: str) -> list:
@@ -147,135 +81,6 @@ def load_history(directory_full_path: str) -> list:
     # ]
     return history
 
-def load_character_memories(
-    session_id: str,
-    sessions_dir: Path,
-) -> dict[str, dict[str, Any]]:
-    """
-    files/sessions/{session_id}/character/*_memory.yaml を読み込み、
-    {正規化済みキャラ名: YAML内容dict} の形で返す。
-    """
-    character_memory_dir = sessions_dir / session_id / "character"
-    result: dict[str, dict[str, Any]] = {}
-
-    # log.info("読み込み対象のyamlファイル名", character_memory_dir)
-
-    if not character_memory_dir.exists():
-        return result
-
-    for yaml_file in character_memory_dir.glob("*_memory.yaml"):
-        try:
-            with yaml_file.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-        except Exception as e:
-            log.info(f"[CHAR MEMORY LOAD ERROR] {yaml_file}: {e}")
-            continue
-
-        raw_name = yaml_file.stem.removesuffix("_memory")
-        char_name = string_utils._normalize_name(raw_name)
-
-        if char_name in result:
-            log.info(
-                f"[CHAR MEMORY WARN] duplicate: raw={raw_name}, normalized={char_name}"
-            )
-
-        result[char_name] = data
-
-    return result
-
-# キャラ説明を取得
-def load_yaml_from_character_description(card_data: dict) -> dict:
-    """
-    SillyTavernキャラカードの description に入っている YAML を読み取る。
-    description 全体が YAML である前提。
-    """
-    if not isinstance(card_data, dict):
-        return {}
-
-    description = card_data.get("description", "")
-    if not isinstance(description, str) or not description.strip():
-        return {}
-
-    text = string_utils.strip_code_block(description).strip()
-
-    try:
-        parsed = yaml.safe_load(text) or {}
-        if isinstance(parsed, dict):
-            return parsed
-        return {}
-    except Exception as e:
-        log.info(f"[CHAR CARD YAML ERROR] description parse failed: {e}")
-        log.info(f"[CHAR CARD YAML ERROR] head={text[:300]!r}")
-        return {}
-    
-def find_character_yaml_file(char_name: str, session_char_dir: Path):
-    target = string_utils._normalize_name(char_name)
-
-    for path in session_char_dir.glob("*.yaml"):
-        if path.name.endswith("_memory.yaml"):
-            continue
-
-        raw_name = path.stem
-        if string_utils._normalize_name(raw_name) == target:
-            return path
-
-    return None
-
-# 引数のキャラに対するmemoryファイルのパスを返却
-def find_character_memory_file(target: str, session_char_dir: Path):
-    target_norm = string_utils._normalize_name(target)
-
-    for file in session_char_dir.glob("*_memory.yaml"):
-        name = file.stem.replace("_memory", "")
-        name_norm = string_utils._normalize_name(name)
-
-        if target_norm == name_norm or target_norm in name_norm:
-            return file
-
-    return None
-
-def find_character_file(char_name: str, st_char_dir: Path) -> Path | None:
-    """スペース無視＋部分一致でキャラカードを探す"""
-    target = string_utils._normalize_name(char_name)
-
-    for file in st_char_dir.iterdir():
-        if not file.is_file():
-            continue
-
-        # 拡張子除去
-        name_no_ext = file.stem
-        normalized = string_utils._normalize_name(name_no_ext)
-
-        # 完全一致 or 部分一致
-        if target == normalized or target in normalized:
-            return file
-
-    return None
-
-def apply_dynamic_params_to_characters(session_id: str, dynamic_list: list[dict]):
-    from config import config
-
-    session_char_dir = config.SESSIONS_DIR / session_id / "character"
-
-    for dynamic in dynamic_list:
-        if not isinstance(dynamic, dict):
-            continue
-
-        target = dynamic.get("target")
-        param_data = dynamic.get("param_data")
-
-        if not target or not param_data:
-            continue
-
-        memory_file = file_utils.find_character_memory_file(target, session_char_dir)
-        if not memory_file:
-            log.info(f"[DYNAMIC PARAM] target not found: {target}")
-            continue
-
-        data = file_utils.load_yaml_file(memory_file) or {}
-        data["param_data"] = param_data
-        file_utils.save_yaml_file(memory_file, data)
-
         #log.info(f"[DYNAMIC PARAM] applied → {memory_file.name}")
 
 #会話履歴を保存
@@ -292,128 +97,6 @@ def create_file(dir_path: str, file_name:str) -> Path:
     file_path.touch(exist_ok=True)
     return file_path
 
-def build_character_comment_system_message(
-    session_id: str,
-    character_name: str,
-    sessions_dir: Path,
-    prompt_file: Path,
-) -> str:
-    """
-    キャラ memory の current_state を読み込み、
-    character_comment_prompt.yaml のテンプレートに差し込んで
-    system_message を返す。
-
-    想定:
-      - memory file:
-          files/sessions/{session_id}/character/{キャラ名}_memory.yaml
-      - prompt file:
-          files/prompts/character_comment_prompt.yaml
-
-    prompt yaml の中身は、以下どちらかを想定:
-      1. 文字列そのもの
-      2. dict で system / prompt / template / content のいずれかを持つ
-    """
-    # log.info("session_id", session_id)
-    # log.info("character_name", character_name)
-    # log.info("sessions_dir", sessions_dir)
-    memory = get_character_memory(session_id, character_name, sessions_dir)
-    if not memory:
-        raise ValueError(f"character memory not found: {character_name}")
-
-    current_state = memory.get("current_state", {}) or {}
-    current_state_text = string_utils.build_current_state_text(current_state)
-
-    template = string_utils.load_prompt_template(prompt_file)
-
-    system_message = template.format(
-        character_name=character_name,
-        character_info=current_state_text,
-    )
-
-    return system_message
-
-def get_character_memory(
-    session_id: str,
-    character_name: str,
-    sessions_dir: Path,
-) -> dict[str, Any] | None:
-    """
-    files/sessions/{session_id}/character/*_memory.yaml を読み込み、
-    指定キャラの memory dict を返す。
-    完全一致 → 部分一致 の順で探す。
-    """
-    all_memories = load_character_memories(session_id, sessions_dir)
-    key = string_utils._normalize_name(character_name)
-
-    # まず完全一致
-    memory = all_memories.get(key)
-    if memory is not None:
-        return memory
-
-    # 次に部分一致
-    for name, data in all_memories.items():
-        if key and (key in name or name in key):
-            return data
-
-    return None
-
-# よくわからない。いるの？
-def get_needs_mob_chat(session_id: str) -> bool:
-    data = status_manager.load_prepare_status(session_id)
-    return bool(data.get("needs_mob_chat", False)) if isinstance(data, dict) else False
-
-# mob_count ここじゃない気が
-# ファイル操作じゃない
-def get_mob_count(session_id: str) -> int:
-    data = status_manager.load_prepare_status(session_id)
-    if not isinstance(data, dict):
-        return 0
-
-    value = data.get("mob_count", 0)
-    try:
-        return int(value)
-    except Exception:
-        return 0
-
-# 処理可能確認
-def wait_until_prepare_status(
-    session_id: str,
-    *,
-    target_stage: str,
-    interval_sec: float = 0.2,
-) -> bool:
-    """
-    prepare_status.yaml が target_stage / ready になるまで待つ
-    error なら False
-    timeout なし
-    """
-    while True:
-        data = status_manager.load_prepare_status(session_id)
-
-        if not data:
-            time.sleep(interval_sec)
-            continue
-
-        status = data.get("status")
-        complete_stage = data.get("complete_stage")
-
-        if status == "error":
-            log.info(f"[WAIT] prepare_status error: session_id={session_id}, data={data}")
-            return False
-
-        if status == "ready" and complete_stage == target_stage:
-            log.info(f"[WAIT] prepare_status ready: session_id={session_id}, target_stage={target_stage}")
-            return True
-
-        time.sleep(interval_sec)
-
-# 世界情報から日付持ってきてる
-# 必要だけどここじゃない
-def get_world_time(world_data: Dict) -> str:
-    current_state = world_data.get("current_state", {})
-    if not isinstance(current_state, dict):
-        return ""
-    return str(current_state.get("time", "")).strip()
 
 class BlockStyleDumper(yaml.SafeDumper):
     pass

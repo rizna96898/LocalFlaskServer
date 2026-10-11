@@ -220,10 +220,6 @@ class LocalModelService:
             log.info(f"[LOCALMODEL] send_message finally")
 
 
-    def send_with_system(self, messages: List[Dict], system_prompt: str, **kwargs) -> str:
-        """system_promptを明確に指定したいとき用の便利メソッド"""
-        return self.send_message(messages, system_prompt=system_prompt, **kwargs)
-
 class OpenRouterService:
     def __init__(self, api_key):
         self.base_url = "https://openrouter.ai/api/v1"
@@ -360,15 +356,6 @@ class OpenRouterService:
         finally:
             log.info(f"[OPENROUTER] send_message end")
 
-
-    def send_with_system(self, messages: List[Dict], system_prompt: str, **kwargs) -> str:
-        """system_promptを明確に指定したいとき用の便利メソッド"""
-        return self.send_message(messages, system_prompt=system_prompt, **kwargs)
-
-def get_model_handling_service(self):
-    if self.model_handling_service is None:
-        self.model_handling_service = ModelHandlingService("local")
-    return self.model_handling_service
 
 # OpenRouterとLocalModelで渡す状態を変えるのが辛いので一旦ここで吸収
 def messages_to_prompt(payload_messages):

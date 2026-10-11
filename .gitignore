@@ -215,3 +215,4 @@ temp/
 *.txt
 *.gguf
 logs/
+files/prompts/backups/
