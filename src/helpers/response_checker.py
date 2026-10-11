@@ -16,7 +16,7 @@ def response_error(message: str, status: int = 400, **kwargs):
 
 def chat_response_ok(payload: dict, line_id: str, message: str, icon_data: str):
     return jsonify({
-            "status": "ok",
+            "ok": True,
             "session_id": payload.get("session_id"),
             "line_id": line_id,
             "message": message,
