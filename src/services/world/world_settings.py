@@ -108,7 +108,7 @@ class WorldSettings:
             "開始メッセージ": string_utils.to_literal_if_multiline(payload.get("start_message", "")),
         }
 
-        save_path = file_utils.save_world_yaml(world_id, world_form_data, save_dir)
+        save_path = self.save_world_yaml(world_id, world_form_data, save_dir)
 
         return jsonify({
             "ok": True,

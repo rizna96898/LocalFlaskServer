@@ -1,7 +1,7 @@
 import os
 from flask import jsonify
 
-def get_template_world_include_player_yaml(self, payload):
+def get_template_world_include_player_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
         return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
@@ -27,7 +27,7 @@ def get_template_world_include_player_yaml(self, payload):
         "content": content
     }) 
 
-def get_template_world_goal_setting_yaml(self, payload):
+def get_template_world_goal_setting_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
         return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
@@ -53,7 +53,7 @@ def get_template_world_goal_setting_yaml(self, payload):
         "content": content
     })
 
-def get_template_world_parameter_setting_yaml(self, payload):
+def get_template_world_parameter_setting_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
         return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
@@ -79,7 +79,7 @@ def get_template_world_parameter_setting_yaml(self, payload):
         "content": content
     })
 
-def get_template_player_yaml(self, payload):
+def get_template_player_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
         return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
@@ -105,7 +105,7 @@ def get_template_player_yaml(self, payload):
         "content": content
     })
 
-def get_template_character_yaml(self, payload):
+def get_template_character_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
         return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400

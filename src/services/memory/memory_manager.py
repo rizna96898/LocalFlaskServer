@@ -39,10 +39,7 @@ class MemoryManager:
     def create_initial_memory(self, session_id: str) -> str:
         log.info(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
 
-        from datetime import datetime
         log.info("chat entered memory_manager.py")
-        with open(r"E:\LocalFlaskServer\debug_chat.log", "a", encoding="utf-8") as f:
-            f.write(f"{datetime.now()} chat entered memory_manager.py\n")
 
         try:
             status_manager.mark_prepare_processing(session_id, "new_chat")

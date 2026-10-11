@@ -330,6 +330,8 @@ class ChatExecute:
             sessions_data = {}
 
         sessions = sessions_data.get("sessions")
+        if not isinstance(sessions, list):
+            sessions = []
 
         same_world_sessions = [
             s for s in sessions
@@ -355,6 +357,7 @@ class ChatExecute:
         sessions.append(new_session)
         sessions_data["sessions"] = sessions
 
+        sessions_list_path.parent.mkdir(parents=True, exist_ok=True)
         with sessions_list_path.open("w", encoding="utf-8") as f:
             yaml.safe_dump(
                 sessions_data,

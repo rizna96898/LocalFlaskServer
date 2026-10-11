@@ -176,7 +176,7 @@ def re_chat():
 # StabilityMatrix起動確認受け口
 @app.route("/v1/chat/check_stability", methods=["GET", "POST", "OPTIONS"])
 def check_stability():
-    return orchestrator.check_stability(request.get_json())
+    return orchestrator.check_stability(request.get_json(silent=True))
 
 if __name__ == "__main__":
     log.info(f"Starting RP Backend on http://0.0.0.0:{config.PORT}")
