@@ -28,7 +28,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 
 ## 設定
 
-`files/settings/system_settings.yaml`（gitignore対象、APIキーを含む）を `src/config.py` の `config` シングルトンが読む。`files/sessions/`、`files/settings/`、`temp/`、`*.txt`、`*.log`、`*.gguf` もgitignore対象。
+`files/settings/system_settings.yaml`（gitignore対象、APIキーを含む）を `src/config.py` の `config` シングルトンが読む。`files/sessions/`、`files/settings/`、`temp/`、`logs/`、`*.txt`、`*.log`、`*.gguf` もgitignore対象。
 
 - モデルの切り替えは `open_router_use_flag` / `local_model_use_flag` と、`ModelHandlingService("local" | "openrouter")` の引数で決まる。現在の呼び出し側はすべて `"local"` 固定。
 - モデルサーバーのURL（`http://127.0.0.1:5001/generate`）と、`src/server.py` のモデルパスはコードに直書きされている。
