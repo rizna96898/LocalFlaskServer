@@ -216,3 +216,4 @@ temp/
 *.gguf
 logs/
 files/prompts/backups/
+files/systems/sessions_list.yaml

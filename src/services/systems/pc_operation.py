@@ -1,7 +1,9 @@
+import os
+from pathlib import Path
 from helpers import response_checker
 from logger import log
 
-def select_base_path(self, payload):
+def select_base_path(payload):
     # 注意:
     # Flaskを起動しているPC側にフォルダ選択ダイアログが出ます。
     try:
@@ -24,29 +26,29 @@ def select_base_path(self, payload):
 
         root.destroy()
 
-        return response_checker._json_ok(base_path=selected or "")
+        return response_checker.response_ok(base_path=selected or "")
     except Exception as exc:
-        return response_checker._json_error(f"フォルダ選択に失敗しました: {exc}", status=500)
+        return response_checker.response_error(f"フォルダ選択に失敗しました: {exc}", status=500)
     
-def open_system_yaml(self, payload):
+def open_system_yaml(payload):
     base_path = payload.get("base_path") or ""
 
     try:
         if not base_path:
-            return response_checker._json_error("ベースパスが未設定です。", status=400)
+            return response_checker.response_error("ベースパスが未設定です。", status=400)
 
         full_path = Path(base_path) / "files" / "settings" / "system_settings.yaml"
 
         if not full_path.exists() or not full_path.is_file():
-            return response_checker._json_error("ファイル読み込み失敗", status=404, full_path=str(full_path))
+            return response_checker.response_error("ファイル読み込み失敗", status=404, full_path=str(full_path))
         
         os.startfile(str(full_path))  # Windows専用。関連付けされたエディタで開きます。
-        return response_checker._json_ok(full_path=str(full_path))
+        return response_checker.response_ok(full_path=str(full_path))
     except Exception as exc:
         import traceback
         traceback.print_exc()          # ←追加
         log.info(repr(exc))               # ←追加
-        return response_checker._json_error(
+        return response_checker.response_error(
             f"ファイル読み込み失敗: {exc}",
             status=500,
             full_path=str(full_path)

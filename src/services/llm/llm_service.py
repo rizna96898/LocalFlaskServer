@@ -376,16 +376,16 @@ def messages_to_prompt(payload_messages):
 
     return "\n".join(lines)
 
-def load_model(self, payload):
+def load_model(payload):
     base_path = payload.get("base_path") or ""
 
     if not base_path:
-        return response_checker._json_error("ベースパスが未設定です。", status=400)
+        return response_checker.response_error("ベースパスが未設定です。", status=400)
 
     full_path = Path(base_path) / "files" / "settings" / "system_settings.yaml"
 
     if not full_path.exists() or not full_path.is_file():
-        return response_checker._json_error("ファイル読み込み失敗", status=404, full_path=str(full_path))
+        return response_checker.response_error("ファイル読み込み失敗", status=404, full_path=str(full_path))
 
     try:
         # TODO:
@@ -393,16 +393,14 @@ def load_model(self, payload):
         # 例:
         # global loaded_model
         # loaded_model = load_model_from_yaml(full_path)
-        return response_checker._json_ok(message="ロード完了", full_path=str(full_path))
+        return response_checker.response_ok(message="ロード完了", full_path=str(full_path))
     except Exception as exc:
-        return response_checker._json_error(f"モデルロード失敗しました。{exc}", status=500, full_path=str(full_path))
+        return response_checker.response_error(f"モデルロード失敗しました。{exc}", status=500, full_path=str(full_path))
 
 # stability matrix起動確認。入り口
-def check_stability(self, payload):
+def check_stability(payload):
     """Stability Matrixの起動確認（Silly Tavern改造対応）"""
-    # OPTIONSプリフライト対応（重要）
-    if payload.method == "OPTIONS":
-        return "", 200
+    message = ""
 
     try:
 
@@ -415,8 +413,8 @@ def check_stability(self, payload):
         result = False
         message = "起動してないよ。"
 
-        return response_checker.response_ok({"message": message})
+        return response_checker.response_ok(message=message)
 
     except Exception as e:
         log.info(f"[ERROR] check_stability: {e}")
-        return response_checker.response_error(message, 500)
+        return response_checker.response_error(str(e), 500)
