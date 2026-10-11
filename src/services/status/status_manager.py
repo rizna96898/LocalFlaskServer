@@ -8,23 +8,6 @@ from typing import Any
 def get_prepare_status_path(session_id: str) -> Path:
     return config.SESSIONS_DIR / session_id / "prepare_status.yaml"
 
-# ステータスを読み込んで返却
-def load_prepare_status(session_id: str) -> dict[str, Any]:
-    path = get_prepare_status_path(session_id)
-    data = file_utils.load_yaml_file(path) or {}
-    return data if isinstance(data, dict) else {}
-
-# 待機判定確認
-# 該当ステージのステータスがreadyなら続行可
-def is_prepare_status_ready(session_id: str, *expected_stages: str) -> bool:
-    data = load_prepare_status(session_id)
-    if not isinstance(data, dict):
-        return False
-
-    return (
-        data.get("status") == "ready"
-        and data.get("complete_stage") in expected_stages
-    )
 
 # 実行ステータスの更新
 def update_prepare_status(
@@ -121,23 +104,3 @@ def mark_prepare_error(
         error_stage=error_stage,
         error_message=error_message,
     )
-
-# 前処理、ステータス確認
-def can_start_prepare(session_id: str) -> bool:
-    data = load_prepare_status(session_id)
-    if not isinstance(data, dict):
-        return False
-
-    if data.get("status") == "ready":
-        return is_prepare_status_ready(session_id, "new_chat", "after")
-    else:
-        return False
-
-# メインチャット時、ステータス確認
-def can_start_main_chat(session_id: str) -> bool:
-    return is_prepare_status_ready(session_id, "prepare")
-
-# 後処理、ステータス確認
-def can_start_after(session_id: str) -> bool:
-    return is_prepare_status_ready(session_id, "main_chat")
-

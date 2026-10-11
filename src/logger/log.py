@@ -60,12 +60,6 @@ def info(*args):
     )
 
 
-def section(title):
-    _print_safe("=" * 60)
-    _print_safe(title)
-    _print_safe("=" * 60)
-
-
 def performance(
     model_name,
     elapsed,

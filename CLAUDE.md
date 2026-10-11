@@ -28,7 +28,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 
 ## 設定
 
-`files/settings/system_settings.yaml`（gitignore対象、APIキーを含む）を `src/config.py` の `config` シングルトンが読む。`files/sessions/`、`files/settings/`、`temp/`、`logs/`、`*.txt`、`*.log`、`*.gguf` もgitignore対象。
+`files/settings/system_settings.yaml`（gitignore対象、APIキーを含む）を `src/config.py` の `config` シングルトンが読む。`files/sessions/`、`files/settings/`、`temp/`、`logs/`、`files/prompts/backups/`、`*.txt`、`*.log`、`*.gguf` もgitignore対象。
 
 - モデルの切り替えは `open_router_use_flag` / `local_model_use_flag` と、`ModelHandlingService("local" | "openrouter")` の引数で決まる。現在の呼び出し側はすべて `"local"` 固定。
 - モデルサーバーのURL（`http://127.0.0.1:5001/generate`）と、`src/server.py` のモデルパスはコードに直書きされている。
@@ -56,7 +56,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 - ファイル名は `src/constant.py` の `Bootstrap` / `PromptsPreprocess` / `PromptsMain` / `PromptsPostprocess` に定数として持つ。YAMLを追加・改名したらここも直す。
 - YAMLのキーは `system`、`header`、`template`、`tail_template`。`_build_messages` が `header` + 動的部分 + `template` + `tail_template` をuserメッセージに連結する。
 - ローカルモデルへは `messages_to_prompt` が `### Instruction:` / `### Response:` 形式の1本の文字列に変換して送る。
-- 先頭に `一旦不要` が付くYAMLと `files/prompts/backups/` は現在使っていない。
+- `files/prompts/backups/` は使っていない古いプロンプトの置き場で、Git管理外。
 
 ### セッションのデータ
 
@@ -80,8 +80,8 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 - `/chat` の応答は `ChatManager.main_chat` 経由で、話し相手の判定プロンプト（`create_discrimination_prompt`）を投げた結果をそのまま返している。キャラクター名や状況文は `chat_builders/prompt_builder.py` に直書き。
 - `chat_execute.py` の `icon_data` や履歴の話者は `shirai_yui` / `白井　結` で固定。
 - `/re_chat` はモデルを呼ばず固定文を返す。
-- `chat_utils.py` の前処理・後処理（`chat_prepare`、`chat_after` など）と、`chat_execute.py` 後半の `handle_chat_completion` 以降は、どのルートからも呼ばれていない。
-- `services/systems/pc_operation.py`、`services/template/template.py`、`services/image/image.py`、`llm_service.py` の `load_model` / `check_stability` はモジュール関数なのに第1引数が `self` で、orchestratorからの呼び出しと引数の数が合わない。`response_checker._json_ok` / `_json_error` も存在しない（実在するのは `response_ok` / `response_error`）。
+- 発言の前処理・後処理、キャラクター記憶の更新、モブ会話は未実装。以前の作りかけはコミット `eca2ea0` 以前の履歴にある。
+- `services/systems/pc_operation.py`、`services/template/template.py`、`llm_service.py` の `load_model` / `check_stability` はモジュール関数なのに第1引数が `self` で、orchestratorからの呼び出しと引数の数が合わない。`response_checker._json_ok` / `_json_error` も存在しない（実在するのは `response_ok` / `response_error`）。
 - `memory_manager.py` に `E:\LocalFlaskServer\debug_chat.log` への直書きがある。
 - レスポンスの形が統一されていない（`{"ok": true}`、`{"status": "ok"}`、`{"result": "error"}`、`{"error": ...}`）。Web側の `requestJson` は `ok === false` と `status === "error"` をエラーとして扱う。新しく書くときは `response_checker` の関数を使う。
 - ルートの `構成.txt` は初期の構想で、現在のフォルダ構成とは一致しない。
