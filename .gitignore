@@ -214,3 +214,4 @@ files/settings/
 temp/
 *.txt
 *.gguf
+logs/
