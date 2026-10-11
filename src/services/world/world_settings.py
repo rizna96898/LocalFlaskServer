@@ -7,7 +7,7 @@ from helpers import file_utils
 from helpers import string_utils
 from logger import log
 
-class ChatSettings:
+class WorldSettings:
     def __init__(self):
         self.model_handling_service = None
 

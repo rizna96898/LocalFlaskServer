@@ -3,16 +3,16 @@
 OpenRouterとの通信を専門に扱うサービスクラス
 設定はすべて config（system_settings.yaml）から取得
 """
-import sys
 import requests
 import time
 import threading
-from llama_cpp import Llama
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from config import config
 from logger import log
 from helpers import string_utils
+from helpers import response_checker
+from services.systems import system_settings_reload_service
 
 class ModelHandlingService:
     def __init__(self, mode="openrouter"):
@@ -26,48 +26,23 @@ class ModelHandlingService:
         elif mode == "local":
             if not config.LOCALMODEL_USE_FLAG:
                 raise RuntimeError("LocalModelが無効なのにmodeがlocalになってる")
-            model_file_path = Path(config.LOCALMODEL_PATH)
-            model_file_name = config.LOCALMODEL_NAME
-            self.llm = Llama(
-                model_path=str(model_file_path / model_file_name),
-                n_ctx=4096,
-                n_gpu_layers=-1,  # GPUに載せる。重ければ数値指定
-                verbose=False,
-                reasoning=False
-            )
-            log.info("ローカルモデルの読み込み完了", str(model_file_path / model_file_name))
-            self.impl = LocalModelService(llm=self.llm)
+            self.impl = LocalModelService()
 
         else:
             raise ValueError(f"未知のmode: {mode}")
     
-    def send_message(
-        self,
-        task_type: Optional[str],
-        messages: List[Dict[str, str]],
-        system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        stop: Optional[List[str]] = None,
-        top_k: Optional[int] = None,
-        repeat_penalty: Optional[int] = None,
-        logit_bias: Optional[Dict[str, int]] = None,
-        **kwargs,
-    ):
-
-        max_tokens = self._get_default_max_tokens(task_type)
-
+    def send_message(self, send_data: Dict):
+        max_tokens = self._get_default_max_tokens(send_data.get("task_type"))
         return self.impl.send_message(
-            messages=messages,
-            system_prompt=system_prompt,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            repeat_penalty=repeat_penalty,
-            max_tokens=max_tokens,
-            stop=stop,
-            logit_bias=logit_bias,
-            **kwargs,
+            messages=send_data.get("prompt_messages"),
+            system_prompt=send_data.get("system_prompt"),
+            temperature=send_data.get("temperature"),
+            top_p=send_data.get("top_p"),
+            top_k = send_data.get("top_k"),
+            repeat_penalty = send_data.get("repeat_penalty"),
+            max_tokens = max_tokens,
+            stop=send_data.get("stop"),
+            logit_bias= send_data.get("logit_bias"),
         )
     def _get_default_max_tokens(self, task_type):
         if task_type == "chat":
@@ -80,8 +55,8 @@ class ModelHandlingService:
 
 class LocalModelService:
     _llm_lock = threading.Lock()
-    def __init__(self, llm):
-        self.llm = llm
+    def __init__(self):
+        self.server_url = "http://127.0.0.1:5001/generate"
         self.temperature = config.TEMPERATURE
         self.max_tokens = config.MAX_TOKENS
 
@@ -138,22 +113,24 @@ class LocalModelService:
                 }
             )
             # log.info(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
-            # llmのリセット
-            self.llm.reset()
-
             start = time.perf_counter()
-
-            response = self.llm(
-                prompt=prompt,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
-                repeat_penalty=repeat_penalty,
-                max_tokens=max_tokens,
-                stop=stop,
-                logit_bias=logit_bias,
+            response = requests.post(
+                "http://127.0.0.1:5001/generate",
+                json={
+                    "prompt": prompt,
+                    "temperature": temperature,
+                    "top_p": top_p,
+                    "top_k": top_k,
+                    "repeat_penalty": repeat_penalty,
+                    "max_tokens": max_tokens,
+                    "stop": stop,
+                    "logit_bias": logit_bias,
+                },
+                timeout=(10, 600),
             )
 
+            response.raise_for_status()
+            response = response.json()
             elapsed = time.perf_counter() - start
 
             log.info("返信結果全部", response)
@@ -182,16 +159,23 @@ class LocalModelService:
             content = content.strip()
             if content == "":
                 for retry in range(2):
-                    response = self.llm(
-                        prompt=prompt,
-                        temperature=temperature,
-                        top_p=top_p,
-                        top_k=top_k,
-                        repeat_penalty=repeat_penalty,
-                        max_tokens=max_tokens,
-                        stop=stop,
-                        logit_bias=logit_bias,
+                    response = requests.post(
+                        self.server_url,
+                        json={
+                            "prompt": prompt,
+                            "temperature": temperature,
+                            "top_p": top_p,
+                            "top_k": top_k,
+                            "repeat_penalty": repeat_penalty,
+                            "max_tokens": max_tokens,
+                            "stop": stop,
+                            "logit_bias": logit_bias,
+                        },
+                        timeout=(10, 600),
                     )
+
+                    response.raise_for_status()
+                    response = response.json()
 
                     content = response["choices"][0]["text"].strip()
 
@@ -441,20 +425,11 @@ def check_stability(self, payload):
         result = True
         message = "起動してます。OK"
 
-#        if generateImage.test_communication_confirmation():
-#            message = "起動してます。OK"
-#        else:
         result = False
         message = "起動してないよ。"
 
-        return jsonify({
-            "ok": result,
-            "message": message
-        }), 200
+        return response_checker.response_ok({"message": message})
 
     except Exception as e:
         log.info(f"[ERROR] check_stability: {e}")
-        return jsonify({
-            "ok": False,
-            "message": f"チェック中にエラー: {str(e)}"
-        }), 500
+        return response_checker.response_error(message, 500)

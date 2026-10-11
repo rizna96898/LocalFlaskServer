@@ -72,6 +72,16 @@ def update_prepare_status(
 
     return file_utils.save_yaml_file(path, data)
 
+# 実行ステータスの更新（実行中に変更）
+def mark_prepare_processing(session_id: str, complete_stage: str = "new_chat") -> bool:
+    return update_prepare_status(
+        session_id,
+        status="processing",
+        complete_stage=complete_stage,
+        error_stage=None,
+        error_message=None,
+    )
+
 # 処理開始時、実行ステータスの初期生成
 def create_prepare_status(session_id: str) -> bool:
     return update_prepare_status (

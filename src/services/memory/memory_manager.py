@@ -19,7 +19,7 @@ from constant import (
     PromptsMain,
     PromptsPostprocess,
 )
-from memory_builders.prompt_builder import PromptBuilder
+from memory_builders.prompt_builder import MemoryPromptBuilder
 from helpers import string_utils
 from helpers import file_utils
 from services.llm.llm_service import ModelHandlingService
@@ -31,24 +31,9 @@ from logger import log
 
 class MemoryManager:
     def __init__(self):
-        self.prompt_builder = PromptBuilder()
+        self.prompt_builder = MemoryPromptBuilder()
         self.model_handling_service = ModelHandlingService("local")
         # log.info("[MemoryManager] Initialized")
-
-    # 問い合わせサービスへのクッション関数
-    def send_prompt(self, send_data: Dict):
-        response_text = self.model_handling_service.send_message(
-            task_type=send_data.get("task_type"),
-            messages=send_data.get("prompt_messages"),
-            system_prompt=send_data.get("system_prompt"),
-            temperature=send_data.get("temperature"),
-            top_p=send_data.get("top_p"),
-            stop=send_data.get("stop"),
-            top_k = send_data.get("top_k"),
-            repeat_penalty = send_data.get("repeat_penalty"),
-            logit_bias= send_data.get("logit_bias")
-        )
-        return response_text
 
     # 初期記憶の非同期作成
     def create_initial_memory(self, session_id: str) -> str:
@@ -60,7 +45,7 @@ class MemoryManager:
             f.write(f"{datetime.now()} chat entered memory_manager.py\n")
 
         try:
-            file_utils.mark_prepare_processing(session_id, "new_chat")
+            status_manager.mark_prepare_processing(session_id, "new_chat")
 
             base_file_obj = lord_init_files.lord_base_world_yaml(session_id)
             # ここで必要なファイルをロードして受け渡しに使う
@@ -119,7 +104,7 @@ class MemoryManager:
 
                     parameters = use_memory_constant.get_world_memory_send_parameters(prompt_messages)
 
-                    response_text = self.send_prompt(parameters)
+                    response_text = self.model_handling_service.send_message(parameters)
 
                     response_text = string_utils.strip_code_block(response_text)
 
@@ -129,7 +114,7 @@ class MemoryManager:
                             parsed_yaml = {}
                         if response_checker.is_invalid_world_memory(parsed_yaml):
                             log.info("[WARN] world_relationships is empty. retry once.")
-                            response_text = self.send_prompt(parameters)
+                            response_text = self.model_handling_service.send_message(parameters)
 
                             response_text = string_utils.strip_code_block(response_text)
                             parsed_yaml = yaml.safe_load(response_text) or {}
@@ -182,7 +167,7 @@ class MemoryManager:
                 import traceback
                 log.info(traceback.format_exc())
 
-                file_utils.mark_prepare_error(
+                status_manager.mark_prepare_error(
                     session_id,
                     error_stage=current_stage,
                     error_message=f"{type(e).__name__}: {e}",
@@ -214,7 +199,7 @@ class MemoryManager:
                 import traceback
                 log.info(traceback.format_exc())
 
-                file_utils.mark_prepare_error(
+                status_manager.mark_prepare_error(
                     session_id,
                     error_stage=current_stage,
                     error_message=f"{type(e).__name__}: {e}",
@@ -385,7 +370,7 @@ class MemoryManager:
         
         log.info("[CHAR MEMORY MIDDLE SUMMERY] send message start")
         parameters = use_memory_constant.get_character_midle_summery_send_parameters(result["system_prompt"], result["template_prompt"])
-        response_text = self.send_prompt(parameters)
+        response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         list_input = string_utils.extract_list_items(response_text)
         log.info("[CHAR MEMORY MIDDLE SUMMERY] send message end")
@@ -415,7 +400,7 @@ class MemoryManager:
 
             parameters = use_memory_constant.get_character_midle_categorize_send_parameters(system_prompt, temp_str)
 
-            response_text = self.send_prompt(parameters)
+            response_text = self.model_handling_service.send_message(parameters)
             response_text = string_utils.strip_code_block(response_text)
         
             category = response_text.replace("分類名: ", "")
@@ -469,7 +454,7 @@ class MemoryManager:
         # # 後共通化できそう？
         parameters = use_memory_constant.get_character_midle_location_send_parameters(system_prompt, temp_str)
 
-        response_text = self.send_prompt(parameters)
+        response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         log.info("response_text", response_text)
         return response_text
@@ -496,7 +481,7 @@ class MemoryManager:
 
         parameters = use_memory_constant.get_character_midle_clothing_send_parameters(system_prompt, temp_str)
 
-        response_text = self.send_prompt(parameters)
+        response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         
         log.info("response_text", response_text)
@@ -544,7 +529,7 @@ class MemoryManager:
 
         parameters = use_memory_constant.get_character_midle_items_send_parameters(system_prompt, temp_str)
 
-        response_text = self.send_prompt(parameters)
+        response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         
         log.info("返却前全文", response_text)
@@ -575,7 +560,7 @@ class MemoryManager:
         log.info("置換後", temp_str)
         parameters = use_memory_constant.get_character_midle_target_send_parameters(system_prompt, temp_str)
 
-        response_text = self.send_prompt(parameters)
+        response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         
         log.info("返却前全文", response_text)
@@ -609,7 +594,7 @@ class MemoryManager:
 
         parameters = use_memory_constant.get_character_midle_currency_send_parameters(system_prompt, temp_str)
 
-        response_text = self.send_prompt(parameters)
+        response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         
         log.info("返却前全文", response_text)

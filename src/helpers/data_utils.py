@@ -7,6 +7,7 @@ from typing import Dict, Any
 from config import config
 import time
 from helpers import file_utils
+from logger import log
 
 def has_changes(current: Dict[str, Any], new_data: Dict[str, Any], keys_to_check: list = None) -> bool:
     """

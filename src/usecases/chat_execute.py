@@ -22,6 +22,7 @@ from constant import (
 from helpers import response_checker
 from helpers.chat_utils import ChatUtils
 from services.memory.memory_manager import MemoryManager
+from services.chat.chat_manager import ChatManager
 from services.status import status_manager
 from usecases import chat_execute
 import os
@@ -32,7 +33,8 @@ class ChatExecute:
     def __init__(self):
         self.model_handling_service = None
         self.memory_manager = MemoryManager()
-        self.chat_utils = ChatUtils(self.memory_manager)
+        self.chat_manager = ChatManager()
+        self.chat_utils = ChatUtils(self.memory_manager, self.chat_manager)
 
     def load_session_list(self, payload):
 
@@ -416,14 +418,9 @@ class ChatExecute:
     # チャット処理。入り口
     def chat(self, payload):
 
-        from datetime import datetime
         log.info("chat chat_execute.py")
-        with open(r"E:\LocalFlaskServer\debug_chat.log", "a", encoding="utf-8") as f:
-            f.write(f"{datetime.now()} chat chat_execute.py\n")
-
-        os.write(1, b"=== FD1 stdout test ===\n")
-        os.write(2, b"=== FD2 stderr test ===\n")
         log.info("チャット開始")
+
         try:
             # start_message = orchestrator.create_new_session(body)
 
@@ -437,7 +434,8 @@ class ChatExecute:
             
             string_utils.history_append(history, "player", "player", "1", message, icon_data)
 
-            message = "モデルを使わないテスト返却。チャットボタン",
+            message = self.chat_utils.chat(session_id, payload, message)
+
             icon_data = {"character_id": "shirai_yui",
                         "character_name": "白井　結"}
             
@@ -540,7 +538,7 @@ class ChatExecute:
             if not session_id:
                 return exception_proc.error_response("session_idがありません。", 503)
 
-            file_utils.mark_prepare_processing(session_id, "main_chat")
+            status_manager.mark_prepare_processing(session_id, "main_chat")
 
             context = self._load_main_chat_context(session_id, body)
 
@@ -607,7 +605,7 @@ class ChatExecute:
             log.info(traceback.format_exc())
 
             if session_id:
-                file_utils.mark_prepare_error(
+                status_manager.mark_prepare_error(
                     session_id,
                     complete_stage="main_chat",
                     error_stage="main_chat",
@@ -641,7 +639,7 @@ class ChatExecute:
                     "status_code": 500,
                 }
 
-            file_utils.mark_prepare_processing(session_id, "mob_chat")
+            status_manager.mark_prepare_processing(session_id, "mob_chat")
             # TODO
             # mob同士の会話をどうするか悩む（多分発生しないか、禁止が良さげ）
             # mobの履歴も一応持つ（名前を付ければ判別できるから）
@@ -677,7 +675,7 @@ class ChatExecute:
                 "status_code": 200
             }
         
-            file_utils.mark_prepare_ready(session_id, "mob_chat")
+            status_manager.mark_prepare_ready(session_id, "mob_chat")
 
             return result
 
@@ -687,7 +685,7 @@ class ChatExecute:
             log.info(traceback.format_exc())
 
             if session_id:
-                file_utils.mark_prepare_error(
+                status_manager.mark_prepare_error(
                     session_id,
                     complete_stage="mob_chat",
                     error_stage="mob_chat",

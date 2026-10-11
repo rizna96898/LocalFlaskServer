@@ -151,13 +151,11 @@ def selected_message():
 def chat_startup():
     return orchestrator.chat_startup(request.get_json())
 
-
 # 新しいチャット
 @app.post("/new_chat")
 def new_chat():
     if request.method == "OPTIONS":
         return "", 200
-
     return orchestrator.new_chat(request.get_json())
 
 # 発言

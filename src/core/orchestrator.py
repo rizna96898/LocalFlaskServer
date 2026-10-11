@@ -16,14 +16,14 @@ from services.template import template
 
 # プロンプト構築
 from usecases.chat_execute import ChatExecute
-from services.chat.chat_settings import ChatSettings
+from services.world.world_settings import WorldSettings
 from logger import log
 # app.pyから呼ばれる処理。
 class ChatOrchestrator:
     def __init__(self):
         self.model_handling_service = None
         self.chat_execute = ChatExecute()
-        self.chat_settings = ChatSettings()
+        self.chat_settings = WorldSettings()
 
     # folder選択ウィンドウを表示（したかったけど今は使えない）
     def select_base_path(self, payload):
