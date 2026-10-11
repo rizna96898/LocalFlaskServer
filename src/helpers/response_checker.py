@@ -11,7 +11,7 @@ def response_ok(**kwargs):
     return jsonify({"ok": True, **kwargs})
 
 # レスポンスの統一
-def _json_error(message: str, status: int = 400, **kwargs):
+def response_error(message: str, status: int = 400, **kwargs):
     return jsonify({"ok": False, "message": message, **kwargs}), status
 
 def chat_response_ok(payload: dict, line_id: str, message: str, icon_data: str):

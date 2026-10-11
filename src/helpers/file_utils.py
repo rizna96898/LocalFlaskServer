@@ -35,29 +35,6 @@ def ensure_session_dir(sessions_dir: Path, session_id: str) -> Path:
     session_dir.mkdir(parents=True, exist_ok=True)
     return session_dir
 
-def mark_prepare_processing(session_id: str, complete_stage: str = "new_chat") -> bool:
-    return status_manager.update_prepare_status(
-        session_id,
-        status="processing",
-        complete_stage=complete_stage,
-        error_stage=None,
-        error_message=None,
-    )
-
-def mark_prepare_error(
-    session_id: str,
-    error_stage: str,
-    error_message: str,
-    complete_stage: str = "new_chat",
-) -> bool:
-    return status_manager.update_prepare_status(
-        session_id,
-        status="error",
-        complete_stage=complete_stage,
-        error_stage=error_stage,
-        error_message=error_message,
-    )
-
 def str_presenter(dumper, data):
     if "\n" in data:
         return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
@@ -154,6 +131,83 @@ def _load_character_data(file_path):
         log.info(f"[CHAR LOAD ERROR] {file_path}: {e}")
         return {}
 
+#ファイルから会話履歴を読み込み
+def load_history(directory_full_path: str) -> list:
+    path = create_file(directory_full_path, "history.json")
+    if path.exists() and path.stat().st_size > 0:
+        with path.open("r", encoding="utf-8") as f:
+            history = json.load(f)
+    else:
+        history = []
+
+    #不要なt（タイムスタンプ）を落とす
+    # llm_history = [
+    #     {"role": m["role"], "message": m["message"]}
+    #     for m in history
+    # ]
+    return history
+
+def load_character_memories(
+    session_id: str,
+    sessions_dir: Path,
+) -> dict[str, dict[str, Any]]:
+    """
+    files/sessions/{session_id}/character/*_memory.yaml を読み込み、
+    {正規化済みキャラ名: YAML内容dict} の形で返す。
+    """
+    character_memory_dir = sessions_dir / session_id / "character"
+    result: dict[str, dict[str, Any]] = {}
+
+    # log.info("読み込み対象のyamlファイル名", character_memory_dir)
+
+    if not character_memory_dir.exists():
+        return result
+
+    for yaml_file in character_memory_dir.glob("*_memory.yaml"):
+        try:
+            with yaml_file.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception as e:
+            log.info(f"[CHAR MEMORY LOAD ERROR] {yaml_file}: {e}")
+            continue
+
+        raw_name = yaml_file.stem.removesuffix("_memory")
+        char_name = string_utils._normalize_name(raw_name)
+
+        if char_name in result:
+            log.info(
+                f"[CHAR MEMORY WARN] duplicate: raw={raw_name}, normalized={char_name}"
+            )
+
+        result[char_name] = data
+
+    return result
+
+# キャラ説明を取得
+def load_yaml_from_character_description(card_data: dict) -> dict:
+    """
+    SillyTavernキャラカードの description に入っている YAML を読み取る。
+    description 全体が YAML である前提。
+    """
+    if not isinstance(card_data, dict):
+        return {}
+
+    description = card_data.get("description", "")
+    if not isinstance(description, str) or not description.strip():
+        return {}
+
+    text = string_utils.strip_code_block(description).strip()
+
+    try:
+        parsed = yaml.safe_load(text) or {}
+        if isinstance(parsed, dict):
+            return parsed
+        return {}
+    except Exception as e:
+        log.info(f"[CHAR CARD YAML ERROR] description parse failed: {e}")
+        log.info(f"[CHAR CARD YAML ERROR] head={text[:300]!r}")
+        return {}
+    
 def find_character_yaml_file(char_name: str, session_char_dir: Path):
     target = string_utils._normalize_name(char_name)
 
@@ -223,22 +277,6 @@ def apply_dynamic_params_to_characters(session_id: str, dynamic_list: list[dict]
         file_utils.save_yaml_file(memory_file, data)
 
         #log.info(f"[DYNAMIC PARAM] applied → {memory_file.name}")
-
-#ファイルから会話履歴を読み込み
-def load_history(directory_full_path: str) -> list:
-    path = create_file(directory_full_path, "history.json")
-    if path.exists() and path.stat().st_size > 0:
-        with path.open("r", encoding="utf-8") as f:
-            history = json.load(f)
-    else:
-        history = []
-
-    #不要なt（タイムスタンプ）を落とす
-    # llm_history = [
-    #     {"role": m["role"], "message": m["message"]}
-    #     for m in history
-    # ]
-    return history
 
 #会話履歴を保存
 def save_history(dir_full_path: str, history: list) -> None:
@@ -319,42 +357,6 @@ def get_character_memory(
 
     return None
 
-def load_character_memories(
-    session_id: str,
-    sessions_dir: Path,
-) -> dict[str, dict[str, Any]]:
-    """
-    files/sessions/{session_id}/character/*_memory.yaml を読み込み、
-    {正規化済みキャラ名: YAML内容dict} の形で返す。
-    """
-    character_memory_dir = sessions_dir / session_id / "character"
-    result: dict[str, dict[str, Any]] = {}
-
-    # log.info("読み込み対象のyamlファイル名", character_memory_dir)
-
-    if not character_memory_dir.exists():
-        return result
-
-    for yaml_file in character_memory_dir.glob("*_memory.yaml"):
-        try:
-            with yaml_file.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-        except Exception as e:
-            log.info(f"[CHAR MEMORY LOAD ERROR] {yaml_file}: {e}")
-            continue
-
-        raw_name = yaml_file.stem.removesuffix("_memory")
-        char_name = string_utils._normalize_name(raw_name)
-
-        if char_name in result:
-            log.info(
-                f"[CHAR MEMORY WARN] duplicate: raw={raw_name}, normalized={char_name}"
-            )
-
-        result[char_name] = data
-
-    return result
-
 # よくわからない。いるの？
 def get_needs_mob_chat(session_id: str) -> bool:
     data = status_manager.load_prepare_status(session_id)
@@ -405,31 +407,6 @@ def wait_until_prepare_status(
 
         time.sleep(interval_sec)
 
-# キャラ説明を取得
-def load_yaml_from_character_description(card_data: dict) -> dict:
-    """
-    SillyTavernキャラカードの description に入っている YAML を読み取る。
-    description 全体が YAML である前提。
-    """
-    if not isinstance(card_data, dict):
-        return {}
-
-    description = card_data.get("description", "")
-    if not isinstance(description, str) or not description.strip():
-        return {}
-
-    text = string_utils.strip_code_block(description).strip()
-
-    try:
-        parsed = yaml.safe_load(text) or {}
-        if isinstance(parsed, dict):
-            return parsed
-        return {}
-    except Exception as e:
-        log.info(f"[CHAR CARD YAML ERROR] description parse failed: {e}")
-        log.info(f"[CHAR CARD YAML ERROR] head={text[:300]!r}")
-        return {}
-    
 # 世界情報から日付持ってきてる
 # 必要だけどここじゃない
 def get_world_time(world_data: Dict) -> str:

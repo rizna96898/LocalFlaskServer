@@ -18,10 +18,10 @@ system: |
   - 独り言、心情、行動のみで誰にも向けていない場合は null
 
   悪い例：
-  target_speakers: 茜さん
+  target_speakers: shirai
 
   良い例：
-  target_speakers: 柊　茜
+  target_speakers: shirai_yui
 
   出力テンプレ:
   target_speakers: null

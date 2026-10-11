@@ -799,4 +799,14 @@ def history_append(history: dict, speaker: str, role: str, line_id: str, message
         "message": message,
         "icon_data": icon_data
     })
-    
+
+def _join_sections(*parts: str) -> str:
+    """空文字を除外しつつ、改行の崩れを抑えて連結する"""
+    cleaned: list[str] = []
+    for part in parts:
+        if part is None:
+            continue
+        text = normalize_newlines(str(part)).strip()
+        if text:
+            cleaned.append(text)
+    return "\n\n".join(cleaned)

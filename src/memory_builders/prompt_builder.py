@@ -20,20 +20,7 @@ from helpers.string_utils import normalize_newlines
 from helpers import file_utils
 from logger import log
 
-class PromptBuilder:
-
-    def _load(self, filePath: Path, filename: str) -> Dict[str, Any]:
-        """promptsフォルダからYAMLを読み込む"""
-        path = filePath / filename
-        if not path.exists():
-            log.info(f"[WARN] Prompt file not found: {path}")
-            return {}
-        try:
-            with open(path, encoding="utf-8") as f:
-                return yaml.safe_load(f) or {}
-        except Exception as e:
-            log.info(f"[ERROR] Failed to load prompt {filename}: {e}")
-            return {}
+class MemoryPromptBuilder:
 
     def _join_sections(self, *parts: str) -> str:
         """空文字を除外しつつ、改行の崩れを抑えて連結する"""
@@ -51,7 +38,8 @@ class PromptBuilder:
     # ======================
     def create_memory_prompt(self, charactor: str, story: str = "", start_message: str = "") -> List[Dict]:
         """新規 world_memory 作成用のプロンプト"""
-        prompt_data = self._load(config.BOOTSTRAP, Bootstrap.WORLD_MEMORY)
+        file_path = config.BOOTSTRAP / Bootstrap.WORLD_MEMORY
+        prompt_data = file_utils.load_yaml_file(file_path)
 
         user_parts = [
             charactor,
@@ -117,7 +105,7 @@ class PromptBuilder:
     # ======================
     def generate_dynamic_params_prompt(self, scenario: str, charactor: str = "") -> List[Dict]:
         """シナリオに基づいて、最初に必要な動的パラメータを提案させる"""
-        base = self._load(config.BOOTSTRAP, Bootstrap.CHARACTER_ITEMS)
+        base = file_utils.load_yaml_file(config.BOOTSTRAP / Bootstrap.CHARACTER_ITEMS)
 
         user_content = self._join_sections(
             base.get("header", ""),
@@ -170,7 +158,7 @@ class PromptBuilder:
         first_mes: str = "",
     ) -> List[Dict]:
         """キャラクター個別 memory 作成用のプロンプト"""
-        prompt_data = self._load(config.BOOTSTRAP, Bootstrap.CHARACTER_MEMORY)
+        prompt_data = file_utils.load_yaml_file(config.BOOTSTRAP / Bootstrap.CHARACTER_MEMORY)
 
         name_text = f"名前: {character_data.get('name', '')}" if character_data.get("name") else ""
 
@@ -220,7 +208,7 @@ class PromptBuilder:
         last_assistant_content: str,
         old_memory: dict,
     ):
-        prompt_data = self._load(config.POSTPROCESS, PromptsPostprocess.CHARACTER_MEMORY)
+        prompt_data = file_utils.load_yaml_file(config.POSTPROCESS / PromptsPostprocess.CHARACTER_MEMORY)
 
         current_state_yaml = yaml.safe_dump(
             current_state or {},
@@ -272,7 +260,7 @@ class PromptBuilder:
         memory_key: str,
         memory_value,
     ) -> list[dict]:
-        prompt_data = self._load(config.BOOTSTRAP, Bootstrap.EDIT_SUMMARY)
+        prompt_data = file_utils.load_yaml_file(config.BOOTSTRAP, Bootstrap.EDIT_SUMMARY)
 
         memory_yaml = yaml.safe_dump(
             memory_value or [],
