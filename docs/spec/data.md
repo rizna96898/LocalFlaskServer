@@ -13,7 +13,8 @@
   - [セッションフォルダ（`files/sessions/{セッションID}/`）](#s3-1)
   - [セッション一覧（`files/systems/sessions_list.yaml`）](#s3-2)
   - [サーバーの設定（`files/settings/system_settings.yaml`）](#s3-3)
-  - [記録と途中結果](#s3-4)
+  - [生成の設定（`files/settings/generation.yaml`）](#s3-4)
+  - [記録と途中結果](#s3-5)
 - [要確認の一覧（この文書の分）](#s4)
 <!-- toc:end -->
 
@@ -192,7 +193,9 @@ LocalFlaskServer/
 ├─ files/
 │  ├─ prompts/                     プロンプトYAML（→ prompts.md）。Git管理
 │  ├─ templates/sub_character.yaml
-│  ├─ settings/system_settings.yaml   サーバーの設定。APIキーを含む。Git管理外
+│  ├─ settings/
+│  │  ├─ system_settings.yaml   サーバーの設定。APIキーを含む。Git管理外
+│  │  └─ generation.yaml        生成の設定（温度、最大トークン数）。Git管理
 │  ├─ systems/sessions_list.yaml      全セッションの一覧。Git管理外
 │  └─ sessions/{セッションID}/         セッションごとのフォルダ。Git管理外
 ├─ logs/                           モデルへ送ったプロンプトとパラメーターの記録。Git管理外
@@ -300,6 +303,18 @@ sessions:
   設定にはあるが、コードのどこからも読まれていない。残す予定のものか、消してよいものか。
 
 <a id="s3-4"></a>
+
+### 生成の設定（`files/settings/generation.yaml`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+モデルに文章を作らせるときの、温度や最大トークン数。用途（`memory`、`judge`、`chat`）ごとに値を持つ。
+形と優先順位は [`prompts.md`](prompts.md) の「生成の設定」。
+
+- `files/settings/` の中で、このファイルだけ Git で管理している（`.gitignore` で例外にしている）。秘密の値は書かない。
+- 書き換えると、サーバーを再起動しなくても、次にモデルへ送るときから反映される。
+
+<a id="s3-5"></a>
 
 ### 記録と途中結果
 

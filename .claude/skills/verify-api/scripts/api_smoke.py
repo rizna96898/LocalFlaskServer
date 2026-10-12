@@ -174,6 +174,33 @@ def main() -> int:
                  json={"session_id": sid})
     t.check("  履歴が1件以上ある", len(body.get("message_list", [])) >= 1)
 
+    # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）
+    print("\n# 初期記憶の生成")
+    scripted = box.client(llm=sandbox.scripted_llm)     # 段階ごとに、それらしい返事を返す偽モデル
+    before = len(box.llm_requests)
+    msid = (scripted.post("/chat_startup", json={"world_id": world_id, "base_chat_path": web}).get_json() or {}).get("session_id", "")
+    scripted.post("/new_chat", json={"session_id": msid})
+    t.check("裏の処理が終わる", box.wait_background(60))
+    status = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
+    t.check("進行状態が ready（エラーなし）", status.get("status") == "ready", status)
+    t.check("世界の記憶ができる", (box.sessions / msid / "world_memory.yaml").exists())
+    memories = sorted(p.name for p in (box.sessions / msid / "character").glob("*_memory.yaml"))
+    t.check("キャラクターの記憶ができる", len(memories) >= 1, memories)
+    sent = box.llm_requests[before:]
+    stages = ["状態と記憶を構造化", "情報抽出担当", "「居場所」を特定", "分類機", "「現在の服装」を特定",
+              "「現在の所持品」を特定", "「意識を向けている相手」を特定", "「所持金」を確定"]
+    missing = [s for s in stages if not any(s in q.get("prompt", "") for q in sent)]
+    t.check("全段階（世界 ＋ キャラクター7段階）のプロンプトが送られる", not missing, f"送られていない段階: {missing}")
+
+    # 生成の設定は files/settings/generation.yaml から読む（→ docs/spec/prompts.md「生成の設定」）
+    wanted = yaml.safe_load(box.generation_file.read_text(encoding="utf-8")) or {}
+    expect = dict(wanted.get("default") or {}, **(wanted.get("memory") or {}))
+    wrong = [q for q in sent if any(q.get(k) != v for k, v in expect.items())]
+    t.check("送信した設定が generation.yaml の memory の値と一致", bool(expect) and not wrong,
+            f"期待 {expect} / 違うもの {len(wrong)} 件")
+    scripted.post("/delete_session", json={"session_ids": [msid]})
+    client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
+
     # ---------------------------------------------------------------- セッションに退避した画像
     print("\n# セッションに退避した画像")
     load_image("アイコン = 新規チャット時点の画像", f"/session_image/{sid}/icon/{cid}", 200, icon_png)

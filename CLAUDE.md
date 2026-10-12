@@ -38,6 +38,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 
 `files/settings/system_settings.yaml`（gitignore対象、APIキーを含む）を `src/config.py` の `config` シングルトンが読む。`files/sessions/`、`files/settings/`、`temp/`、`logs/`、`files/prompts/backups/`、`files/systems/sessions_list.yaml`、`*.txt`、`*.log`、`*.gguf` もgitignore対象。
 
+- 生成の設定（温度、最大トークン数）は `files/settings/generation.yaml`。`files/settings/` は丸ごと gitignore 対象だが、このファイルだけ例外として Git で管理している。**`system_settings.yaml` は絶対にコミットしない**（APIキーが入っている）。
 - モデルの切り替えは `open_router_use_flag` / `local_model_use_flag` と、`ModelHandlingService("local" | "openrouter")` の引数で決まる。現在の呼び出し側はすべて `"local"` 固定。
 - APサーバーのポートは `port`（未設定なら5000）。Web側の接続先の既定値は `http://127.0.0.1:5000` なので、変える場合は画面の「接続環境設定」も合わせる。
 - モデルサーバーが読み込むモデルは `local_model_path`（フォルダ）と `local_mode_name`（ファイル名）で決まる。未設定やファイルが無い場合、`src/server.py` は起動時にエラーで止まる。
@@ -54,7 +55,8 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 - `services/chat/chat_manager.py`: 本番チャットの応答生成
 - `services/llm/llm_service.py`: `ModelHandlingService` が `LocalModelService` / `OpenRouterService` を切り替える。`task_type`（`chat` / `memory` / `judge`）で `max_tokens` が決まる
 - `services/status/status_manager.py`: セッションごとの進行状態
-- `memory_builders/`、`chat_builders/`: プロンプト組み立て（`prompt_builder.py`）と、用途別の送信パラメーター（`use_*_constant.py`）
+- `services/llm/generation_params.py`: モデルへ送る内容（メッセージと生成の設定）を組み立てる `build_send_parameters`。温度や最大トークン数は、コードに書かず `files/settings/generation.yaml` から読む（書き換えは再起動なしで反映）
+- `memory_builders/`、`chat_builders/`: プロンプト組み立て（`prompt_builder.py`）
 
 ### プロンプト
 

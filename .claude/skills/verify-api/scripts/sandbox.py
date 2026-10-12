@@ -56,6 +56,33 @@ open_router_use_flag: false
 """
 
 
+def scripted_llm(prompt: str) -> str:
+    """プロンプトの種類を見て、それらしい返事を返す偽のモデル。
+
+    box.client(llm=sandbox.scripted_llm) と渡すと、初期記憶の生成（世界の記憶 → キャラクターの記憶の全段階）を
+    最後まで走らせられる。返事の中身は固定で、内容の良し悪しは確かめられない。確かめられるのは、
+    「どの段階も呼ばれ、返事を読み取れ、記憶のファイルができる」こと。
+
+    プロンプトの文面（各YAMLの system の1行目）を目印にしているので、そこを書き換えたらここも合わせる。
+    """
+    answers = [
+        ("状態と記憶を構造化するAI", "現在の状態:\n  現在日付: 2025年11月28日\n  空間の参加者:\n    - 名前: 検証 花子\n      役割: ヒロイン\n"
+                                     "  パーティー一覧: null\n世界の状態:\n  世界の参加者:\n    - 名前: 検証 花子\n      役割: ヒロイン\n"),
+        ("情報抽出担当", "- 待合室に座っている\n- 緊張している\n- 夫の手を握っている\n"),
+        ("分類機", "行動"),
+        ("「居場所」を特定", "待合室"),
+        ("「現在の服装」を特定", "服装:\n  - ブレザー\n  - ローファー\n"),
+        ("「現在の所持品」を特定", "所持品:\n  - 財布\n  - スマートフォン\n"),
+        ("「意識を向けている相手」を特定", "相手: 検証 太郎\n"),
+        ("「所持金」を確定", "通貨:\n  通貨単位: 円\n  金額: 5000\n"),
+        ("今回の発言での会話対象", "対象: 検証 花子\n"),
+    ]
+    for mark, answer in answers:
+        if mark in prompt:
+            return answer
+    return "不明なプロンプトです"
+
+
 class Sandbox:
     def __init__(self, root: Path):
         self.root = root
@@ -63,6 +90,7 @@ class Sandbox:
         self.web = root / "web"                # LLM_CHAT_CONSOLE のコピー（データフォルダのみ）
         self.sessions = self.server / "files" / "sessions"
         self.settings_file = self.server / "files" / "settings" / "system_settings.yaml"
+        self.generation_file = self.server / "files" / "settings" / "generation.yaml"   # 生成の設定。書き換えて試せる
         self.llm_calls = []                    # モデルへ送られたプロンプトの記録
         self.llm_requests = []                 # 同じく、送信した内容の全体（prompt、stop、logit_bias、温度など）
         self._app = None
@@ -189,6 +217,11 @@ def prepare(server_repo: Path = None, web_repo: Path = None, root: Path = None) 
     box.sessions.mkdir(parents=True)
     box.settings_file.parent.mkdir(parents=True)
     box.write_settings(DEFAULT_SETTINGS)
+
+    # 生成の設定は秘密の値を含まないので、本物をコピーする（system_settings.yaml はコピーしない）
+    generation = server_repo / "files" / "settings" / "generation.yaml"
+    if generation.exists():
+        shutil.copyfile(generation, box.generation_file)
 
     for name in ("characters", "players", "worlds"):
         _copy_tree(web_repo / name, box.web / name)

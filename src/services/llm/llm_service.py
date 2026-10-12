@@ -13,6 +13,7 @@ from logger import log
 from helpers import string_utils
 from helpers import response_checker
 from services.systems import system_settings_reload_service
+from services.llm import generation_params
 
 class ModelHandlingService:
     def __init__(self, mode="openrouter"):
@@ -31,8 +32,12 @@ class ModelHandlingService:
         else:
             raise ValueError(f"未知のmode: {mode}")
     
+    # send_data は generation_params.build_send_parameters で組み立てる
     def send_message(self, send_data: Dict):
-        max_tokens = self._get_default_max_tokens(send_data.get("task_type"))
+        max_tokens = send_data.get("max_tokens")
+        if max_tokens is None:
+            max_tokens = generation_params.get_generation_params(send_data.get("task_type"))["max_tokens"]
+
         return self.impl.send_message(
             messages=send_data.get("prompt_messages"),
             system_prompt=send_data.get("system_prompt"),
@@ -44,14 +49,6 @@ class ModelHandlingService:
             stop=send_data.get("stop"),
             logit_bias= send_data.get("logit_bias"),
         )
-    def _get_default_max_tokens(self, task_type):
-        if task_type == "chat":
-            return 400
-        elif task_type == "memory":
-            return 1500
-        elif task_type == "judge":
-            return 200
-        return 800
 
 class LocalModelService:
     _llm_lock = threading.Lock()

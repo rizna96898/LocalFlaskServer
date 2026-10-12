@@ -17,7 +17,9 @@
   - [なぜこの形にしたか（2026-10-13 の実験）](#s5-2)
   - [返事の後始末](#s5-3)
 - [生成の設定](#s6)
-  - [最大トークン数](#s6-1)
+  - [値の決まり方](#s6-1)
+  - [プロンプトごとに変える](#s6-2)
+  - [コードでの組み立て](#s6-3)
 - [送った内容の記録](#s7)
 - [要確認の一覧（この文書の分）](#s8)
 <!-- toc:end -->
@@ -78,6 +80,7 @@ files/prompts/
 | `template` | 本文のひな形。`{名前}` の形の差し込み口を持てる |
 | `tail_template` | 本文の後に置く念押し。「出力開始は必ず『服装:』から」など |
 | `message_header` | `header` と同じ役割（分類のプロンプトだけがこの名前を使っている） |
+| `params` | そのプロンプトだけ生成の設定を変えたいときに書く（→「生成の設定」）。普段は書かない |
 
 全部が必須ではない。使うキーだけ書く。
 
@@ -260,41 +263,101 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-用途ごとに、コード（`memory_builders/use_memory_constant.py`、`chat_builders/use_chat_constant.py`）で決めている。
-今は、どの用途も同じ値。
+温度や最大トークン数は、コードには書かず、**`files/settings/generation.yaml`** に書く。
 
-| 項目 | 値 |
+```yaml
+default:              # 基本の値
+  temperature: 0.5
+  top_p: 0.9
+  top_k: 0
+  repeat_penalty: 1.1
+  max_tokens: 800
+
+memory:               # 用途ごとの欄。変えたい項目だけ書く
+  max_tokens: 1500
+judge:
+  max_tokens: 200
+chat:
+  max_tokens: 400
+```
+
+| 項目 | 意味 |
 |---|---|
-| 温度 | 0.5 |
-| `top_p` | 0.9 |
-| `top_k` | 0 |
-| 繰り返し抑制 | 1.1 |
-| `logit_bias` | 使わない |
-
-生成を打ち切る文字列は、形式に応じて `llm_service.py` の `build_stop` が付ける（`chatml` なら `<|im_end|>`、`alpaca` なら `### Instruction:`）。
-モデルがそこまで書いたら生成を止める指定で、答えのあとに次の質問まで勝手に書き続けるのを防ぐ。
-呼び出し側が打ち切る文字列を足したい場合は、`stop` に入れて渡すと、形式ごとの分に加えられる。
-
-- 以前は、用途ごとに `<think>` の禁止の強さ（-5 〜 -100）と打ち切る文字列を変えていた。
-  形式を直してからは、その使い分けが不要になった（上の「なぜこの形にしたか」）。
+| `temperature` | ばらつき。小さいほど毎回同じ答えになり、大きいほど多彩になる |
+| `top_p` | 候補を、確率の上位から合計がこの割合になるまでに絞る |
+| `top_k` | 候補を、確率の上位この個数に絞る。0 は絞らない |
+| `repeat_penalty` | 同じ言葉の繰り返しを抑える強さ。1.0 は抑えない |
+| `max_tokens` | 1回の返事の長さの上限 |
 
 <a id="s6-1"></a>
 
-### 最大トークン数
+### 値の決まり方
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-用途の種類（`task_type`）で決まる（`ModelHandlingService._get_default_max_tokens`）。
+上にあるものほど優先される。
 
-| `task_type` | 最大トークン数 |
+1. プロンプトのYAMLの `params`（そのプロンプトだけ変えたいとき）
+2. `generation.yaml` の用途ごとの欄（`memory`、`judge`、`chat`）
+3. `generation.yaml` の `default`
+4. コードに持っている組み込みの値（`generation.yaml` が無い・項目が欠けているときの備え）
+
+用途は、呼び出し側が `build_send_parameters` に渡す1つ目の値で決まる。
+
+| 用途 | 使う場面 |
 |---|---|
-| `chat` | 400 |
-| `memory` | 1500 |
-| `judge` | 200 |
-| それ以外 | 800 |
+| `memory` | 記憶の生成（世界の記憶、キャラクターの記憶の各段階） |
+| `judge` | 判定（誰の発言か、誰に向けた発言か） |
+| `chat` | キャラクターの返答 |
 
-- **【要確認 Q44】** 今の呼び出しは、すべて `task_type` が `memory` になっている（誰に向けた発言かの判定も `memory`）。
+- `generation.yaml` を書き換えると、次にモデルへ送るときから反映される。サーバーの再起動は要らない。
+- `generation.yaml` が壊れていても（YAMLとして読めない、形が違う）、止めずに、直前に読めた内容で送る。
+- `generation.yaml` は Git で管理する。`files/settings/` は丸ごと管理外だが、このファイルだけ例外にしている。
+  APIキーなど秘密の値は書かない（それは `system_settings.yaml` に書く）。
+- **【要確認 Q44】** 今の呼び出しは、すべて用途が `memory` になっている（誰に向けた発言かの判定も `memory`）。
   判定は `judge`、返答は `chat` にするのが本来の形か。
+
+<a id="s6-2"></a>
+
+### プロンプトごとに変える
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+特定のプロンプトだけ値を変えたいときは、そのプロンプトのYAMLに `params` を足し、変えたい項目だけ書く。
+
+```yaml
+system: |
+  あなたは「現在の服装」を特定する担当です。
+  …
+params:
+  temperature: 0.2
+```
+
+今は、どのプロンプトにも書いていない（全部が用途の値で動いている）。
+
+<a id="s6-3"></a>
+
+### コードでの組み立て
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+モデルへ送る内容は、`services/llm/generation_params.py` の `build_send_parameters` で組み立てて、`ModelHandlingService.send_message` に渡す。
+
+```python
+parameters = generation_params.build_send_parameters(
+    "memory",                    # 用途
+    system_prompt=system_prompt,
+    user_content=temp_str,       # 本文。messages=[...] で渡してもよい
+    prompt_data=prompt_yaml,     # プロンプトのYAMLを読んだ辞書。params があれば上書きに使う
+)
+response_text = self.model_handling_service.send_message(parameters)
+```
+
+- 生成を打ち切る文字列は、形式に応じて `llm_service.py` の `build_stop` が付ける（`chatml` なら `<|im_end|>`、`alpaca` なら `### Instruction:`）。
+  モデルがそこまで書いたら生成を止める指定で、答えのあとに次の質問まで勝手に書き続けるのを防ぐ。
+- `logit_bias` は使わない（上の「ローカルモデルへ送る形」）。
+- 以前は、用途ごとに関数を分け（`use_memory_constant.py` の8つと `use_chat_constant.py` の1つ）、`<think>` の禁止の強さや
+  打ち切る文字列を変えていた。形式を直してからは、その使い分けが不要になり、1つにまとめた。
 
 <a id="s7"></a>
 
