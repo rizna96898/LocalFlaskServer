@@ -284,6 +284,8 @@ sessions:
 | `local_model_path` | モデルファイルのあるフォルダ | モデルサーバーが起動時に止まる |
 | `local_mode_name` | モデルファイルの名前 | 同上 |
 | `local_model_server_port` | モデルサーバーのポート | 5001 |
+| `local_model_prompt_format` | ローカルモデルへ送る会話の形式。`chatml`／`alpaca`（→ [`prompts.md`](prompts.md)） | `chatml` |
+| `local_model_no_think` | `true` なら、返事の出だしに空の思考ブロックを置いて、思考を書かせない（`chatml` のときだけ効く） | `true` |
 | `local_mode_max_tokens` | | |
 | `open_router_use_flag`、`openrouter_api_key`、`openrouter_site_url`、`openrouter_site_name`、`openrouter_max_tokens` | OpenRouter を使う場合の設定 | |
 | `default_model`、`temperature`、`max_tokens` | 既定のモデル名と生成の設定 | `grok-4`、0.85、2048 |

@@ -154,6 +154,18 @@ def main() -> int:
     t.check("  裏の記憶生成スレッドが終わる", box.wait_background())
     t.check("  記憶生成がモデルへ送信しようとした", len(box.llm_calls) >= 1, f"{len(box.llm_calls)} 回")
 
+    # モデルへ送る形。形式がモデルと合っていないと空の返事になるので、既定の形を固定しておく
+    # （→ docs/spec/prompts.md「ローカルモデルへ送る形」）
+    if box.llm_requests:
+        sent = box.llm_requests[0]
+        prompt = sent.get("prompt", "")
+        t.check("  送る形式は ChatML（<|im_start|> で始まる）", prompt.startswith("<|im_start|>"), repr(prompt[:60]))
+        t.check("  返事の出だしに空の思考ブロックを置いている",
+                prompt.endswith("<|im_start|>assistant\n<think>\n\n</think>\n\n"), repr(prompt[-60:]))
+        t.check("  古い形式（### Instruction:）が混ざっていない", "### Instruction:" not in prompt)
+        t.check("  打ち切りの文字列は <|im_end|>", sent.get("stop") == ["<|im_end|>"], sent.get("stop"))
+        t.check("  <think> を logit_bias で禁止していない", not sent.get("logit_bias"), sent.get("logit_bias"))
+
     t.api(client, "chat（モデルサーバー停止中）→ 500", "post", "/chat", 500, False,
           json={"session_id": sid, "message": "こんにちは"})
     t.api(client, "re_chat", "post", "/re_chat", 200, True, ["session_id", "line_id", "message", "icon_data"],

@@ -11,7 +11,7 @@ def get_world_memory_send_parameters(prompt_messages: List[Dict]):
     parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -5}
+    parameters["logit_bias"]      = None
     return parameters
 
 def get_character_middle_summary_send_parameters(system_prompt: str, prompt_messages: str):
@@ -29,7 +29,7 @@ def get_character_middle_summary_send_parameters(system_prompt: str, prompt_mess
     parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -5}
+    parameters["logit_bias"]      = None
     return parameters
 
 def get_character_middle_categorize_send_parameters(system_prompt: str, prompt_messages: str):
@@ -44,10 +44,10 @@ def get_character_middle_categorize_send_parameters(system_prompt: str, prompt_m
     parameters["system_prompt"]   = system_prompt
     parameters["temperature"]     = 0.5
     parameters["top_p"]           = 0.9
-    parameters["stop"]            = ["### Instruction:"]
+    parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -100}
+    parameters["logit_bias"]      = None
     return parameters
 
 def get_character_middle_location_send_parameters(system_prompt: str, prompt_messages: str):
@@ -62,10 +62,10 @@ def get_character_middle_location_send_parameters(system_prompt: str, prompt_mes
     parameters["system_prompt"]   = system_prompt
     parameters["temperature"]     = 0.5
     parameters["top_p"]           = 0.9
-    parameters["stop"]            = ["### Instruction:"]
+    parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -100}
+    parameters["logit_bias"]      = None
     return parameters
 
 def get_character_middle_clothing_send_parameters(system_prompt: str, prompt_messages: str):
@@ -80,10 +80,10 @@ def get_character_middle_clothing_send_parameters(system_prompt: str, prompt_mes
     parameters["system_prompt"]   = system_prompt
     parameters["temperature"]     = 0.5
     parameters["top_p"]           = 0.9
-    parameters["stop"]            = ["### Instruction:"]
+    parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -100}
+    parameters["logit_bias"]      = None
     return parameters
 
 def get_character_middle_items_send_parameters(system_prompt: str, prompt_messages: str):
@@ -98,10 +98,10 @@ def get_character_middle_items_send_parameters(system_prompt: str, prompt_messag
     parameters["system_prompt"]   = system_prompt
     parameters["temperature"]     = 0.5
     parameters["top_p"]           = 0.9
-    parameters["stop"]            = ["### Instruction:"]
+    parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -90}
+    parameters["logit_bias"]      = None
     return parameters
 
 def get_character_middle_target_send_parameters(system_prompt: str, prompt_messages: str):
@@ -116,10 +116,10 @@ def get_character_middle_target_send_parameters(system_prompt: str, prompt_messa
     parameters["system_prompt"]   = system_prompt
     parameters["temperature"]     = 0.5
     parameters["top_p"]           = 0.9
-    parameters["stop"]            = ["### Instruction:"]
+    parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -80}
+    parameters["logit_bias"]      = None
     return parameters
 
 def get_character_middle_currency_send_parameters(system_prompt: str, prompt_messages: str):
@@ -134,9 +134,9 @@ def get_character_middle_currency_send_parameters(system_prompt: str, prompt_mes
     parameters["system_prompt"]   = system_prompt
     parameters["temperature"]     = 0.5
     parameters["top_p"]           = 0.9
-    parameters["stop"]            = ["### Instruction:"]
+    parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -100}
+    parameters["logit_bias"]      = None
     return parameters
 

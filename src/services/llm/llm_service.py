@@ -92,6 +92,7 @@ class LocalModelService:
 
         log.info(payload_messages)
         prompt = messages_to_prompt(payload_messages)
+        stop = build_stop(stop)
 
         log.info("=== LOCAL PROMPT TAIL ===")
         log.info("[LOCALMODEL] 送信予定文", prompt)
@@ -357,8 +358,51 @@ class OpenRouterService:
             log.info(f"[OPENROUTER] send_message end")
 
 
+# 空の思考ブロック。返事の出だしに置くと、モデルは「もう考え終わった」ものとして本文から書き始める
+EMPTY_THINK_BLOCK = "<think>\n\n</think>\n\n"
+
+# 形式ごとの、生成を打ち切る文字列
+FORMAT_STOP = {
+    "chatml": ["<|im_end|>"],
+    "alpaca": ["### Instruction:"],
+}
+
+
 # OpenRouterとLocalModelで渡す状態を変えるのが辛いので一旦ここで吸収
+# ローカルモデルは system / user の区別を受け取らないので、1本の文章にまとめて送る。
+# 形式は設定 local_model_prompt_format で決まる（→ docs/spec/prompts.md）
 def messages_to_prompt(payload_messages):
+    if config.LOCALMODEL_PROMPT_FORMAT == "alpaca":
+        return _messages_to_alpaca(payload_messages)
+
+    return _messages_to_chatml(payload_messages, no_think=config.LOCALMODEL_NO_THINK)
+
+
+def _messages_to_chatml(payload_messages, no_think: bool = True):
+    parts = []
+
+    for m in payload_messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+
+        if role not in ("system", "user", "assistant"):
+            role = "user"
+
+        # 中身の無い system は送らない
+        if role == "system" and not str(content).strip():
+            continue
+
+        parts.append(f"<|im_start|>{role}\n{content}<|im_end|>\n")
+
+    parts.append("<|im_start|>assistant\n")
+
+    if no_think:
+        parts.append(EMPTY_THINK_BLOCK)
+
+    return "".join(parts)
+
+
+def _messages_to_alpaca(payload_messages):
     lines = []
 
     for m in payload_messages:
@@ -375,6 +419,17 @@ def messages_to_prompt(payload_messages):
     lines.append("### Response:")
 
     return "\n".join(lines)
+
+
+# 生成を打ち切る文字列。形式ごとの区切りに、呼び出し側が足したいものを加える
+def build_stop(extra_stop=None):
+    stop = list(FORMAT_STOP.get(config.LOCALMODEL_PROMPT_FORMAT, FORMAT_STOP["chatml"]))
+
+    for s in extra_stop or []:
+        if s and s not in stop:
+            stop.append(s)
+
+    return stop
 
 def load_model(payload):
     base_path = payload.get("base_path") or ""

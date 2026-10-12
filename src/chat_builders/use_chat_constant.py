@@ -12,6 +12,6 @@ def get_chat_send_parameters(prompt_messages: List[Dict]):
     parameters["stop"]            = []
     parameters["top_k"]           = 0
     parameters["repeat_penalty"]  = 1.1
-    parameters["logit_bias"]      = {"248068": -5}
+    parameters["logit_bias"]      = None
     return parameters
 
