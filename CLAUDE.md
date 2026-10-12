@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ローカルLLMを使ったロールプレイチャットのサーバー側AP（Flask）。画面は別リポジトリ `LLM_CHAT_CONSOLE`（`z:\LLM_CHAT_CONSOLE`、ビルドなしの静的HTML/JS）が担当し、HTTPでこのサーバーを呼ぶ。
 
+**LLM_CHAT_CONSOLE を扱う場合は、先に `z:\LLM_CHAT_CONSOLE\CLAUDE.md` を読み直すこと。** 作業は普段このリポジトリを開いて行い、Web側は追加フォルダとして扱うが、追加フォルダの `CLAUDE.md` は自動では読み込まれない。画面の構成、JSの読み込み順、`localStorage` の使い方、コミット時の注意など、Web側の決まりごとはそちらにしか書いていない。
+
 2つのリポジトリは次の点で結合しているので、片方を変えるときはもう片方も確認する。
 
 - **APIパス**: `src/app.py` のルートと、Web側 `js/constant.js` の `API_PATHS` が1対1で対応する。追加・改名は両方に入れる。
