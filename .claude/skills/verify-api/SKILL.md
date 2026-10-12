@@ -70,6 +70,7 @@ sys.exit(t.finish())
 - `box.web`、`box.server` … コピーの場所。保存されたファイルの中身を直接確かめられる
 - `box.worlds()`、`box.characters_with_images()` … リポジトリにある実データのID
 - `box.write_settings("port: 5050\n")` … 設定を変えて試す。`client()` より前に呼ぶ
+- `box.generation_file` … 生成の設定（`generation.yaml`）のコピー。書き換えて、送信に反映されるかを試せる
 - `box.wait_background()` … `/new_chat` が裏で始める記憶生成スレッドの終了を待つ
 
 ### 4. 既存のスモークテストを育てる
@@ -86,8 +87,9 @@ APIを足した・形を変えたときは、`scripts/api_smoke.py` にもその
 | `box.client()` | モデルサーバーに接続できない扱い。`/chat` は500になる |
 | `box.client(llm="現在の状態:\n  ...")` | その文字列をモデルの返事として返す |
 | `box.client(llm=lambda prompt: ...)` | プロンプトに応じて返事を変える |
+| `box.client(llm=sandbox.scripted_llm)` | 段階ごとにそれらしい返事を返す。初期記憶の生成を最後まで走らせられる |
 
-送られたプロンプトは `box.llm_calls` に溜まるので、「どんなプロンプトを組み立てたか」を確かめられる。
+送られたプロンプトは `box.llm_calls` に、送信した内容の全体（`prompt`、`stop`、温度など）は `box.llm_requests` に溜まるので、「どんなプロンプトを、どんな設定で送ったか」を確かめられる。
 
 記憶生成のように、モデルの返事を決まった形（YAML）として読む処理は、偽の返事が形に合っていないと途中で止まる。
 それは検証の都合で起きることで、変更の不具合ではない。どこまで進んだかはサーバーのログ（`--verbose`）で分かる。
@@ -108,4 +110,5 @@ APIを足した・形を変えたときは、`scripts/api_smoke.py` にもその
 - `server/` … `src/`、`files/prompts/`、`files/templates/` のコピー。`sessions/` と `sessions_list.yaml` は毎回空から始める
 - `web/` … LLM_CHAT_CONSOLE の `characters/`、`players/`、`worlds/` のコピー
 - 設定ファイル（`system_settings.yaml`）はコピーしない。本物にはAPIキーが入っているので、検証用の最小の内容を新しく書いている
+- 生成の設定（`generation.yaml`）は、秘密の値を含まないので本物をコピーする
 - `llama_cpp` は偽物に差し替えるので、`src/server.py` を import してもモデルは読み込まれない

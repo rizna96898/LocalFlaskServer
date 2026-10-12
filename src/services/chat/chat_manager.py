@@ -1,6 +1,9 @@
 from chat_builders.prompt_builder import ChatPromptBuilder
 from services.llm.llm_service import ModelHandlingService
-from chat_builders import use_chat_constant
+from services.llm import generation_params
+from config import config
+from constant import PromptsMain
+from helpers import file_utils
 from logger import log
 
 class ChatManager:
@@ -14,7 +17,12 @@ class ChatManager:
         prompt_messages = self.prompt_builder.create_discrimination_prompt(session_id, message)
         log.info("プロンプトエラーが無い事", prompt_messages)
 
-        parameters = use_chat_constant.get_chat_send_parameters(prompt_messages)
+        # TODO 用途は judge が本来の形と思われるが、今は memory のまま（docs/spec/prompts.md の Q44）
+        parameters = generation_params.build_send_parameters(
+            "memory",
+            messages=prompt_messages,
+            prompt_data=file_utils.load_yaml_file(config.MAIN / PromptsMain.CHARACTER_IDENTIFICATION),
+        )
 
         log.info("パラメーターエラーが無い事", parameters)
 

@@ -24,7 +24,7 @@ from helpers import string_utils
 from helpers import file_utils
 from services.llm.llm_service import ModelHandlingService
 from helpers import response_checker
-from memory_builders import use_memory_constant
+from services.llm import generation_params
 from memory_builders import load_init_files
 from services.status import status_manager
 from logger import log
@@ -99,7 +99,7 @@ class MemoryManager:
                     # 世界の初期記憶作成
                     prompt_messages = self.prompt_builder.create_memory_prompt(characters_text, story, start_message)
 
-                    parameters = use_memory_constant.get_world_memory_send_parameters(prompt_messages)
+                    parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=file_utils.load_yaml_file(config.BOOTSTRAP / Bootstrap.WORLD_MEMORY))
 
                     response_text = self.model_handling_service.send_message(parameters)
 
@@ -366,7 +366,7 @@ class MemoryManager:
         log.info("[CHAR MEMORY MIDDLE SUMMARY] replace end")
         
         log.info("[CHAR MEMORY MIDDLE SUMMARY] send message start")
-        parameters = use_memory_constant.get_character_middle_summary_send_parameters(result["system_prompt"], result["template_prompt"])
+        parameters = generation_params.build_send_parameters("memory", system_prompt=result["system_prompt"], user_content=result["template_prompt"], prompt_data=base_file_obj["prompt_data"])
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         list_input = string_utils.extract_list_items(response_text)
@@ -395,7 +395,7 @@ class MemoryManager:
         for temp_categorize_str in temp_categorize_data:
             temp_str = base_file_obj["prompt_categorize_yaml"].get("message_header") + "\n" + temp_categorize_str + "\n" + base_file_obj["prompt_categorize_yaml"].get("tail_template")
 
-            parameters = use_memory_constant.get_character_middle_categorize_send_parameters(system_prompt, temp_str)
+            parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_categorize_yaml"])
 
             response_text = self.model_handling_service.send_message(parameters)
             response_text = string_utils.strip_code_block(response_text)
@@ -449,7 +449,7 @@ class MemoryManager:
 
         # # ここでreplaceが必要かな？
         # # 後共通化できそう？
-        parameters = use_memory_constant.get_character_middle_location_send_parameters(system_prompt, temp_str)
+        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_location_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -476,7 +476,7 @@ class MemoryManager:
         temp_str = temp_str.replace("{character_data}", character_data)
         temp_str = temp_str + "\n" + tail_str
 
-        parameters = use_memory_constant.get_character_middle_clothing_send_parameters(system_prompt, temp_str)
+        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_clothing_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -524,7 +524,7 @@ class MemoryManager:
 
         temp_str = temp_str + "\n" + tail_str
 
-        parameters = use_memory_constant.get_character_middle_items_send_parameters(system_prompt, temp_str)
+        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_items_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -555,7 +555,7 @@ class MemoryManager:
         temp_str = temp_str + "\n" + tail_str
 
         log.info("置換後", temp_str)
-        parameters = use_memory_constant.get_character_middle_target_send_parameters(system_prompt, temp_str)
+        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_target_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -589,7 +589,7 @@ class MemoryManager:
 
         temp_str = temp_str + "\n" + tail_str
 
-        parameters = use_memory_constant.get_character_middle_currency_send_parameters(system_prompt, temp_str)
+        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_currency_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
