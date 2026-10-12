@@ -1,13 +1,13 @@
-#lord_init_files.py
+#load_init_files.py
 from config import config
 from helpers import file_utils
 from constant import Bootstrap
 
 # 世界作成で必要なベースファイル読み込み
-def lord_base_world_yaml(session_id: str):
+def load_base_world_yaml(session_id: str):
     # ここで必要なファイルをロードして受け渡しに使う
     system_file_path = config.SYSTEM_DIR / f"sessions_list.yaml"    
-    prompt_path = config.BOOTSTRAP / Bootstrap.MEMORY_MIDDLE_SUMMERY
+    prompt_path = config.BOOTSTRAP / Bootstrap.MEMORY_MIDDLE_SUMMARY
     system_file_data = file_utils.load_yaml_file(system_file_path)
     prompt_data = file_utils.load_yaml_file(prompt_path) or {}
 
@@ -17,7 +17,7 @@ def lord_base_world_yaml(session_id: str):
     return base_file_data
 
 #キャラクター作成時に必要なベースファイル読み込みと初期ディレクトリ生成
-def lord_base_character_yaml(session_id: str):
+def load_base_character_yaml(session_id: str):
     session_dir = config.SESSIONS_DIR / session_id
     session_char_dir = session_dir / "character"
     world_memory_file = session_dir / f"world_memory.yaml"
@@ -28,7 +28,7 @@ def lord_base_character_yaml(session_id: str):
     prompt_target_path = config.BOOTSTRAP / Bootstrap.MEMORY_MIDDLE_TARGET
     prompt_currency_path = config.BOOTSTRAP / Bootstrap.MEMORY_MIDDLE_CURRENCY
 
-    prompt_path = config.BOOTSTRAP / Bootstrap.MEMORY_MIDDLE_SUMMERY
+    prompt_path = config.BOOTSTRAP / Bootstrap.MEMORY_MIDDLE_SUMMARY
 
     world_memory_data = file_utils.load_yaml_file(world_memory_file) or {}
     prompt_categorize_yaml = file_utils.load_yaml_file(prompt_categorize_path) or {}

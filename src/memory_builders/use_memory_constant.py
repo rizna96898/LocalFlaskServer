@@ -14,7 +14,7 @@ def get_world_memory_send_parameters(prompt_messages: List[Dict]):
     parameters["logit_bias"]      = {"248068": -5}
     return parameters
 
-def get_character_midle_summery_send_parameters(system_prompt: str, prompt_messages: str):
+def get_character_middle_summary_send_parameters(system_prompt: str, prompt_messages: str):
     parameters = {}
     parameters["task_type"]       = "memory"
     parameters["prompt_messages"] = [
@@ -32,7 +32,7 @@ def get_character_midle_summery_send_parameters(system_prompt: str, prompt_messa
     parameters["logit_bias"]      = {"248068": -5}
     return parameters
 
-def get_character_midle_categorize_send_parameters(system_prompt: str, prompt_messages: str):
+def get_character_middle_categorize_send_parameters(system_prompt: str, prompt_messages: str):
     parameters = {}
     parameters["task_type"]       = "memory"
     parameters["prompt_messages"] = [
@@ -50,7 +50,7 @@ def get_character_midle_categorize_send_parameters(system_prompt: str, prompt_me
     parameters["logit_bias"]      = {"248068": -100}
     return parameters
 
-def get_character_midle_location_send_parameters(system_prompt: str, prompt_messages: str):
+def get_character_middle_location_send_parameters(system_prompt: str, prompt_messages: str):
     parameters = {}
     parameters["task_type"]       = "memory"
     parameters["prompt_messages"] = [
@@ -68,7 +68,7 @@ def get_character_midle_location_send_parameters(system_prompt: str, prompt_mess
     parameters["logit_bias"]      = {"248068": -100}
     return parameters
 
-def get_character_midle_clothing_send_parameters(system_prompt: str, prompt_messages: str):
+def get_character_middle_clothing_send_parameters(system_prompt: str, prompt_messages: str):
     parameters = {}
     parameters["task_type"]       = "memory"
     parameters["prompt_messages"] = [
@@ -86,7 +86,7 @@ def get_character_midle_clothing_send_parameters(system_prompt: str, prompt_mess
     parameters["logit_bias"]      = {"248068": -100}
     return parameters
 
-def get_character_midle_items_send_parameters(system_prompt: str, prompt_messages: str):
+def get_character_middle_items_send_parameters(system_prompt: str, prompt_messages: str):
     parameters = {}
     parameters["task_type"]       = "memory"
     parameters["prompt_messages"] = [
@@ -104,7 +104,7 @@ def get_character_midle_items_send_parameters(system_prompt: str, prompt_message
     parameters["logit_bias"]      = {"248068": -90}
     return parameters
 
-def get_character_midle_target_send_parameters(system_prompt: str, prompt_messages: str):
+def get_character_middle_target_send_parameters(system_prompt: str, prompt_messages: str):
     parameters = {}
     parameters["task_type"]       = "memory"
     parameters["prompt_messages"] = [
@@ -122,7 +122,7 @@ def get_character_midle_target_send_parameters(system_prompt: str, prompt_messag
     parameters["logit_bias"]      = {"248068": -80}
     return parameters
 
-def get_character_midle_currency_send_parameters(system_prompt: str, prompt_messages: str):
+def get_character_middle_currency_send_parameters(system_prompt: str, prompt_messages: str):
     parameters = {}
     parameters["task_type"]       = "memory"
     parameters["prompt_messages"] = [

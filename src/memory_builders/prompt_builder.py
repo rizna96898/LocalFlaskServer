@@ -36,13 +36,13 @@ class MemoryPromptBuilder:
     # ======================
     # 記憶関連プロンプト
     # ======================
-    def create_memory_prompt(self, charactor: str, story: str = "", start_message: str = "") -> List[Dict]:
+    def create_memory_prompt(self, character: str, story: str = "", start_message: str = "") -> List[Dict]:
         """新規 world_memory 作成用のプロンプト"""
         file_path = config.BOOTSTRAP / Bootstrap.WORLD_MEMORY
         prompt_data = file_utils.load_yaml_file(file_path)
 
         user_parts = [
-            charactor,
+            character,
             story,
             start_message,
         ]
