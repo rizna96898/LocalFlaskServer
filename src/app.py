@@ -190,4 +190,4 @@ def check_stability():
 if __name__ == "__main__":
     log.info(f"Starting RP Backend on http://0.0.0.0:{config.PORT}")
 
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=config.PORT, debug=False)

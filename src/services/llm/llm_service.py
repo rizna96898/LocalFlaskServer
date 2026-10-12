@@ -56,7 +56,7 @@ class ModelHandlingService:
 class LocalModelService:
     _llm_lock = threading.Lock()
     def __init__(self):
-        self.server_url = "http://127.0.0.1:5001/generate"
+        self.server_url = config.LOCALMODEL_SERVER_URL
         self.temperature = config.TEMPERATURE
         self.max_tokens = config.MAX_TOKENS
 
@@ -115,7 +115,7 @@ class LocalModelService:
             # log.info(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
             start = time.perf_counter()
             response = requests.post(
-                "http://127.0.0.1:5001/generate",
+                self.server_url,
                 json={
                     "prompt": prompt,
                     "temperature": temperature,

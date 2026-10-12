@@ -52,6 +52,10 @@ class Config:
         self.LOCALMODEL_NAME = self.settings.get("local_mode_name")
         self.LOCALMODEL_MAX_TOKENS = self.settings.get("local_mode_max_tokens")
 
+        # モデルサーバー(src/server.py)。APサーバーと同じPCで動かす前提
+        self.LOCALMODEL_SERVER_PORT = self.settings.get("local_model_server_port", 5001)
+        self.LOCALMODEL_SERVER_URL = f"http://127.0.0.1:{self.LOCALMODEL_SERVER_PORT}/generate"
+
     def _load_system_settings(self) -> dict:
         settings_file = self.SETTINGS_DIR / "system_settings.yaml"
 
