@@ -15,7 +15,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 実行
 
-テスト、リンター、`requirements.txt` は存在しない。動作確認は実際に起動して画面から操作する。
+テスト、リンター、`requirements.txt` は存在しない。代わりに、検証用のスキルを `.claude/skills/` に置いている。
+
+- `verify-api`: 両リポジトリのコピーと専用の venv を一時フォルダに作り、本物のデータやモデルに触れずにAPIを実際に呼ぶ。`src/` を変更したら、PRの前に `static_check.py --base main` と `api_smoke.py` を通す。APIを足した・形を変えたときは `api_smoke.py` にも確認を足す。
+- `verify-ui`: Web側のJSの検査と、Edge を画面なしで起動してのスクリーンショット。
+
+スキルで確かめられないこと（本物のモデルの応答、サブPCでの起動、連続した画面操作）は、PRの説明に「未確認」と書いて、ユーザーに実機での確認を頼む。
 
 ```
 python src/app.py        # APサーバー（ポート5000、0.0.0.0）
@@ -75,6 +80,16 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 ### ログ
 
 `logger/log.py` の `log.info(...)` を使う（`print` は使わない。コンソールがcp932のため文字化け対策が入っている）。ローカルモデルへ送るたびに `log.debug_dump_all` が `logs/{ミリ秒}_prompt.txt` と `_params.json` を書き出すので、プロンプトの確認はここを見る。
+
+## 作業の進め方
+
+- **区切りごとにPRにする**: `main` から作業ブランチを切り、コミット → push → `gh pr create`。PRの説明には、変えたこと・確認したこと・確認できていないことを書く。マージはユーザーの動作確認のあと（`gh pr merge` は許可済みだが、確認を待たずにマージしない）。
+- **進め方や範囲は先に確認する**: 何をどこまでやるかを示して、了承を得てから着手する。作業中に見つけた別の不具合は、勝手に直さずに報告し、別のPRにするか相談する。
+- **サーバーとWebにまたがる変更は、同名のブランチでPRを2本作る**: 片方だけ新しい状態で使うと動かないので、その旨をPRに書く。
+- **コミットに入れるファイルは名前で指定する**: `git add -A` でまとめて入れない。動作確認でユーザーが保存した画像やYAML（Web側の `characters/` など）が作業ツリーに混ざっていることがある。
+- **ローカルの `main` を進めるときは `git fetch origin && git branch -f main origin/main && git switch main`**: 先に古い `main` へ切り替えてから `pull` すると、Git管理から外したファイル（`logs/`、`files/prompts/backups/`、`sessions_list.yaml`）が「削除されたファイル」として扱われ、ディスクからも消える。作業ブランチにいる状態から上の手順で進めれば消えない。
+- **このファイルもPRごとに直す**: 仕様や構成を変えたら、同じPRで `CLAUDE.md` の該当箇所を更新する。
+- コメントアウトされたコードと覚書のコメントは、ユーザーの備忘なので消さない。
 
 ## 現状の注意点
 

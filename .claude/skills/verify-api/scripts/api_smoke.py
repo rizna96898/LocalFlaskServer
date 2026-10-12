@@ -1,0 +1,204 @@
+"""全APIを一通り呼ぶスモークテスト。本物のデータには触れない。
+
+    py -3 .claude/skills/verify-api/scripts/api_smoke.py
+
+確かめること:
+- レスポンスの形（成功は ok: true、失敗は ok: false + message + HTTPステータス）
+- 設定系（テンプレート、世界・キャラクターの保存と読み込み、画像）
+- セッション系（一覧、作成、履歴、再送、削除）
+- 画像（キャラクター／プレイヤーの保存と読み込み、セッションに退避した画像）
+
+呼ばないもの:
+- /settings/select_base_path と /settings/open_system_yaml の成功時
+  （サーバーを動かしているPCにダイアログやエディタが開いてしまうため）
+- モデルの実際の応答（偽物に差し替えている）
+"""
+import io
+import sys
+from urllib.parse import quote
+
+import _env
+
+_env.utf8_stdout()
+_env.run_in_venv(_env.default_sandbox())
+
+import sandbox  # noqa: E402  (venv に入ってから読み込む)
+
+OLD_KEYS = ("status", "result", "error", "response", "status_code")
+
+
+def main() -> int:
+    box = sandbox.prepare()
+    client = box.client()          # モデルサーバーには接続できない扱い
+    t = sandbox.Checker()
+    web = box.base_chat_path
+    q = quote(web)
+
+    worlds = box.worlds()
+    characters = box.characters_with_images()
+    if not worlds or not characters:
+        print("世界設定、または画像を持つキャラクターが LLM_CHAT_CONSOLE に見つかりません。")
+        return 1
+    world_id, world = worlds[0]
+    world_name = world.get("世界名", "")
+    cid = characters[0]
+    icon_png = (box.web / "characters" / "icon" / cid / f"{cid}.png").read_bytes()
+    standing_png = (box.web / "characters" / "standing" / cid / f"{cid}_standing.png").read_bytes()
+    print(f"使用するデータ: 世界={world_id} キャラクター={cid}\n")
+
+    # ---------------------------------------------------------------- 基本
+    print("# 基本・設定")
+    t.api(client, "health", "get", "/health", 200, True)
+    for name in ("world_include_player", "world_goal_setting", "world_parameter_setting", "player", "character"):
+        t.api(client, f"テンプレート取得 {name}", "post", f"/settings/get_template_{name}_yaml", 200, True,
+              ["content"], json={"base_chat_path": web})
+    t.api(client, "テンプレート取得 パス未指定", "post", "/settings/get_template_player_yaml", 400, False, json={})
+    t.api(client, "load_model パス未指定", "post", "/settings/load_model", 400, False, json={})
+    t.api(client, "load_model 不正パス", "post", "/settings/load_model", 404, False, json={"base_path": web + "_x"})
+    t.api(client, "load_model", "post", "/settings/load_model", 200, True, json={"base_path": str(box.server)})
+    t.api(client, "open_system_yaml パス未指定", "post", "/settings/open_system_yaml", 400, False, json={})
+    t.api(client, "open_system_yaml 不正パス", "post", "/settings/open_system_yaml", 404, False,
+          json={"base_path": web + "_x"})
+    t.api(client, "check_stability GET", "get", "/v1/chat/check_stability", 200, True)
+    t.api(client, "check_stability POST", "post", "/v1/chat/check_stability", 200, True, json={})
+
+    # ---------------------------------------------------------------- 世界・キャラクター設定
+    print("\n# 世界・キャラクター設定")
+    import yaml
+
+    def dump(value):
+        return yaml.safe_dump(value, allow_unicode=True, sort_keys=False)
+
+    t.api(client, "世界設定の読み込み", "post", "/settings/load_world_settings", 200, True,
+          json={"base_chat_path": web, "world_id": world_id})
+    t.api(client, "キャラクター設定の読み込み", "post", "/settings/load_character_settings", 200, True,
+          ["character_id", "character_name", "character_info"], json={"base_chat_path": web, "character_id": cid})
+    t.api(client, "世界設定の保存", "post", "/settings/save_world_setting", 200, True, ["path"], json={
+        "base_chat_path": web, "world_id": "zz_verify", "world_name": "検証用の世界", "purpose": "p", "supplement": "s",
+        "include_data": dump(world["登場人物"]), "goal_data": dump(world["シナリオの目標"]),
+        "parameter_data": dump(world["シナリオパラメータ"]),
+        "past": "", "current": "いま", "future": "", "start_message": "開始"})
+    t.check("  保存した世界YAMLがある", (box.web / "worlds" / "settings" / "zz_verify_world.yaml").exists())
+    t.api(client, "世界設定の保存 ID不正", "post", "/settings/save_world_setting", 400, False,
+          json={"base_chat_path": web, "world_id": "a-b", "world_name": "x"})
+
+    # ---------------------------------------------------------------- 画像
+    print("\n# 画像の保存と読み込み")
+
+    def save_image(name, status, expect_file=None, with_file=True, **form):
+        data = dict(form)
+        if with_file:
+            data["file"] = (io.BytesIO(icon_png), "a.png")
+        body = t.api(client, name, "post", "/settings/save_image", status, status == 200,
+                     data=data, content_type="multipart/form-data")
+        if expect_file:
+            path = box.web / expect_file
+            t.check(f"  {expect_file} に保存された", path.exists() and path.read_bytes() == icon_png)
+        return body
+
+    save_image("キャラクターのアイコン", 200, "characters/icon/zz_c/zz_c.png",
+               base_chat_path=web, owner_type="character", owner_id="zz_c", image_type="icon")
+    save_image("キャラクターの立ち絵（owner_type 省略）", 200, "characters/standing/zz_c/zz_c_standing.png",
+               base_chat_path=web, owner_id="zz_c", image_type="standing")
+    save_image("プレイヤーのアイコン", 200, "players/icon/zz_p/zz_p.png",
+               base_chat_path=web, owner_type="player", owner_id="zz_p", image_type="icon")
+    save_image("プレイヤーの立ち絵", 200, "players/standing/zz_p/zz_p_standing.png",
+               base_chat_path=web, owner_type="player", owner_id="zz_p", image_type="standing")
+    save_image("base_chat_path なし", 400, owner_type="player", owner_id="zz_p", image_type="icon")
+    save_image("owner_type 不正", 400, base_chat_path=web, owner_type="world", owner_id="zz_p", image_type="icon")
+    save_image("image_type 不正", 400, base_chat_path=web, owner_type="player", owner_id="zz_p", image_type="thumb")
+    save_image("ID なし", 400, base_chat_path=web, owner_type="player", image_type="icon")
+    save_image("ID に ../ を含む", 400, base_chat_path=web, owner_type="player", owner_id="../../evil", image_type="icon")
+    save_image("ファイルなし", 400, with_file=False,
+               base_chat_path=web, owner_type="player", owner_id="zz_p", image_type="icon")
+    t.check("  サンドボックスの外に書き込まれていない", not list(box.root.rglob("evil*")))
+
+    def load_image(name, url, status, expect=None):
+        response = client.get(url)
+        ok = response.status_code == status
+        if status == 200:
+            ok = ok and response.data == expect
+        else:
+            ok = ok and (response.get_json(silent=True) or {}).get("ok") is False
+        t.check(name, ok, f"status {response.status_code}")
+
+    load_image("読み込み キャラクターのアイコン", f"/settings/load_image/icon/zz_c?base_chat_path={q}", 200, icon_png)
+    load_image("読み込み プレイヤーのアイコン", f"/settings/load_image/icon/zz_p?owner_type=player&base_chat_path={q}", 200, icon_png)
+    load_image("読み込み プレイヤーをキャラクターとして → 404", f"/settings/load_image/icon/zz_p?base_chat_path={q}", 404)
+    load_image("読み込み 存在しないID → 404", f"/settings/load_image/icon/nobody?base_chat_path={q}", 404)
+    load_image("読み込み base_chat_path なし → 400", "/settings/load_image/icon/zz_c", 400)
+    load_image("読み込み image_type 不正 → 400", f"/settings/load_image/thumb/zz_c?base_chat_path={q}", 400)
+
+    # ---------------------------------------------------------------- セッション
+    print("\n# セッション")
+    t.check("開始時点で sessions_list.yaml は無い", not (box.server / "files" / "systems" / "sessions_list.yaml").exists())
+    t.api(client, "一覧 world_id なし", "post", "/load_session_list", 400, False, json={})
+    t.api(client, "一覧（空）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
+    t.api(client, "world_start world_id なし", "post", "/world_start", 400, False, json={})
+    t.api(client, "world_start world_name なし", "post", "/world_start", 400, False, json={"world_id": world_id})
+    t.api(client, "world_start", "post", "/world_start", 200, True, ["world_id", "world_name", "sessions"],
+          json={"world_id": world_id, "world_name": world_name})
+
+    body = t.api(client, "chat_startup", "post", "/chat_startup", 200, True,
+                 ["session_id", "world_id", "world_name", "display_name"],
+                 json={"world_id": world_id, "base_chat_path": web})
+    sid = body.get("session_id", "")
+    listed = t.api(client, "一覧（1件）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
+    t.check("  作ったセッションが一覧にある", any(s.get("session_id") == sid for s in listed.get("sessions", [])))
+    t.api(client, "selected_session", "post", "/selected_session", 200, True, ["session_id", "message_list"],
+          json={"session_id": sid})
+
+    body = t.api(client, "new_chat", "post", "/new_chat", 200, True, ["session_id", "line_id", "message", "icon_data"],
+                 json={"session_id": sid})
+    t.check("  開始メッセージが世界設定と一致", body.get("message") == world.get("開始メッセージ"))
+    t.check("  裏の記憶生成スレッドが終わる", box.wait_background())
+    t.check("  記憶生成がモデルへ送信しようとした", len(box.llm_calls) >= 1, f"{len(box.llm_calls)} 回")
+
+    t.api(client, "chat（モデルサーバー停止中）→ 500", "post", "/chat", 500, False,
+          json={"session_id": sid, "message": "こんにちは"})
+    t.api(client, "re_chat", "post", "/re_chat", 200, True, ["session_id", "line_id", "message", "icon_data"],
+          json={"session_id": sid, "message": "てすと"})
+    body = t.api(client, "履歴に追記されている", "post", "/selected_session", 200, True, ["message_list"],
+                 json={"session_id": sid})
+    t.check("  履歴が1件以上ある", len(body.get("message_list", [])) >= 1)
+
+    # ---------------------------------------------------------------- セッションに退避した画像
+    print("\n# セッションに退避した画像")
+    load_image("アイコン = 新規チャット時点の画像", f"/session_image/{sid}/icon/{cid}", 200, icon_png)
+    load_image("立ち絵 = 新規チャット時点の画像", f"/session_image/{sid}/standing/{cid}", 200, standing_png)
+    client.post("/settings/save_image", content_type="multipart/form-data", data={
+        "base_chat_path": web, "owner_type": "character", "owner_id": cid, "image_type": "icon",
+        "file": (io.BytesIO(standing_png), "new.png")})
+    load_image("キャラクターの画像を変えても、進行中のセッションは元のまま", f"/session_image/{sid}/icon/{cid}", 200, icon_png)
+    sid2 = (client.post("/chat_startup", json={"world_id": world_id, "base_chat_path": web}).get_json() or {}).get("session_id", "")
+    load_image("新しいセッションには変更後の画像", f"/session_image/{sid2}/icon/{cid}", 200, standing_png)
+    load_image("存在しないキャラクター → 404", f"/session_image/{sid}/icon/nobody", 404)
+    load_image("存在しないセッション → 404", f"/session_image/no-such-session/icon/{cid}", 404)
+    load_image("image_type 不正 → 400", f"/session_image/{sid}/thumb/{cid}", 400)
+    load_image("キャラクターID 不正 → 400", f"/session_image/{sid}/icon/a.b", 400)
+    load_image("セッションID 不正 → 400", f"/session_image/a.b/icon/{cid}", 400)
+
+    # ---------------------------------------------------------------- 後片付け系
+    print("\n# 削除")
+    body = t.api(client, "delete_session", "post", "/delete_session", 200, True,
+                 ["deleted_session_ids", "failed_session_ids"], json={"session_ids": [sid, sid2]})
+    t.check("  2件とも削除された", sorted(body.get("deleted_session_ids", [])) == sorted([sid, sid2]))
+    body = t.api(client, "一覧（削除後）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
+    t.check("  一覧が空に戻った", body.get("sessions") == [])
+
+    # ---------------------------------------------------------------- 形の統一
+    print("\n# レスポンスの形")
+    samples = {
+        "/load_session_list": client.post("/load_session_list", json={"world_id": world_id}).get_json(),
+        "/world_start (失敗)": client.post("/world_start", json={}).get_json(),
+        "/chat (失敗)": client.post("/chat", json={"session_id": "x", "message": "x"}).get_json(),
+    }
+    for name, body in samples.items():
+        old = [k for k in OLD_KEYS if k in (body or {})]
+        t.check(f"{name} に旧形式のキーが無い", not old, f"残っているキー: {old}")
+
+    return t.finish()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
