@@ -7,6 +7,7 @@
 - 画像作成
 """
 
+import re
 from flask import send_file
 from pathlib import Path
 from helpers import response_checker
@@ -74,53 +75,67 @@ class ChatOrchestrator:
     def load_character_settings(self, payload):
         return self.chat_settings.load_character_settings(payload)
 
-    # キャラクター画像を読み込んで返却
-    def load_image(self, base_chat_path, image_type, character_id):
-        
-        base_dir = Path(base_chat_path) / "characters"
+    # 画像ファイルの場所を決める。問題があれば (None, エラーレスポンス) を返す
+    # owner_type: character(省略時) / player
+    # 保存先: {base_chat_path}/characters|players/icon|standing/{owner_id}/
+    def _resolve_image_path(self, base_chat_path, owner_type, image_type, owner_id):
+
+        if not base_chat_path:
+            return None, response_checker.response_error("base_chat_pathが未指定です", 400)
+
+        owner_dirs = {"character": "characters", "player": "players"}
+        owner_dir = owner_dirs.get(owner_type or "character")
+        if owner_dir is None:
+            return None, response_checker.response_error("owner_type が不正です", 400)
+
+        # IDはそのままフォルダ名になるので、画面の入力チェックと同じ文字種に限る
+        if not owner_id or not re.fullmatch(r"[A-Za-z0-9_]+", owner_id):
+            return None, response_checker.response_error("IDは半角英数字と_のみ使用できます", 400)
+
+        base_dir = Path(base_chat_path) / owner_dir
 
         if image_type == "icon":
-            save_dir = base_dir / "icon" / character_id
-            filename = f"{character_id}.png"
+            image_path = base_dir / "icon" / owner_id / f"{owner_id}.png"
 
         elif image_type == "standing":
-            save_dir = base_dir / "standing" / character_id
-            filename = f"{character_id}_standing.png"
+            image_path = base_dir / "standing" / owner_id / f"{owner_id}_standing.png"
 
         else:
-            return response_checker.response_error("image_type が不正です", 400)
+            return None, response_checker.response_error("image_type が不正です", 400)
 
-        image_path = save_dir / filename
+        return image_path, None
+
+    # キャラクター・プレイヤーの画像を読み込んで返却
+    def load_image(self, base_chat_path, owner_type, image_type, owner_id):
+
+        image_path, error = self._resolve_image_path(base_chat_path, owner_type, image_type, owner_id)
+        if error:
+            return error
 
         log.info(image_path)
-        
+
         if not image_path.exists():
             return response_checker.response_error("画像が存在しません", 404)
 
         return send_file(image_path)
 
-    # キャラクター画像を保存
-    def save_image(self, base_chat_path, image_type, character_id, file):
+    # キャラクター・プレイヤーの画像を保存
+    def save_image(self, base_chat_path, owner_type, image_type, owner_id, file):
 
-        base_dir = Path(base_chat_path) / "characters"
+        image_path, error = self._resolve_image_path(base_chat_path, owner_type, image_type, owner_id)
+        if error:
+            return error
 
-        if image_type == "icon":
-            save_dir = base_dir / "icon" / character_id
-            filename = f"{character_id}.png"
+        if file is None:
+            return response_checker.response_error("画像ファイルがありません", 400)
 
-        elif image_type == "standing":
-            save_dir = base_dir / "standing" / character_id
-            filename = f"{character_id}_standing.png"
+        image_path.parent.mkdir(parents=True, exist_ok=True)
 
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        save_path = save_dir / filename
-
-        file.save(save_path)
+        file.save(image_path)
 
         return response_checker.response_ok(
             message="画像を保存しました",
-            path=str(save_path),
+            path=str(image_path),
         )
 
     # モデルのロードを行う

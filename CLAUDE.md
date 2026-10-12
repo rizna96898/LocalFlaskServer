@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **APIパス**: `src/app.py` のルートと、Web側 `js/constant.js` の `API_PATHS` が1対1で対応する。追加・改名は両方に入れる。
 - **設定ファイルの実体はWeb側にある**: 世界・キャラクター・プレイヤーのYAMLと画像は `LLM_CHAT_CONSOLE` 配下（`worlds/`、`characters/`、`players/`）に保存される。サーバーはリクエストで受け取る `base_chat_path`（Web側の置き場所）を使ってそこを直接読み書きする。`base_path` は LocalFlaskServer 自身の置き場所で、設定画面のAPIだけが使う。
 - **YAMLのキーは日本語**: `登場人物` → `世界の登場人物`、`参照ID`、`参照種別`（`player` / `character` / `inline`）、`世界名`、`開始メッセージ`、`シナリオ本文` → `現在` など。Web側のテンプレートYAMLとサーバー側の読み取りコードでキー名を揃える。
+- **画像の置き場所**: `{base_chat_path}/characters|players/icon/{id}/{id}.png` と `.../standing/{id}/{id}_standing.png`。`/settings/save_image`（フォーム送信）と `/settings/load_image` は `owner_type`（`character` / `player`、省略時は `character`）で保存先を切り替える。場所の決定とIDの文字種チェックは `ChatOrchestrator._resolve_image_path` にまとめてある。
 
 ## 実行
 
