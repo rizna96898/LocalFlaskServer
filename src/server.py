@@ -3,20 +3,26 @@ from pathlib import Path
 from flask import Flask, jsonify
 from llama_cpp import Llama
 from flask import request
+from config import config
 from logger import log
 
 app = Flask(__name__)
 
 
-MODEL_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "models"
-    / "qween"
-    / "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf"
-)
+# 読み込むモデルは system_settings.yaml の local_model_path / local_mode_name で決める
+if not config.LOCALMODEL_PATH or not config.LOCALMODEL_NAME:
+    raise RuntimeError(
+        "local_model_path / local_mode_name が未設定です。"
+        "files/settings/system_settings.yaml を確認してください。"
+    )
+
+MODEL_PATH = Path(config.LOCALMODEL_PATH) / config.LOCALMODEL_NAME
+
+if not MODEL_PATH.is_file():
+    raise RuntimeError(f"モデルファイルが見つかりません: {MODEL_PATH}")
 
 
-log.info("[MODEL_SERVER] モデル読み込み開始")
+log.info(f"[MODEL_SERVER] モデル読み込み開始: {MODEL_PATH}")
 
 llm = Llama(
     model_path=str(MODEL_PATH),
@@ -69,7 +75,7 @@ def generate():
 if __name__ == "__main__":
     app.run(
         host="127.0.0.1",
-        port=5001,
+        port=config.LOCALMODEL_SERVER_PORT,
         debug=False,
         use_reloader=False,
     )

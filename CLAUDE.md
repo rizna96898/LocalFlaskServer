@@ -32,8 +32,9 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 `files/settings/system_settings.yaml`（gitignore対象、APIキーを含む）を `src/config.py` の `config` シングルトンが読む。`files/sessions/`、`files/settings/`、`temp/`、`logs/`、`files/prompts/backups/`、`files/systems/sessions_list.yaml`、`*.txt`、`*.log`、`*.gguf` もgitignore対象。
 
 - モデルの切り替えは `open_router_use_flag` / `local_model_use_flag` と、`ModelHandlingService("local" | "openrouter")` の引数で決まる。現在の呼び出し側はすべて `"local"` 固定。
-- モデルサーバーのURL（`http://127.0.0.1:5001/generate`）と、`src/server.py` のモデルパスはコードに直書きされている。
-- `port` を設定しても `app.run` は5000固定。
+- APサーバーのポートは `port`（未設定なら5000）。Web側の接続先の既定値は `http://127.0.0.1:5000` なので、変える場合は画面の「接続環境設定」も合わせる。
+- モデルサーバーが読み込むモデルは `local_model_path`（フォルダ）と `local_mode_name`（ファイル名）で決まる。未設定やファイルが無い場合、`src/server.py` は起動時にエラーで止まる。
+- モデルサーバーのポートは `local_model_server_port`（未設定なら5001）。`src/server.py` の待ち受けと、APサーバーからの送信先（`config.LOCALMODEL_SERVER_URL`）の両方がこれを使う。モデルサーバーはAPサーバーと同じPCで動かす前提（`127.0.0.1` 固定）。
 
 ## 構成
 
