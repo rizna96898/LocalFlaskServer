@@ -1,5 +1,20 @@
 # 現状
 
+<a id="top"></a>
+
+<!-- toc:start -->
+**目次**
+
+- [仮の実装（動くが、中身が本物ではない）](#s1)
+  - [チャットの返答（`/chat`）](#s1-1)
+  - [再送（`/re_chat`）](#s1-2)
+  - [話者の固定](#s1-3)
+  - [設定画面のボタン](#s1-4)
+- [未実装](#s2)
+- [既知の不具合](#s3)
+- [残っている半端なもの](#s4)
+<!-- toc:end -->
+
 仕様（[`spec/`](spec/)）に対して、今のコードがまだ届いていない所の一覧。
 サーバー（LocalFlaskServer）と画面（LLM_CHAT_CONSOLE）の両方をここにまとめる。
 
@@ -11,9 +26,17 @@
 
 最終更新: 2026-10-12
 
+<a id="s1"></a>
+
 ## 仮の実装（動くが、中身が本物ではない）
 
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+<a id="s1-1"></a>
+
 ### チャットの返答（`/chat`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - 返答として返しているのは、「誰に向けた発言か」を判定するプロンプトの結果そのもの。キャラクターとしての返答は作っていない。
   流れ: `ChatExecute.chat` → `ChatUtils.chat` → `ChatManager.main_chat` → `ChatPromptBuilder.create_discrimination_prompt`
@@ -21,12 +44,20 @@
 - 判定プロンプトが、置換前の `{characters}`、`{player_message}`、`{player_answer}` を含んだままモデルに送られている。
   置換したものを system 側に入れたうえで、元のひな形（`template`）も user 側にそのまま連結しているため。
 
+<a id="s1-2"></a>
+
 ### 再送（`/re_chat`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - モデルを呼ばず、固定文「モデルを使わないテスト返却。再送ボタン」を返す。
 - 返す固定文を履歴に書くとき、発言者がプレイヤーとして記録される（キャラクターの発言として書くべき所）。
 
+<a id="s1-3"></a>
+
 ### 話者の固定
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - `/new_chat`、`/chat`、`/re_chat` が返す発言者と、履歴に書く発言者が、`shirai_yui` / `白井　結` で固定。
   世界の登場人物が誰であっても、この名前で返る。
@@ -34,12 +65,20 @@
 - 世界の記憶を作るとき、プレイヤーのIDと名前が `kyuya` / `究也` で固定（`memory_manager.py`）。
   世界の登場人物の `player` が誰であっても、この名前で `world_memory.yaml` に入る。
 
+<a id="s1-4"></a>
+
 ### 設定画面のボタン
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - 「モデルロード」（`/settings/load_model`）: 設定YAMLがあることを確かめて「ロード完了」と返すだけ。
 - `/v1/chat/check_stability`: 常に「起動してないよ。」を返す。画面からは呼ばれていない。
 
+<a id="s2"></a>
+
 ## 未実装
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - **発言の前処理・後処理**: 発言ごとの世界の記憶の更新、キャラクターの記憶の更新、パラメーターの変動。
   プロンプトYAML（`files/prompts/chat/01_preprocess/`、`03_postprocess/`）はあるが、呼び出す処理が無い。
@@ -53,7 +92,11 @@
 - **メイン画面上部の「言語選択」「ラベル ON/OFF」**: 操作しても何も起きない（処理がつながっていない）。
   「タグ」はウィンドウが開くが、中の「登録／更新」は何もしない。
 
+<a id="s3"></a>
+
 ## 既知の不具合
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - **モデルが空の返事を返すことがある**: 初期記憶の生成（服装を決める段階など）で、モデルが改行だけを返し、3回試しても同じで失敗することがある。
   同じプロンプトで成功することも多く、毎回ではない。失敗すると `prepare_status.yaml` が `error` になる。
@@ -62,7 +105,11 @@
 - **存在しないセッションIDでも成功を返す**: `/new_chat`、`/re_chat`。
 - **プレイヤー画面のアイコンに切り抜きが無い**: キャラクター画面は正方形に切り抜いてから保存するが、プレイヤー画面は選んだ画像をそのまま保存する。
 
+<a id="s4"></a>
+
 ## 残っている半端なもの
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - `src/constant.py` の `Bootstrap.CHARACTER_ITEMS`、`CHARACTER_MEMORY`、`SUB_CHARACTER_MEMORY`: 指しているYAMLが無く、コードからも使われていない。
 - 設定項目名 `local_mode_name`: `local_model_name` の綴り違いに見える。直すと設定ファイル側の書き換えも必要。

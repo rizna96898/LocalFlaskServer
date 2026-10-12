@@ -1,19 +1,48 @@
 # プロンプトの仕様
 
+<a id="top"></a>
+
+<!-- toc:start -->
+**目次**
+
+- [基本の決まり](#s1)
+- [置き場所](#s2)
+- [YAMLの形](#s3)
+  - [差し込み口](#s3-1)
+- [プロンプトの一覧](#s4)
+  - [初期記憶の生成（`bootstrap/`）](#s4-1)
+  - [発言ごとの処理（`chat/`）](#s4-2)
+- [組み立て方](#s5)
+  - [ローカルモデルへ送る形](#s5-1)
+  - [返事の後始末](#s5-2)
+- [生成の設定](#s6)
+  - [最大トークン数](#s6-1)
+- [送った内容の記録](#s7)
+- [要確認の一覧（この文書の分）](#s8)
+<!-- toc:end -->
+
 モデルに送る文章を、どこに置き、どう組み立て、どんな設定で送るか。
 
 **この文書の位置づけ**: 2026-10-12 時点のコードから書き起こした下書き。
 判断がつかなかった所には **【要確認 Q番号】** を付けている（番号は [`api.md`](api.md) からの通し）。
 どの場面でどのプロンプトを使うかの流れは [`chat-flow.md`](chat-flow.md)、作りかけは [`../status.md`](../status.md) を見る。
 
+<a id="s1"></a>
+
 ## 基本の決まり
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - **プロンプトの文章は、すべて `files/prompts/` のYAMLに書く。コードには書かない。**
   文面を直すときに、Python を触らずに済むようにするため。
 - YAMLのファイル名は、`src/constant.py` に定数として持つ。YAMLを足す・改名するときは、ここも直す。
 - 使わなくなったプロンプトは `files/prompts/backups/` に移す（Git管理外）。
 
+<a id="s2"></a>
+
 ## 置き場所
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 ```
 files/prompts/
@@ -33,7 +62,11 @@ files/prompts/
 | `chat/02_main/` | `PromptsMain` | `config.MAIN` |
 | `chat/03_postprocess/` | `PromptsPostprocess` | `config.POSTPROCESS` |
 
+<a id="s3"></a>
+
 ## YAMLの形
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 1つのYAMLが、1回分の「モデルへの頼みごと」。使うキーは次のとおり。
 
@@ -49,7 +82,11 @@ files/prompts/
 
 - **【要確認 Q38】** 分類のプロンプトだけ `header` ではなく `message_header` という名前になっている。`header` に揃えてよいか。
 
+<a id="s3-1"></a>
+
 ### 差し込み口
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 `template` などの中の `{summary_data}` のような部分は、送る前にコードが実際の内容で置き換える。
 
@@ -69,9 +106,17 @@ files/prompts/
   `{first_mes}`、`{mes_example}` は SillyTavern のキャラクターカードの項目名の名残に見える。揃えるか。
   また、要約のプロンプトでは `{character_name}` に、system 側は表示名、本文側はIDが入る。どちらかに揃えるか。
 
+<a id="s4"></a>
+
 ## プロンプトの一覧
 
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+<a id="s4-1"></a>
+
 ### 初期記憶の生成（`bootstrap/`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | ファイル | 用途 | 使われているか |
 |---|---|---|
@@ -90,7 +135,11 @@ files/prompts/
 キャラクターの記憶は、「要約 → 場所 → 分類 → 服装 → …」と小分けにして1つずつ聞いている。
 1回で全部を聞くと、ローカルモデルでは形が崩れたり抜けが出たりしやすいため、と思われる（コードからの推測）。
 
+<a id="s4-2"></a>
+
 ### 発言ごとの処理（`chat/`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | ファイル | 用途（ファイル名から） | 使われているか |
 |---|---|---|
@@ -107,7 +156,11 @@ files/prompts/
 
 `chat/` のプロンプトは、ほとんどが文面だけ用意されていて、呼び出す処理がまだ無い（[`../status.md`](../status.md)）。
 
+<a id="s5"></a>
+
 ## 組み立て方
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 YAMLの各キーから、「system」と「user」の2つのメッセージを作る。
 
@@ -121,7 +174,11 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
 
 - **【要確認 Q40】** 組み立て方が2通りある（共通の関数を使うものと、各段階で個別につなげるもの）。1つに揃えるか。
 
+<a id="s5-1"></a>
+
 ### ローカルモデルへ送る形
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 ローカルモデルは「system」「user」という区別を受け取らないので、送る直前に1本の文章にまとめる（`messages_to_prompt`）。
 
@@ -139,7 +196,11 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
   合わせたものと思われ、今のモデル（Qwen3）が学習している会話の形式とは違う。モデルに合わせた形式に変えるか。
   空の返事（[`../status.md`](../status.md)）との関係は確かめていないが、試す価値はある。
 
+<a id="s5-2"></a>
+
 ### 返事の後始末
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 返ってきた文章から、次のものを取り除いてから使う（`cleanup_model_output`、`strip_code_block`）。
 
@@ -149,7 +210,11 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
 
 返事が空だった場合は、同じ内容であと2回まで送り直す。それでも空なら失敗とする。
 
+<a id="s6"></a>
+
 ## 生成の設定
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 用途ごとに、コード（`memory_builders/use_memory_constant.py`、`chat_builders/use_chat_constant.py`）で決めている。
 
@@ -169,7 +234,11 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
   モデルを替えると、同じ番号が別の語を指すので、意図しない語を抑えることになる。モデルごとに設定を持つべきか。
 - **【要確認 Q43】** 抑制の強さが、用途によって -5、-80、-90、-100 とまちまち。試しながら調整した結果と思われるが、それぞれの値に意図があるか。
 
+<a id="s6-1"></a>
+
 ### 最大トークン数
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 用途の種類（`task_type`）で決まる（`ModelHandlingService._get_default_max_tokens`）。
 
@@ -183,7 +252,11 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
 - **【要確認 Q44】** 今の呼び出しは、すべて `task_type` が `memory` になっている（誰に向けた発言かの判定も `memory`）。
   判定は `judge`、返答は `chat` にするのが本来の形か。
 
+<a id="s7"></a>
+
 ## 送った内容の記録
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 ローカルモデルへ送るたびに、`logs/` に2つのファイルを書く（`log.debug_dump_all`）。
 
@@ -192,7 +265,11 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
 
 プロンプトを直したときは、ここを見て、差し込み口が正しく置き換わっているかを確かめる。
 
+<a id="s8"></a>
+
 ## 要確認の一覧（この文書の分）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 番号 | 対象 | 確認したいこと |
 |---|---|---|
