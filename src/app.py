@@ -99,19 +99,23 @@ def save_character_setting():
 def load_character_settings():
     return orchestrator.load_character_settings(request.get_json())
 
-# キャラクター画像を読み込んで返却
-@app.get("/settings/load_image/<image_type>/<character_id>")
-def load_image(image_type, character_id):
+# キャラクター・プレイヤーの画像を読み込んで返却
+# owner_type は character(省略時) / player
+@app.get("/settings/load_image/<image_type>/<owner_id>")
+def load_image(image_type, owner_id):
     return orchestrator.load_image(request.args.get("base_chat_path"),
-                                   image_type, 
-                                   character_id)
+                                   request.args.get("owner_type"),
+                                   image_type,
+                                   owner_id)
 
-# キャラクター画像を保存
-@app.post("/settings/save_image") 
+# キャラクター・プレイヤーの画像を保存
+# 送信はフォーム(multipart)。owner_type は character(省略時) / player
+@app.post("/settings/save_image")
 def save_image():
-    return orchestrator.save_image(request.args.get("base_chat_path"),
-                                   request.form.get("image_type"), 
-                                   request.form.get("character_id"),
+    return orchestrator.save_image(request.form.get("base_chat_path"),
+                                   request.form.get("owner_type"),
+                                   request.form.get("image_type"),
+                                   request.form.get("owner_id"),
                                    request.files.get("file"))
 
 # モデルのロードを行う
@@ -145,6 +149,11 @@ def selected_session():
 @app.post("/selected_message")
 def selected_message():
     return orchestrator.selected_message(request.get_json())
+
+# チャット画面用。新規チャット時にセッションフォルダへ退避した画像を返却
+@app.get("/session_image/<session_id>/<image_type>/<character_id>")
+def load_session_image(session_id, image_type, character_id):
+    return orchestrator.load_session_image(session_id, image_type, character_id)
 
 #新しいチャットを開始する為の事前準備ファイルをLLM_CHAT_CONSOLEから持ってくる
 @app.post("/chat_startup")

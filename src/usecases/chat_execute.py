@@ -1,4 +1,6 @@
+import re
 import yaml
+from flask import send_file
 from uuid import uuid4
 import time
 import shutil
@@ -216,6 +218,34 @@ class ChatExecute:
             session_id=payload.get("session_id"),
             message_list=message_list,
         )
+
+    # チャット画面用の画像を返却する。
+    # chat_startup でセッションフォルダの picture/ に退避したものを読むので、
+    # 後からキャラクター画面で画像を変えても、進行中のチャットには影響しない。
+    def load_session_image(self, session_id, image_type, character_id):
+
+        # どちらもそのままパスの一部になるので、文字種を限定する
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", session_id or ""):
+            return response_checker.response_error("session_id が不正です", 400)
+
+        if not re.fullmatch(r"[A-Za-z0-9_]+", character_id or ""):
+            return response_checker.response_error("character_id が不正です", 400)
+
+        picture_dir = config.SESSIONS_DIR / session_id / "picture"
+
+        if image_type == "icon":
+            image_path = picture_dir / "icon" / f"{character_id}.png"
+
+        elif image_type == "standing":
+            image_path = picture_dir / "standing" / f"{character_id}_standing.png"
+
+        else:
+            return response_checker.response_error("image_type が不正です", 400)
+
+        if not image_path.exists():
+            return response_checker.response_error("画像が存在しません", 404)
+
+        return send_file(image_path)
 
     def chat_startup(self, payload):
         # """新規チャット作成（/new_chat）"""
