@@ -150,6 +150,11 @@ def selected_session():
 def selected_message():
     return orchestrator.selected_message(request.get_json())
 
+# チャット画面用。新規チャット時にセッションフォルダへ退避した画像を返却
+@app.get("/session_image/<session_id>/<image_type>/<character_id>")
+def load_session_image(session_id, image_type, character_id):
+    return orchestrator.load_session_image(session_id, image_type, character_id)
+
 #新しいチャットを開始する為の事前準備ファイルをLLM_CHAT_CONSOLEから持ってくる
 @app.post("/chat_startup")
 def chat_startup():

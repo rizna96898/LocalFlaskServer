@@ -167,6 +167,10 @@ class ChatOrchestrator:
     # メッセージをクリックした時のページネーション部分を展開して返却
     def selected_message(self, payload):
         return self.chat_execute.selected_message(payload)
+
+    # チャット画面用。新規チャット時にセッションフォルダへ退避した画像を返却
+    def load_session_image(self, session_id, image_type, character_id):
+        return self.chat_execute.load_session_image(session_id, image_type, character_id)
     
     #新しいチャットを開始する為の事前準備ファイルをLLM_CHAT_CONSOLEから持ってくる
     def chat_startup(self, payload):
