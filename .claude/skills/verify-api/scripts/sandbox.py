@@ -64,6 +64,7 @@ class Sandbox:
         self.sessions = self.server / "files" / "sessions"
         self.settings_file = self.server / "files" / "settings" / "system_settings.yaml"
         self.llm_calls = []                    # モデルへ送られたプロンプトの記録
+        self.llm_requests = []                 # 同じく、送信した内容の全体（prompt、stop、logit_bias、温度など）
         self._app = None
 
     # 画面が送る base_chat_path に相当する値
@@ -114,9 +115,13 @@ class Sandbox:
                     "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
                 }
 
+        requests_log = self.llm_requests
+
         def fake_post(url, *args, **kwargs):
-            prompt = (kwargs.get("json") or {}).get("prompt", "")
+            body = kwargs.get("json") or {}
+            prompt = body.get("prompt", "")
             calls.append(prompt)
+            requests_log.append(body)
             if llm is None:
                 raise requests.exceptions.ConnectionError("検証中のためモデルサーバーには接続しません")
             return _Response(llm(prompt) if callable(llm) else llm)

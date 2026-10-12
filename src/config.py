@@ -56,6 +56,16 @@ class Config:
         self.LOCALMODEL_SERVER_PORT = self.settings.get("local_model_server_port", 5001)
         self.LOCALMODEL_SERVER_URL = f"http://127.0.0.1:{self.LOCALMODEL_SERVER_PORT}/generate"
 
+        # ローカルモデルへ送る会話の形式。モデルが学習した形式に合わせる。
+        #   chatml : <|im_start|>role ... <|im_end|> で区切る形。Qwen 系など
+        #   alpaca : ### Instruction: / ### Response: の形。mythomax など
+        # 形式がモデルと合っていないと、返事が空になったり、延々と思考を書き続けたりする。
+        self.LOCALMODEL_PROMPT_FORMAT = str(self.settings.get("local_model_prompt_format", "chatml")).lower()
+
+        # true なら、返事の出だしに空の思考ブロックを置き、モデルに思考を書かせない（chatml のときだけ効く）。
+        # <think> を logit_bias で禁止する方法は使わない。禁止すると、モデルが第一手を失って空の返事を返す。
+        self.LOCALMODEL_NO_THINK = bool(self.settings.get("local_model_no_think", True))
+
     def _load_system_settings(self) -> dict:
         settings_file = self.SETTINGS_DIR / "system_settings.yaml"
 

@@ -24,7 +24,7 @@
 - 直したら、その項目をここから消す。新しく作りかけを残したら、ここに足す。
 - 「こう動くべき」という話は書かない。それは `spec/` に書く。意図がまだ決まっていないものは、`spec/` の【要確認】に入れる。
 
-最終更新: 2026-10-12
+最終更新: 2026-10-13
 
 <a id="s1"></a>
 
@@ -98,10 +98,6 @@
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-- **モデルが空の返事を返すことがある**: 初期記憶の生成（服装を決める段階など）で、モデルが改行だけを返し、3回試しても同じで失敗することがある。
-  同じプロンプトで成功することも多く、毎回ではない。失敗すると `prepare_status.yaml` が `error` になる。
-  未確認の仮説: 送信パラメーターの `logit_bias: {"248068": -100}`（思考タグを出させない指定と思われる）のせいで、
-  返事の出だしを封じられたモデルが、改行だけ出して終わっている。
 - **存在しないセッションIDでも成功を返す**: `/new_chat`、`/re_chat`。
 - **プレイヤー画面のアイコンに切り抜きが無い**: キャラクター画面は正方形に切り抜いてから保存するが、プレイヤー画面は選んだ画像をそのまま保存する。
 
@@ -113,6 +109,7 @@
 
 - `src/constant.py` の `Bootstrap.CHARACTER_ITEMS`、`CHARACTER_MEMORY`、`SUB_CHARACTER_MEMORY`: 指しているYAMLが無く、コードからも使われていない。
 - 設定項目名 `local_mode_name`: `local_model_name` の綴り違いに見える。直すと設定ファイル側の書き換えも必要。
+- `OpenRouterService`（未使用）: 送信内容に `logit_bias: {"248068": -100}` が直書きされている。この番号はローカルの Qwen の `<think>` で、OpenRouter のモデルでは別の語を指す。OpenRouter を使い始める前に外すこと。
 - `services/world/world_settings.py` と `services/template/template.py`: レスポンスの形は合っているが、`response_checker` を使わず `jsonify` を直接書いている。
 - 使われていない import が3つ（`verify-api` の `static_check.py` で表示される）。
 - ルートの `構成.txt`: 初期の構想で、今のフォルダ構成とは一致しない（Git管理外）。
