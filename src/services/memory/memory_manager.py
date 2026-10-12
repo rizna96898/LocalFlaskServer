@@ -25,7 +25,7 @@ from helpers import file_utils
 from services.llm.llm_service import ModelHandlingService
 from helpers import response_checker
 from memory_builders import use_memory_constant
-from memory_builders import lord_init_files
+from memory_builders import load_init_files
 from services.status import status_manager
 from logger import log
 
@@ -44,7 +44,7 @@ class MemoryManager:
         try:
             status_manager.mark_prepare_processing(session_id, "new_chat")
 
-            base_file_obj = lord_init_files.lord_base_world_yaml(session_id)
+            base_file_obj = load_init_files.load_base_world_yaml(session_id)
             # ここで必要なファイルをロードして受け渡しに使う
             system_file_path = config.SYSTEM_DIR / f"sessions_list.yaml"
             system_file_data = file_utils.load_yaml_file(system_file_path)
@@ -177,7 +177,7 @@ class MemoryManager:
                     current_stage = "character"
                     status_manager.mark_prepare_ready(session_id, "new_chat")
 
-                    base_file_obj = lord_init_files.lord_base_character_yaml(session_id)
+                    base_file_obj = load_init_files.load_base_character_yaml(session_id)
 
                     # キャラメモリ作成
                     # LocalLLMだとモデル性能が足りないので細かく
@@ -238,8 +238,8 @@ class MemoryManager:
                     continue
                 
                 # キャラの状況一覧を問い合わせ
-                log.info("[CHAR MEMORY MIDDLE SUMMERY] start")
-                temp_file = self.proc_middle_summery(base_file_obj,
+                log.info("[CHAR MEMORY MIDDLE SUMMARY] start")
+                temp_file = self.proc_middle_summary(base_file_obj,
                                                      character,
                                                      char_id,
                                                      scenario,
@@ -247,7 +247,7 @@ class MemoryManager:
                                                      start_message,
                                                      temp_dir,
                                                      session_id,)
-                log.info("[CHAR MEMORY MIDDLE SUMMERY] end")
+                log.info("[CHAR MEMORY MIDDLE SUMMARY] end")
 
                 # 現在の状態(current_state)の作成
                 # 場所(location)の特定
@@ -346,7 +346,7 @@ class MemoryManager:
         log.info("_run_character_memory_create_sync end")
 
     # 要約の問い合わせ
-    def proc_middle_summery(self, 
+    def proc_middle_summary(self, 
                             base_file_obj: Dict[str, any] = {},
                             character: Dict[str, any] = {},
                             char_id: str = "",
@@ -356,27 +356,27 @@ class MemoryManager:
                             temp_dir: str = "",
                             session_id: str = ""):
         
-        log.info("[CHAR MEMORY MIDDLE SUMMERY] replace start")
-        result = self.replace_middle_summery(base_file_obj,
+        log.info("[CHAR MEMORY MIDDLE SUMMARY] replace start")
+        result = self.replace_middle_summary(base_file_obj,
                                              character,
                                              char_id,
                                              scenario,
                                              scenario_parameter,
                                              start_message,)              
-        log.info("[CHAR MEMORY MIDDLE SUMMERY] replace end")
+        log.info("[CHAR MEMORY MIDDLE SUMMARY] replace end")
         
-        log.info("[CHAR MEMORY MIDDLE SUMMERY] send message start")
-        parameters = use_memory_constant.get_character_midle_summery_send_parameters(result["system_prompt"], result["template_prompt"])
+        log.info("[CHAR MEMORY MIDDLE SUMMARY] send message start")
+        parameters = use_memory_constant.get_character_middle_summary_send_parameters(result["system_prompt"], result["template_prompt"])
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         list_input = string_utils.extract_list_items(response_text)
-        log.info("[CHAR MEMORY MIDDLE SUMMERY] send message end")
+        log.info("[CHAR MEMORY MIDDLE SUMMARY] send message end")
         
         # config.SESSIONS_DIR = files/sessions 前提なら、プロジェクト直下の temp
         temp_file = temp_dir / f"{char_id}_{session_id}_middle.yaml"
         temp_dir.mkdir(parents=True, exist_ok=True)
         # 書き込み
-        log.info(f"[CHAR MEMORY MIDDLE SUMMERY] saved: {temp_file}")
+        log.info(f"[CHAR MEMORY MIDDLE SUMMARY] saved: {temp_file}")
         with temp_file.open("w", encoding="utf-8") as f:
             yaml.safe_dump(list_input, f, allow_unicode=True, sort_keys=False)
 
@@ -395,7 +395,7 @@ class MemoryManager:
         for temp_categorize_str in temp_categorize_data:
             temp_str = base_file_obj["prompt_categorize_yaml"].get("message_header") + "\n" + temp_categorize_str + "\n" + base_file_obj["prompt_categorize_yaml"].get("tail_template")
 
-            parameters = use_memory_constant.get_character_midle_categorize_send_parameters(system_prompt, temp_str)
+            parameters = use_memory_constant.get_character_middle_categorize_send_parameters(system_prompt, temp_str)
 
             response_text = self.model_handling_service.send_message(parameters)
             response_text = string_utils.strip_code_block(response_text)
@@ -449,7 +449,7 @@ class MemoryManager:
 
         # # ここでreplaceが必要かな？
         # # 後共通化できそう？
-        parameters = use_memory_constant.get_character_midle_location_send_parameters(system_prompt, temp_str)
+        parameters = use_memory_constant.get_character_middle_location_send_parameters(system_prompt, temp_str)
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -476,7 +476,7 @@ class MemoryManager:
         temp_str = temp_str.replace("{character_data}", character_data)
         temp_str = temp_str + "\n" + tail_str
 
-        parameters = use_memory_constant.get_character_midle_clothing_send_parameters(system_prompt, temp_str)
+        parameters = use_memory_constant.get_character_middle_clothing_send_parameters(system_prompt, temp_str)
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -524,7 +524,7 @@ class MemoryManager:
 
         temp_str = temp_str + "\n" + tail_str
 
-        parameters = use_memory_constant.get_character_midle_items_send_parameters(system_prompt, temp_str)
+        parameters = use_memory_constant.get_character_middle_items_send_parameters(system_prompt, temp_str)
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -555,7 +555,7 @@ class MemoryManager:
         temp_str = temp_str + "\n" + tail_str
 
         log.info("置換後", temp_str)
-        parameters = use_memory_constant.get_character_midle_target_send_parameters(system_prompt, temp_str)
+        parameters = use_memory_constant.get_character_middle_target_send_parameters(system_prompt, temp_str)
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -589,7 +589,7 @@ class MemoryManager:
 
         temp_str = temp_str + "\n" + tail_str
 
-        parameters = use_memory_constant.get_character_midle_currency_send_parameters(system_prompt, temp_str)
+        parameters = use_memory_constant.get_character_middle_currency_send_parameters(system_prompt, temp_str)
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -620,7 +620,7 @@ class MemoryManager:
         return {"変動パラメータ": result}
 
     # システムプロンプトとテンプレートプロンプトの置換
-    def replace_middle_summery(self, 
+    def replace_middle_summary(self, 
                                base_file_obj: Dict[str, any] = {},
                                character: Dict[str, any] = {},
                                char_id: str = "",
@@ -684,10 +684,10 @@ class MemoryManager:
     #                 config.SESSIONS_DIR / session_id / "world_memory.yaml"
     #             ) or {}
     #             prompt_data = file_utils.load_yaml_file(
-    #                 config.PREPROCESS / PromptsPreprocess.PLAYER_IDENTIFYCATION
+    #                 config.PREPROCESS / PromptsPreprocess.PLAYER_IDENTIFICATION
     #             ) or {}
 
-    #             log.info("prompt_path", config.BOOTSTRAP / PromptsPreprocess.PLAYER_IDENTIFYCATION)
+    #             log.info("prompt_path", config.BOOTSTRAP / PromptsPreprocess.PLAYER_IDENTIFICATION)
     #             log.info("prompt_data", prompt_data)
 
     #             world_participants = string_utils.build_characters_text(world_memory["current_state"]["participants"])

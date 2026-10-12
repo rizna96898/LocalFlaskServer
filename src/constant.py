@@ -5,7 +5,7 @@
 # - YAMLキーの一元管理
 # - 将来的に relationships → character_relationships に変更予定
 class Bootstrap:
-    MEMORY_MIDDLE_SUMMERY = "00_query_create_character_memory_middle_summery.yaml"
+    MEMORY_MIDDLE_SUMMARY = "00_query_create_character_memory_middle_summary.yaml"
     MEMORY_MIDDLE_CATEGORIZE = "00_query_create_character_memory_middle_categorize.yaml"
     MEMORY_MIDDLE_LOCATION = "00_query_create_character_memory_middle_location.yaml"
     MEMORY_MIDDLE_CLOTHING = "00_query_create_character_memory_middle_clothing.yaml"
@@ -21,7 +21,7 @@ class Bootstrap:
       
 class PromptsPreprocess:
     WORLD_MEMORY          = "01_query_update_world_memory.yaml"
-    PLAYER_IDENTIFYCATION = "99_query_judge_player_identification.yaml"
+    PLAYER_IDENTIFICATION = "99_query_judge_player_identification.yaml"
 
 class PromptsMain:
     VALIDATION_CHAT          = "01_query_validation_chat.yaml"
