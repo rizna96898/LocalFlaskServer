@@ -1,5 +1,51 @@
 # API仕様
 
+<a id="top"></a>
+
+<!-- toc:start -->
+**目次**
+
+- [共通ルール](#s1)
+  - [呼び出し方](#s1-1)
+  - [レスポンスの形](#s1-2)
+  - [場所を表す2つの項目](#s1-3)
+  - [ID](#s1-4)
+- [一覧](#s2)
+- [接続・設定画面](#s3)
+  - [`GET /health`](#s3-1)
+  - [`POST /settings/select_base_path`](#s3-2)
+  - [`POST /settings/open_system_yaml`](#s3-3)
+  - [`POST /settings/load_model`](#s3-4)
+- [テンプレート](#s4)
+  - [`POST /settings/get_template_{名前}_yaml`](#s4-1)
+- [世界設定](#s5)
+  - [`POST /settings/save_world_setting`](#s5-1)
+  - [`POST /settings/load_world_settings`](#s5-2)
+- [キャラクター設定・プレイヤー設定](#s6)
+  - [`POST /settings/save_character_setting`](#s6-1)
+  - [`POST /settings/load_character_settings`](#s6-2)
+  - [`POST /settings/save_player_setting`](#s6-3)
+  - [一覧と削除について](#s6-4)
+- [画像](#s7)
+  - [`POST /settings/save_image`](#s7-1)
+  - [`GET /settings/load_image/{image_type}/{owner_id}`](#s7-2)
+  - [`GET /session_image/{session_id}/{image_type}/{character_id}`](#s7-3)
+- [セッション](#s8)
+  - [`POST /world_start`](#s8-1)
+  - [`POST /load_session_list`](#s8-2)
+  - [`POST /chat_startup`](#s8-3)
+  - [`POST /new_chat`](#s8-4)
+  - [`POST /chat`](#s8-5)
+  - [`POST /re_chat`](#s8-6)
+  - [`POST /selected_session`](#s8-7)
+  - [`POST /selected_message`](#s8-8)
+  - [`POST /delete_session`](#s8-9)
+  - [履歴のファイル](#s8-10)
+- [その他](#s9)
+  - [`/v1/chat/check_stability`（GET / POST）](#s9-1)
+- [要確認の一覧](#s10)
+<!-- toc:end -->
+
 サーバー（LocalFlaskServer）が公開し、画面（LLM_CHAT_CONSOLE）が呼ぶAPIの仕様。
 
 **この文書の位置づけ**: 2026-10-12 時点のコードから書き起こした下書き。「コードが今こう動いている」という事実をまとめたもので、
@@ -9,15 +55,27 @@
 
 作りかけ・未実装・既知の不具合は、この文書ではなく [`../status.md`](../status.md) に書く。
 
+<a id="s1"></a>
+
 ## 共通ルール
 
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+<a id="s1-1"></a>
+
 ### 呼び出し方
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - 接続先は画面の「接続環境設定」で決める（未設定なら `http://127.0.0.1:5000`）。
 - 特に断りがなければ `POST`、本文は JSON（`Content-Type: application/json`）。
 - 画像の保存だけはフォーム送信（`multipart/form-data`）。
 
+<a id="s1-2"></a>
+
 ### レスポンスの形
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | | 本文 | HTTPステータス |
 |---|---|---|
@@ -29,7 +87,11 @@
 - 画像を返すAPIは、成功時はJSONではなく画像そのもの（`image/png`）を返す。失敗時は上の形のJSON。
 - サーバー側では `helpers/response_checker.py` の `response_ok` / `response_error` で返す。
 
+<a id="s1-3"></a>
+
 ### 場所を表す2つの項目
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 項目 | 指すもの | 使うAPI |
 |---|---|---|
@@ -38,11 +100,19 @@
 
 どちらも **サーバーを動かしているPCから見たパス** を送る。画面の「接続環境設定」に保存した値を使う。
 
+<a id="s1-4"></a>
+
 ### ID
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 世界ID・キャラクターID・プレイヤーIDは、半角英数字と `_` だけ。そのままファイル名やフォルダ名になる。
 
+<a id="s2"></a>
+
 ## 一覧
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | パス | 概要 | 呼ぶ画面 |
 |---|---|---|
@@ -74,16 +144,28 @@
 
 ---
 
+<a id="s3"></a>
+
 ## 接続・設定画面
 
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+<a id="s3-1"></a>
+
 ### `GET /health`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 サーバーが動いているかを確かめる。
 
 - 返却: `{"ok": true, "status": "ok"}`
 - **【要確認 Q1】** `status: "ok"` は、レスポンスの形を統一する前の名残に見える。画面は `ok` しか見ていない。消してよいか。
 
+<a id="s3-2"></a>
+
 ### `POST /settings/select_base_path`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 **サーバーを動かしているPCの画面に**、フォルダ選択ダイアログを開く。選ばれたパスを返す。
 
@@ -95,7 +177,11 @@
 - 設定画面の「ベースパス」「ベースチャットパス」の両方の「エクスプローラー」ボタンが、このAPIを使う。
 - **【要確認 Q2】** ダイアログの題名が、どちらのボタンから開いても「LOCAL_FLASK_SERVER のフォルダを選択」になる。ベースチャットパスを選ぶときも同じ題名でよいか。
 
+<a id="s3-3"></a>
+
 ### `POST /settings/open_system_yaml`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 `system_settings.yaml` を、**サーバーを動かしているPCで**、関連付けられたエディタで開く。
 
@@ -106,7 +192,11 @@
 - 返却: `{"ok": true, "full_path": "開いたファイルのパス"}`
 - 失敗: `base_path` が無い（400）、ファイルが無い（404）
 
+<a id="s3-4"></a>
+
 ### `POST /settings/load_model`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 項目 | 必須 | 内容 |
 |---|---|---|
@@ -120,9 +210,17 @@
 
 ---
 
+<a id="s4"></a>
+
 ## テンプレート
 
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+<a id="s4-1"></a>
+
 ### `POST /settings/get_template_{名前}_yaml`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 入力欄の初期値にするテンプレートYAMLの中身を、文字列で返す。
 
@@ -143,9 +241,17 @@
 
 ---
 
+<a id="s5"></a>
+
 ## 世界設定
 
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+<a id="s5-1"></a>
+
 ### `POST /settings/save_world_setting`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 世界設定を `worlds/settings/{world_id}_world.yaml` に保存する。同じIDがあれば上書きする。
 
@@ -169,7 +275,11 @@
 - **【要確認 Q4】** 登場人物が指すキャラクターやプレイヤーが実在するかは、保存時に確かめていない（存在しなければ表示名が空のまま保存される）。
   実在しないと、後の `/chat_startup` で失敗する。保存時に弾くべきか。
 
+<a id="s5-2"></a>
+
 ### `POST /settings/load_world_settings`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 項目 | 必須 | 内容 |
 |---|---|---|
@@ -194,9 +304,17 @@
 
 ---
 
+<a id="s6"></a>
+
 ## キャラクター設定・プレイヤー設定
 
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+<a id="s6-1"></a>
+
 ### `POST /settings/save_character_setting`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 キャラクター設定を `characters/settings/{character_id}_setting.yaml` に保存する。
 
@@ -212,7 +330,11 @@
 - **名前欄は画面の入力で上書きする**: `content` に `名前` が書いてあっても、`名前` → `表示名` は `character_name`、
   `名前` → `識別子` は `character_id` で置き換える。`ふりがな` は、無ければ空として足す。
 
+<a id="s6-2"></a>
+
 ### `POST /settings/load_character_settings`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 項目 | 必須 | 内容 |
 |---|---|---|
@@ -222,7 +344,11 @@
 - 返却: `{"ok": true, "character_id": ..., "character_name": ..., "character_info": "設定YAML全体の文字列"}`
 - **【要確認 Q6】**（世界設定と同じ）設定YAMLが無い場合、500（JSONではない）になる。
 
+<a id="s6-3"></a>
+
 ### `POST /settings/save_player_setting`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 プレイヤー設定を `players/settings/{player_id}_setting.yaml` に保存する。
 項目は `player_id`、`player_name`、`content`、`base_chat_path`。動きはキャラクター設定の保存と同じ。
@@ -230,7 +356,11 @@
 - **【要確認 Q7】** プレイヤー設定を**読み込む**APIが無い（キャラクターにはある）。プレイヤー画面は、ブラウザに保存した内容だけを表示している。
   意図したものか、作り忘れか。
 
+<a id="s6-4"></a>
+
 ### 一覧と削除について
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - **【要確認 Q8】** 世界・キャラクター・プレイヤーの**一覧を返すAPIが無い**。各画面の一覧は、ブラウザの `localStorage`
   （`world_list`、`char_list`、`player_list`）に持っている。そのため、別のブラウザや別のPCで開くと一覧が空になり、
@@ -239,7 +369,11 @@
 
 ---
 
+<a id="s7"></a>
+
 ## 画像
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 画像の置き場所は2系統ある。
 
@@ -252,7 +386,11 @@
 **チャット画面は退避した画像だけを使う**ので、後からキャラクター画面で画像を変えても、進行中のチャットの見た目は変わらない。
 変更後の画像は、次に作るセッションから使われる。
 
+<a id="s7-1"></a>
+
 ### `POST /settings/save_image`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 フォーム送信（`multipart/form-data`）。
 
@@ -269,7 +407,11 @@
 - 拡張子に関わらず、`.png` という名前で保存する（中身の変換はしない）。
 - キャラクターのアイコンは、画面側で正方形（512×512）に切り抜いてから送る。プレイヤーのアイコンと立ち絵は、選んだ画像をそのまま送る。
 
+<a id="s7-2"></a>
+
 ### `GET /settings/load_image/{image_type}/{owner_id}`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 指定 | 必須 | 内容 |
 |---|---|---|
@@ -282,7 +424,11 @@
 - 失敗: 指定が不正（400）、画像が無い（404）
 - 画面側は、保存直後に古い画像が表示されないよう、URLの末尾に毎回違う値（`&v=時刻`）を付けて呼ぶ。
 
+<a id="s7-3"></a>
+
 ### `GET /session_image/{session_id}/{image_type}/{character_id}`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 チャット画面のアイコンと立ち絵。セッションに退避した画像を返す。
 
@@ -292,7 +438,11 @@
 
 ---
 
+<a id="s8"></a>
+
 ## セッション
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 セッションは、1つの世界で始めた1回分のチャット。実体は `files/sessions/{セッションID}/` のフォルダで、
 全セッションの一覧は `files/systems/sessions_list.yaml` に持つ。
@@ -306,7 +456,11 @@
 | `world_id`、`world_name` | 属する世界 |
 | `created_at`、`updated_at` | `2026年10月12日 10:00` の形の文字列 |
 
+<a id="s8-1"></a>
+
 ### `POST /world_start`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 メイン画面で世界を選んだときに呼ぶ。
 
@@ -320,7 +474,11 @@
 - **【要確認 Q10】** `/load_session_list` と返す中身がほぼ同じで、`world_name` は必須なのにそのまま返すだけ。
   「世界を選んだ」ことをサーバーが覚える予定があったのか、1つにまとめてよいか。
 
+<a id="s8-2"></a>
+
 ### `POST /load_session_list`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 項目 | 必須 | 内容 |
 |---|---|---|
@@ -328,7 +486,11 @@
 
 - 返却: `{"ok": true, "sessions": [その世界のセッション一覧]}`。一覧ファイルが無ければ空の配列。
 
+<a id="s8-3"></a>
+
 ### `POST /chat_startup`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 セッションを新しく作る。新規チャットの**1段階目**。
 
@@ -358,7 +520,11 @@
 - **【要確認 Q13】** `inline` の人物だけ、ファイル名が `{ID}.yaml` で、他（`{ID}_setting.yaml`）と違う。揃えるべきか。
 - **【要確認 Q14】** プレイヤーの画像はコピーしていない（プレイヤーのアイコンをチャットに出す機能が未実装のため）。
 
+<a id="s8-4"></a>
+
 ### `POST /new_chat`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 チャットを開始する。新規チャットの**2段階目**。
 
@@ -375,7 +541,11 @@
 - 返却: `{"ok": true, "session_id": ..., "line_id": "1", "message": "開始メッセージ", "icon_data": {"character_id": ..., "character_name": ...}}`
 - **【要確認 Q15】** 同じセッションに2回呼ぶと、開始メッセージがもう一度履歴に足され、記憶の生成もやり直される。2回目は弾くべきか。
 
+<a id="s8-5"></a>
+
 ### `POST /chat`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 項目 | 必須 | 内容 |
 |---|---|---|
@@ -386,14 +556,22 @@
 - プレイヤーの発言と返答を、この順で履歴に足す。返答の生成に失敗した場合は、どちらも履歴に残さない。
 - 返答の生成そのものは作りかけ。[`../status.md`](../status.md) を参照。
 
+<a id="s8-6"></a>
+
 ### `POST /re_chat`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 項目と返却の形は `/chat` と同じ。中身は作りかけ。[`../status.md`](../status.md) を参照。
 
 - **【要確認 Q16】** 「再送」の本来の動きは何か。今は、送られた `message` をプレイヤーの発言としてもう一度履歴に足している。
   考えられるのは「最後の返答だけを作り直す（履歴の最後の返答を置き換える）」「最後の発言からやり直す」など。
 
+<a id="s8-7"></a>
+
 ### `POST /selected_session`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 セッションを開く。履歴を返す。
 
@@ -412,7 +590,11 @@
 - **【要確認 Q17】** 履歴がちょうど10の倍数のとき、本文が1件も返らず、印だけになる（20件なら印 `1`、`2` のみ）。
   開いた直後に直近の会話が見えない。最後の10件は本文で返すべきか。
 
+<a id="s8-8"></a>
+
 ### `POST /selected_message`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 畳まれた履歴の1区切り（10件）を返す。
 
@@ -424,7 +606,11 @@
 - 返却: `{"ok": true, "session_id": ..., "message_list": [10件]}`
 - 画面は、クリックされた印を、返ってきた10件で置き換える。
 
+<a id="s8-9"></a>
+
 ### `POST /delete_session`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 項目 | 必須 | 内容 |
 |---|---|---|
@@ -436,7 +622,11 @@
 - **【要確認 Q18】** 一覧にはあるがフォルダが無いセッションは、一覧からは消えるが、`deleted_session_ids` にも `failed_session_ids` にも入らない。
   画面には「削除できた」と伝わらないので、一覧に残って見える可能性がある。
 
+<a id="s8-10"></a>
+
 ### 履歴のファイル
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 `files/sessions/{セッションID}/history.json` に、発言を1件ずつ足していく。
 
@@ -455,9 +645,17 @@
 
 ---
 
+<a id="s9"></a>
+
 ## その他
 
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+<a id="s9-1"></a>
+
 ### `/v1/chat/check_stability`（GET / POST）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 画像生成（Stability Matrix）の起動確認用。
 
@@ -467,7 +665,11 @@
 
 ---
 
+<a id="s10"></a>
+
 ## 要確認の一覧
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 番号 | 対象 | 確認したいこと |
 |---|---|---|

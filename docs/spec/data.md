@@ -1,12 +1,33 @@
 # データの仕様
 
+<a id="top"></a>
+
+<!-- toc:start -->
+**目次**
+
+- [全体像](#s1)
+- [元データ（LLM_CHAT_CONSOLE 配下）](#s2)
+  - [世界設定（`{世界ID}_world.yaml`）](#s2-1)
+  - [キャラクター設定・プレイヤー設定（`{ID}_setting.yaml`）](#s2-2)
+- [実行時データ（LocalFlaskServer の `files/`）](#s3)
+  - [セッションフォルダ（`files/sessions/{セッションID}/`）](#s3-1)
+  - [セッション一覧（`files/systems/sessions_list.yaml`）](#s3-2)
+  - [サーバーの設定（`files/settings/system_settings.yaml`）](#s3-3)
+  - [記録と途中結果](#s3-4)
+- [要確認の一覧（この文書の分）](#s4)
+<!-- toc:end -->
+
 ファイルとフォルダの置き場所、設定YAMLの形。データベースは使わず、すべてファイルで持つ。
 
 **この文書の位置づけ**: 2026-10-12 時点のコードと、テンプレートYAMLに書かれたコメントから書き起こした下書き。
 判断がつかなかった所には **【要確認 Q番号】** を付けている（番号は [`api.md`](api.md) からの通し）。
 作りかけ・未実装は [`../status.md`](../status.md) に書く。
 
+<a id="s1"></a>
+
 ## 全体像
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 データは2か所に分かれる。
 
@@ -20,7 +41,11 @@
 
 サーバーは LLM_CHAT_CONSOLE の場所を自分では知らない。画面がリクエストのたびに `base_chat_path` として送る。
 
+<a id="s2"></a>
+
 ## 元データ（LLM_CHAT_CONSOLE 配下）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 ```
 LLM_CHAT_CONSOLE/
@@ -42,7 +67,11 @@ LLM_CHAT_CONSOLE/
 
 ファイル名の規則（`_world.yaml`、`_setting.yaml`、`_standing.png`）は、サーバーのコードが前提にしている。
 
+<a id="s2-1"></a>
+
 ### 世界設定（`{世界ID}_world.yaml`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | キー | 中身 |
 |---|---|
@@ -119,7 +148,11 @@ LLM_CHAT_CONSOLE/
 - 新規チャット時に読み込んで記憶生成へ渡しているが、チャット中の変動はまだ無い（[`../status.md`](../status.md)）。
 - **【要確認 Q25】** テンプレートのコメントでは画像の置き場所が `world/icons`、実際のフォルダは `worlds/icons`。フォルダ名に合わせてコメントを直してよいか。
 
+<a id="s2-2"></a>
+
 ### キャラクター設定・プレイヤー設定（`{ID}_setting.yaml`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 2つは同じ形。
 
@@ -148,7 +181,11 @@ LLM_CHAT_CONSOLE/
 - `名前` の `表示名` と `識別子` は、保存のたびに画面の入力で上書きする。
 - 画面の入力欄では、簡易的なチェック（1行に `:` は1つまで、タブ不可）をしてから送る。
 
+<a id="s3"></a>
+
 ## 実行時データ（LocalFlaskServer の `files/`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 ```
 LocalFlaskServer/
@@ -163,7 +200,11 @@ LocalFlaskServer/
 └─ models/                         モデルファイル(.gguf)。Git管理外
 ```
 
+<a id="s3-1"></a>
+
 ### セッションフォルダ（`files/sessions/{セッションID}/`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | ファイル | 中身 | 作られる時 |
 |---|---|---|
@@ -212,7 +253,11 @@ LocalFlaskServer/
 - **【要確認 Q26】** `inline`（サブ・モブ）の人物には記憶を作っていない。テンプレートのコメント「mob はカード等を作らない」に照らすと、
   `sub` には作り、`mob` には作らない、が本来の形か。
 
+<a id="s3-2"></a>
+
 ### セッション一覧（`files/systems/sessions_list.yaml`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 ```yaml
 sessions:
@@ -226,7 +271,11 @@ sessions:
 
 ファイルやフォルダが無い状態から始めても動く（最初のセッションを作るときに作られる）。
 
+<a id="s3-3"></a>
+
 ### サーバーの設定（`files/settings/system_settings.yaml`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 項目 | 中身 | 未設定のとき |
 |---|---|---|
@@ -248,7 +297,11 @@ sessions:
 - **【要確認 Q27】** `log_level`、`enable_image_generation`、`characters_dir`、`openrouter_max_tokens`、`local_mode_max_tokens` は、
   設定にはあるが、コードのどこからも読まれていない。残す予定のものか、消してよいものか。
 
+<a id="s3-4"></a>
+
 ### 記録と途中結果
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 場所 | 中身 |
 |---|---|
@@ -261,7 +314,11 @@ sessions:
 
 - **【要確認 Q28】** `logs/` と `temp/` は増え続け、消す仕組みが無い。セッションを削除しても、対応する `temp/` のファイルは残る。
 
+<a id="s4"></a>
+
 ## 要確認の一覧（この文書の分）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
 
 | 番号 | 対象 | 確認したいこと |
 |---|---|---|
