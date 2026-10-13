@@ -210,10 +210,9 @@ node_modules/
 files/sessions/
 *.log
 .env
-# files/settings/ は、APIキーの入った system_settings.yaml があるので丸ごと管理しない。
-# 生成の設定(generation.yaml)だけは、秘密の値を含まないので例外として管理する。
-files/settings/*
-!files/settings/generation.yaml
+# 秘密の値(APIキーなど)は secrets.yaml にだけ書き、Git では管理しない。
+# それ以外の設定(system_settings.yaml, generation.yaml)は管理する。
+files/settings/secrets.yaml
 temp/
 *.txt
 *.gguf

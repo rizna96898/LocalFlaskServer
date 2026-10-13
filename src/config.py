@@ -31,12 +31,15 @@ class Config:
 
         self.settings = self._load_system_settings()
 
+        # 秘密の値（APIキーなど）は、Git で管理しない secrets.yaml に分けて書く
+        self.secrets = self._load_yaml_file(self.SETTINGS_DIR / "secrets.yaml", required=False)
+
         self.PORT = self.settings.get("port", 5000)
         self.DEFAULT_MODEL = self.settings.get("default_model", "grok-4")
         self.TEMPERATURE = self.settings.get("temperature", 0.85)
         self.MAX_TOKENS = self.settings.get("max_tokens", 2048)
 
-        self.OPENROUTER_API_KEY = self.settings.get("openrouter_api_key")
+        self.OPENROUTER_API_KEY = self._read_secret("openrouter_api_key")
         self.OPENROUTER_USE_FLAG = self.settings.get("open_router_use_flag")
         self.OPENROUTER_SITE_URL = self.settings.get("openrouter_site_url", "http://localhost:5000")
         self.OPENROUTER_SITE_NAME = self.settings.get("openrouter_site_name", "Grok-like RP Backend")
@@ -44,8 +47,9 @@ class Config:
         
         self.CHARACTERS_DIR = self.settings.get("characters_dir", "no set directory")
 
-        if not self.OPENROUTER_API_KEY or str(self.OPENROUTER_API_KEY).strip() in ["", "dummy"]:
-            log.info("[WARN] openrouter_api_key が設定されていません。files/settings/system_settings.yaml を確認してください。")
+        # 鍵が要るのは OpenRouter を使うときだけ
+        if self.OPENROUTER_USE_FLAG and (not self.OPENROUTER_API_KEY or str(self.OPENROUTER_API_KEY).strip() in ["", "dummy"]):
+            log.info("[WARN] openrouter_api_key が設定されていません。files/settings/secrets.yaml を確認してください。")
 
         self.LOCALMODEL_USE_FLAG = self.settings.get("local_model_use_flag")
         self.LOCALMODEL_PATH = self.settings.get("local_model_path")
@@ -67,21 +71,41 @@ class Config:
         self.LOCALMODEL_NO_THINK = bool(self.settings.get("local_model_no_think", True))
 
     def _load_system_settings(self) -> dict:
-        settings_file = self.SETTINGS_DIR / "system_settings.yaml"
+        return self._load_yaml_file(self.SETTINGS_DIR / "system_settings.yaml", required=True)
 
-        if not settings_file.exists():
-            log.info(f"[WARN] settings file not found: {settings_file}")
+    def _load_yaml_file(self, path: Path, required: bool) -> dict:
+        if not path.exists():
+            if required:
+                log.info(f"[WARN] settings file not found: {path}")
             return {}
 
         try:
-            with open(settings_file, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f) or {}
+            with open(path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            return data if isinstance(data, dict) else {}
         except Exception as e:
-            log.info(f"[ERROR] settings load failed: {e}")
+            log.info(f"[ERROR] settings load failed: {path.name}: {e}")
             return {}
+
+    # 秘密の値を読む。置き場所は secrets.yaml。
+    # system_settings.yaml は Git で管理する（公開される）ので、そちらに書いてあったら移すように促す。
+    # 値そのものは、ログにも画面にも出さない。
+    def _read_secret(self, name: str):
+        value = self.secrets.get(name)
+
+        if name in self.settings:
+            log.info(
+                f"[WARN] {name} が system_settings.yaml に書かれています。"
+                "このファイルは Git で管理されるので、files/settings/secrets.yaml に移してください。"
+            )
+            if not value:
+                value = self.settings.get(name)
+
+        return value
 
     def reload(self):
         self.settings = self._load_system_settings()
+        self.secrets = self._load_yaml_file(self.SETTINGS_DIR / "secrets.yaml", required=False)
 
 
 config = Config()
