@@ -36,9 +36,11 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 
 ## 設定
 
-`files/settings/system_settings.yaml`（gitignore対象、APIキーを含む）を `src/config.py` の `config` シングルトンが読む。`files/sessions/`、`files/settings/`、`temp/`、`logs/`、`files/prompts/backups/`、`files/systems/sessions_list.yaml`、`*.txt`、`*.log`、`*.gguf` もgitignore対象。
+`files/settings/system_settings.yaml` を `src/config.py` の `config` シングルトンが読む。`files/sessions/`、`temp/`、`logs/`、`files/prompts/backups/`、`files/systems/sessions_list.yaml`、`*.txt`、`*.log`、`*.gguf` は gitignore 対象。
 
-- 生成の設定（温度、最大トークン数）は `files/settings/generation.yaml`。`files/settings/` は丸ごと gitignore 対象だが、このファイルだけ例外として Git で管理している。**`system_settings.yaml` は絶対にコミットしない**（APIキーが入っている）。
+- **秘密の値（APIキー）は `files/settings/secrets.yaml` にだけ書く。** このファイルだけが gitignore 対象で、`system_settings.yaml` と `generation.yaml` は Git で管理している。**このリポジトリは公開（PUBLIC）**なので、管理しているファイルに鍵を書くと、そのまま世界に公開される（過去に一度起きた。鍵は作り直して無効化済み）。
+- **コミットの前に `py -3 .claude/skills/verify-api/scripts/static_check.py --base main` を通す。** APIキーらしい文字列が Git から見えるファイルに無いかも、ここで一緒に調べている（`secret_scan.py`）。鍵の値は、ログにも、画面にも、PRの説明にも出さない。照合が要るときは末尾の数文字か指紋（ハッシュ）で行う。
+- 生成の設定（温度、最大トークン数）は `files/settings/generation.yaml`。
 - モデルの切り替えは `open_router_use_flag` / `local_model_use_flag` と、`ModelHandlingService("local" | "openrouter")` の引数で決まる。現在の呼び出し側はすべて `"local"` 固定。
 - APサーバーのポートは `port`（未設定なら5000）。Web側の接続先の既定値は `http://127.0.0.1:5000` なので、変える場合は画面の「接続環境設定」も合わせる。
 - モデルサーバーが読み込むモデルは `local_model_path`（フォルダ）と `local_mode_name`（ファイル名）で決まる。未設定やファイルが無い場合、`src/server.py` は起動時にエラーで止まる。

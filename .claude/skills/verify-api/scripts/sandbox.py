@@ -14,7 +14,7 @@ prepare() がやること:
 - LocalFlaskServer の src/ と files/prompts/ をサンドボックスへコピー
 - LLM_CHAT_CONSOLE の characters/ players/ worlds/ をコピー
 - 設定ファイルはコピーせず、検証用の最小の system_settings.yaml を新しく書く
-  （本物にはAPIキーが入っているため）
+  （本物の設定には、そのPCのモデルの場所などが入っている。秘密の値の secrets.yaml もコピーしない）
 - sessions/ と sessions_list.yaml は空から始める
 - llama_cpp を偽物に差し替える（モデルは読み込まない）
 
@@ -49,7 +49,7 @@ FAKE_LLAMA = '''class Llama:
 
 VERBOSE = "--verbose" in sys.argv or os.environ.get("LLMCHAT_VERIFY_VERBOSE") == "1"
 
-DEFAULT_SETTINGS = """# 検証用。本物の system_settings.yaml はコピーしない
+DEFAULT_SETTINGS = """# 検証用。本物の system_settings.yaml と secrets.yaml はコピーしない
 port: 5000
 local_model_use_flag: true
 open_router_use_flag: false

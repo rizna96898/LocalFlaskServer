@@ -1,0 +1,31 @@
+# files/settings/system_settings.yaml
+port: 5000
+default_model: "deepseek/deepseek-v3.2"          # または使いたいモデル名
+temperature: 0.85
+ 
+max_tokens: 2048
+
+# OpenRouter設定
+# openrouter_api_key は、このファイルではなく secrets.yaml に書く（このファイルは Git で管理するため）
+
+open_router_use_flag: False
+openrouter_site_url: "http://127.0.0.1:5000"
+# openrouter_site_name: "mythomax-12-13B RP Backend"
+openrouter_site_name: "Qwen3.6 35B-A3B RP Backend"
+openrouter_max_tokens :
+  chat : 2048
+
+local_model_use_flag: True
+#local_model_path: "E:\\LocalFlaskServer\\models\\mythomax\\"
+local_model_path: "E:\\LocalFlaskServer\\models\\qween\\"
+#local_mode_name: "mythomax-l2-13b.Q5_K_M.gguf"
+local_mode_name: "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf"
+local_mode_max_tokens :
+  chat : 2048
+
+# その他の設定（後で追加しやすい）
+log_level: "INFO"
+enable_image_generation: true
+
+# キャラクターカードの場所（Silly Tavernのpngカードが入っているフォルダ）
+characters_dir: "E:/SillyTavernInstaller/SillyTavern-Launcher/SillyTavern/data/default-user/characters"

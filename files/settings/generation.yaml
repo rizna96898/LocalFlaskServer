@@ -15,7 +15,7 @@
 #   repeat_penalty  同じ言葉の繰り返しを抑える強さ。1.0 は抑えない
 #   max_tokens      1回の返事の長さの上限（トークン数）
 #
-# このファイルは Git で管理する。APIキーなど秘密の値は書かないこと（それは system_settings.yaml に書く）。
+# このファイルは Git で管理する。APIキーなど秘密の値は書かないこと（それは secrets.yaml に書く）。
 
 default:
   temperature: 0.5

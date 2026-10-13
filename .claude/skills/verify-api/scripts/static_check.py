@@ -228,11 +228,22 @@ def main() -> int:
             print("  " + p)
         serious = [p for p in current if not p.startswith(("未使用のimport", "届かない"))]
 
+    # APIキーの混入も、毎回ここで一緒に調べる（公開リポジトリなので、コミットしたら取り返しがつかない）
+    import secret_scan
+
+    leaks = secret_scan.scan(repo)
+    if leaks:
+        print(f"\nAPIキーらしい文字列が {len(leaks)} 件あります。コミットしないでください。")
+        for rel, number, name, masked in leaks:
+            print(f"  {rel}:{number}  {name}  {masked}")
+    else:
+        print("\nAPIキーらしい文字列はありません。")
+
     if serious:
-        print(f"\n呼ぶと落ちる種類の問題が {len(serious)} 件あります。")
+        print(f"呼ぶと落ちる種類の問題が {len(serious)} 件あります。")
         return 1
-    print("\n呼ぶと落ちる種類の問題はありません。")
-    return 0
+    print("呼ぶと落ちる種類の問題はありません。")
+    return 1 if leaks else 0
 
 
 if __name__ == "__main__":

@@ -29,6 +29,8 @@ py -3 .claude/skills/verify-api/scripts/static_check.py --base main
 
 これで分かるのは「名前が存在するか」だけ。引数の数や、実行して初めて分かる間違いは見つからない。
 
+同じコマンドが、**APIキーの混入**も調べる（`secret_scan.py`）。Git から見えるファイルに鍵らしい文字列があると、場所を示して失敗する。このリポジトリは公開なので、鍵をコミットすると取り返しがつかない。コミットの前に必ず通す。
+
 ### 2. スモークテスト（初回のみ環境構築に1〜2分、以降は数秒）
 
 ```
@@ -109,6 +111,6 @@ APIを足した・形を変えたときは、`scripts/api_smoke.py` にもその
 - `venv/` … 専用の Python 環境。flask、flask-cors、pyyaml、requests、pillow、esprima が入る
 - `server/` … `src/`、`files/prompts/`、`files/templates/` のコピー。`sessions/` と `sessions_list.yaml` は毎回空から始める
 - `web/` … LLM_CHAT_CONSOLE の `characters/`、`players/`、`worlds/` のコピー
-- 設定ファイル（`system_settings.yaml`）はコピーしない。本物にはAPIキーが入っているので、検証用の最小の内容を新しく書いている
+- 設定ファイル（`system_settings.yaml`）と秘密の値（`secrets.yaml`）はコピーしない。検証用の最小の設定を新しく書いている
 - 生成の設定（`generation.yaml`）は、秘密の値を含まないので本物をコピーする
 - `llama_cpp` は偽物に差し替えるので、`src/server.py` を import してもモデルは読み込まれない

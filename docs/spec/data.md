@@ -13,8 +13,9 @@
   - [セッションフォルダ（`files/sessions/{セッションID}/`）](#s3-1)
   - [セッション一覧（`files/systems/sessions_list.yaml`）](#s3-2)
   - [サーバーの設定（`files/settings/system_settings.yaml`）](#s3-3)
-  - [生成の設定（`files/settings/generation.yaml`）](#s3-4)
-  - [記録と途中結果](#s3-5)
+  - [秘密の値（`files/settings/secrets.yaml`）](#s3-4)
+  - [生成の設定（`files/settings/generation.yaml`）](#s3-5)
+  - [記録と途中結果](#s3-6)
 - [要確認の一覧（この文書の分）](#s4)
 <!-- toc:end -->
 
@@ -194,8 +195,10 @@ LocalFlaskServer/
 │  ├─ prompts/                     プロンプトYAML（→ prompts.md）。Git管理
 │  ├─ templates/sub_character.yaml
 │  ├─ settings/
-│  │  ├─ system_settings.yaml   サーバーの設定。APIキーを含む。Git管理外
-│  │  └─ generation.yaml        生成の設定（温度、最大トークン数）。Git管理
+│  │  ├─ system_settings.yaml   サーバーの設定。Git管理
+│  │  ├─ generation.yaml        生成の設定（温度、最大トークン数）。Git管理
+│  │  ├─ secrets.yaml           秘密の値（APIキー）。**Git管理外**
+│  │  └─ secrets.example.yaml   secrets.yaml の書き方の見本。Git管理
 │  ├─ systems/sessions_list.yaml      全セッションの一覧。Git管理外
 │  └─ sessions/{セッションID}/         セッションごとのフォルダ。Git管理外
 ├─ logs/                           モデルへ送ったプロンプトとパラメーターの記録。Git管理外
@@ -290,12 +293,12 @@ sessions:
 | `local_model_prompt_format` | ローカルモデルへ送る会話の形式。`chatml`／`alpaca`（→ [`prompts.md`](prompts.md)） | `chatml` |
 | `local_model_no_think` | `true` なら、返事の出だしに空の思考ブロックを置いて、思考を書かせない（`chatml` のときだけ効く） | `true` |
 | `local_mode_max_tokens` | | |
-| `open_router_use_flag`、`openrouter_api_key`、`openrouter_site_url`、`openrouter_site_name`、`openrouter_max_tokens` | OpenRouter を使う場合の設定 | |
+| `open_router_use_flag`、`openrouter_site_url`、`openrouter_site_name`、`openrouter_max_tokens` | OpenRouter を使う場合の設定（APIキーは `secrets.yaml`） | |
 | `default_model`、`temperature`、`max_tokens` | 既定のモデル名と生成の設定 | `grok-4`、0.85、2048 |
 | `characters_dir` | | |
 | `log_level`、`enable_image_generation` | | |
 
-- APIキーが入っているので、Git には入れない。検証のときもコピーしない。
+- Git で管理する。リポジトリは公開なので、**秘密の値は書かない**（下の「秘密の値」）。
 - 読み込むのは起動時。`src/config.py` の `config` がまとめて持つ。
 - 生成の設定（温度、最大トークン数）は、今は用途ごとにコードで決めている（→ [`prompts.md`](prompts.md)）。
   設定ファイルの `temperature`、`max_tokens`、`default_model` が効くのは、OpenRouter を使う場合だけ。
@@ -303,6 +306,23 @@ sessions:
   設定にはあるが、コードのどこからも読まれていない。残す予定のものか、消してよいものか。
 
 <a id="s3-4"></a>
+
+### 秘密の値（`files/settings/secrets.yaml`）
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+APIキーなど、人に見せてはいけない値だけを書くファイル。`files/settings/` の中で、これだけが Git 管理外。
+
+| 項目 | 中身 |
+|---|---|
+| `openrouter_api_key` | OpenRouter のAPIキー。OpenRouter を使うとき（`open_router_use_flag` が `true`）だけ必要 |
+
+- 無くても起動する（ローカルモデルだけ使うなら不要）。新しく用意するときは、`secrets.example.yaml` をコピーして名前を変える。
+- 鍵が `system_settings.yaml` に書いてあっても読めるが、起動時に「`secrets.yaml` に移してください」と警告を出す。
+  `system_settings.yaml` は公開されるので、警告が出たらすぐ移す。
+- 鍵の値は、ログにも画面にも出さない。
+
+<a id="s3-5"></a>
 
 ### 生成の設定（`files/settings/generation.yaml`）
 
@@ -314,7 +334,7 @@ sessions:
 - `files/settings/` の中で、このファイルだけ Git で管理している（`.gitignore` で例外にしている）。秘密の値は書かない。
 - 書き換えると、サーバーを再起動しなくても、次にモデルへ送るときから反映される。
 
-<a id="s3-5"></a>
+<a id="s3-6"></a>
 
 ### 記録と途中結果
 
