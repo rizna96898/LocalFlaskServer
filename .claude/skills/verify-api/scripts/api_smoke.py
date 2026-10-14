@@ -175,11 +175,14 @@ def main() -> int:
 
     t.api(client, "chat（モデルサーバー停止中）→ 500", "post", "/chat", 500, False,
           json={"session_id": sid, "message": "こんにちは"})
-    t.api(client, "re_chat", "post", "/re_chat", 200, True, ["session_id", "line_id", "message", "icon_data"],
-          json={"session_id": sid, "message": "てすと"})
+    body = t.api(client, "re_chat", "post", "/re_chat", 200, True, ["session_id", "line_id", "message", "icon_data"],
+                 json={"session_id": sid, "message": "てすと"})
+    # 開始メッセージ(1)、再送のプレイヤーの発言(2)、再送の返事(3)。/chat は失敗したので何も足さない
+    t.check("  line_id は発言ごとの通し番号（再送の返事は 3）", body.get("line_id") == "3", body.get("line_id"))
     body = t.api(client, "履歴に追記されている", "post", "/selected_session", 200, True, ["message_list"],
                  json={"session_id": sid})
-    t.check("  履歴が1件以上ある", len(body.get("message_list", [])) >= 1)
+    t.check("  履歴の番号が 1, 2, 3", [m.get("line_id") for m in body.get("message_list", [])] == ["1", "2", "3"],
+            [m.get("line_id") for m in body.get("message_list", [])])
 
     # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）
     print("\n# 初期記憶の生成")

@@ -216,8 +216,8 @@ LocalFlaskServer/
 | `{世界ID}_world.yaml` | 世界設定のコピー | `/chat_startup` |
 | `character/{ID}_setting.yaml` | プレイヤー・キャラクター設定のコピー | `/chat_startup` |
 | `character/{参照ID}_setting.yaml` | `inline` の人物。テンプレートから作る（名前の規則は他の人物と同じ） | `/chat_startup` |
-| `picture/icon/{ID}.png` | キャラクターのアイコンのコピー | `/chat_startup` |
-| `picture/standing/{ID}_standing.png` | キャラクターの立ち絵のコピー | `/chat_startup` |
+| `picture/icon/{ID}.png` | キャラクター・プレイヤーのアイコンのコピー（元に無ければ作らない） | `/chat_startup` |
+| `picture/standing/{ID}_standing.png` | キャラクター・プレイヤーの立ち絵のコピー（元に無ければ作らない） | `/chat_startup` |
 | `prepare_status.yaml` | 進行状態（→ [`chat-flow.md`](chat-flow.md)） | `/new_chat` |
 | `history.json` | 発言の履歴（→ [`api.md`](api.md) の「履歴のファイル」） | `/new_chat` 以降、発言のたびに追記 |
 | `world_memory.yaml` | 世界の記憶 | `/new_chat` の裏の処理 |
@@ -300,8 +300,9 @@ sessions:
 - 読み込むのは起動時。`src/config.py` の `config` がまとめて持つ。
 - 生成の設定（温度、最大トークン数）は、今は用途ごとにコードで決めている（→ [`prompts.md`](prompts.md)）。
   設定ファイルの `temperature`、`max_tokens`、`default_model` が効くのは、OpenRouter を使う場合だけ。
-- **【要確認 Q27】** `log_level`、`enable_image_generation`、`characters_dir`、`openrouter_max_tokens`、`local_mode_max_tokens` は、
-  設定にはあるが、コードのどこからも読まれていない。残す予定のものか、消してよいものか。
+- `log_level`、`enable_image_generation`、`characters_dir`、`openrouter_max_tokens`、`local_mode_max_tokens` は、
+  設定にはあるが、コードのどこからも読まれていない。OpenRouter は使わない方向に寄せる予定だが、
+  今はローカルモデルの作り込みを優先するので、これらはそのまま置いておく。
 
 <a id="s3-4"></a>
 
@@ -347,7 +348,8 @@ APIキーなど、人に見せてはいけない値だけを書くファイル�
 
 どれも消しても動作に影響しない。プロンプトの中身を確かめたいときは `logs/` を見る。
 
-- **【要確認 Q28】** `logs/` と `temp/` は増え続け、消す仕組みが無い。セッションを削除しても、対応する `temp/` のファイルは残る。
+- `temp/` の途中結果は、セッションを削除したときに一緒に消える（ファイル名にセッションIDが入っているもの）。
+- `logs/` は自動では消さない。不要になったら手で消してよい。
 
 <a id="s4"></a>
 
@@ -359,8 +361,6 @@ APIキーなど、人に見せてはいけない値だけを書くファイル�
 
 | 番号 | 対象 | 確認したいこと | 回答・状況 |
 |---|---|---|---|
-| Q22 | 登場人物の `inline` | `参照ID` を必須にするか、表示名から作るか | 回答: 参照IDでよい。世界作成でもIDは必須にしているはず。<br>→ 補足: 世界画面のチェックで `inline` に必須なのは表示名で、参照IDは必須になっていない。チェックに足すか確認中 |
+| Q22 | 登場人物の `inline` | `参照ID` を必須にするか、表示名から作るか | 回答: IDの存在チェックが必要なのはプレイヤーとメインだけ（「隣のyaml内容を反映」が既に確かめている）。サブ・モブは不要。<br>→ 確認中: サブ・モブの参照IDが空だと、セッションに `None_setting.yaml` ができる。空のときはサーバーが `inline_1` などを付ける形でよいか |
 | Q23 | 登場人物の `役割` | `役割`（main / sub / mob）で動きを変えるか | 回答: どう変えるかが決まっていないので、今は答えられない |
-| Q24 | 登場人物の `player` | 1人だけであることを確かめるか | 回答: 状態管理に、それを管理する項目があったはず。<br>→ 補足: 聞きたかったのは「`player` を2人以上書けてしまう点を止めるか」。今は画面のチェックにも保存時にも無い。確認中 |
-| Q27 | サーバーの設定 | 使われていない項目を残すか | 回答: 使われていない設定を教えてほしい。<br>→ 補足: 読まれていないのは `log_level`、`enable_image_generation`、`characters_dir`、`openrouter_max_tokens`、`local_mode_max_tokens`。`default_model`、`temperature`、`max_tokens` は OpenRouter を使うときだけ読む。残すものを確認中 |
-| Q28 | `logs/`、`temp/` | 古いものを消す仕組みを作るか | 回答: セッションを消したときに、セッションの中身は消している。ログは好きに消せばよい。<br>→ 未反映: セッションを消すとき、`temp/` の途中結果も一緒に消す |
+| Q24 | 登場人物の `player` | 1人だけであることを確かめるか | 回答: プレイヤーは必ず1人（絶対条件）。→ 未反映（画面のチェックと、保存時のチェック） |

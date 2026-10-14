@@ -78,7 +78,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 新規チャットは2段階で始まる。
 
 1. `/chat_startup`: `session_id` を採番し、Web側フォルダから世界YAML・登場人物のYAML・画像をセッションフォルダへコピーして、`sessions_list.yaml` に追記する。`参照種別` が `inline` の人物はテンプレートから新規作成する。
-   退避した画像は `files/sessions/{session_id}/picture/icon/{id}.png` と `picture/standing/{id}_standing.png` に入り、チャット画面は `/session_image/{session_id}/{icon|standing}/{id}` でこれを読む（Web側フォルダの最新の画像は読まない）。プレイヤーの画像は退避していない。
+   退避した画像は `files/sessions/{session_id}/picture/icon/{id}.png` と `picture/standing/{id}_standing.png` に入り、チャット画面は `/session_image/{session_id}/{icon|standing}/{id}` でこれを読む（Web側フォルダの最新の画像は読まない）。プレイヤーの画像も退避する。元に画像が無い人物は退避しない（無くてもチャットは始められる）。
 2. `/new_chat`: `prepare_status.yaml` を作り、初期記憶の生成を別スレッドで開始して、世界YAMLの `開始メッセージ` を返す。
 
 `prepare_status.yaml` の `status`（`processing` / `ready` / `error`）と `complete_stage`（`new_chat` → `prepare` → `main_chat` → `mob_chat` → `after`）が、非同期処理の進行と次に進めるかどうかの判定に使われる。
