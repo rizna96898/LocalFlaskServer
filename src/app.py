@@ -111,6 +111,12 @@ def load_player_settings():
 def list_settings():
     return orchestrator.list_settings(request.get_json(silent=True))
 
+# 世界・キャラクター・プレイヤーを削除（設定YAMLと画像）
+# kind は world / character / player。世界で使われているキャラクター・プレイヤーは消さない
+@app.post("/settings/delete_setting")
+def delete_setting():
+    return orchestrator.delete_setting(request.get_json(silent=True))
+
 # キャラクター・プレイヤーの画像を読み込んで返却
 # owner_type は character(省略時) / player
 @app.get("/settings/load_image/<image_type>/<owner_id>")

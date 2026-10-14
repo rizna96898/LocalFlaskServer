@@ -1,6 +1,7 @@
 import yaml
 
 import re
+import shutil
 from flask import jsonify
 from pathlib import Path
 from helpers import file_utils
@@ -407,6 +408,75 @@ class WorldSettings:
                 items.append({"id": item_id, "name": name or item_id})
 
         return jsonify({"ok": True, "message": "", "kind": kind, "items": items}), 200
+
+    # 世界・キャラクター・プレイヤーを削除する（設定YAMLと、キャラクター・プレイヤーは画像のフォルダも）
+    # kind: world / character / player
+    # - 世界を消しても、その世界のセッションは残す（セッション側に世界のコピーがある）
+    # - キャラクター・プレイヤーは、登場人物にしている世界があれば消さない（409）
+    def delete_setting(self, payload):
+        payload = payload or {}
+        base_chat_path = (payload.get("base_chat_path") or "").strip()
+        kind = (payload.get("kind") or "").strip()
+        item_id = (payload.get("id") or "").strip()
+
+        if not base_chat_path:
+            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+
+        if kind not in LIST_SOURCES:
+            return jsonify({"ok": False, "message": f"kind は {' / '.join(LIST_SOURCES)} のどれかにしてください"}), 400
+
+        if not re.fullmatch(r"[A-Za-z0-9_]+", item_id):
+            return jsonify({"ok": False, "message": "IDは半角英数字と_で指定してください"}), 400
+
+        folder, suffix = LIST_SOURCES[kind]
+        setting_file = Path(base_chat_path) / folder / "settings" / f"{item_id}{suffix}"
+
+        if not setting_file.is_file():
+            return jsonify({"ok": False, "message": f"設定がありません: {item_id}"}), 404
+
+        if kind != "world":
+            used_in = self._worlds_using(base_chat_path, kind, item_id)
+            if used_in:
+                names = "、".join(w["name"] for w in used_in)
+                return jsonify({
+                    "ok": False,
+                    "message": f"これらの世界で使われているので削除できません: {names}",
+                    "worlds": used_in,
+                }), 409
+
+        try:
+            setting_file.unlink()
+
+            # キャラクター・プレイヤーは、アイコンと立ち絵のフォルダも消す
+            if kind != "world":
+                for image_type in ("icon", "standing"):
+                    image_dir = Path(base_chat_path) / folder / image_type / item_id
+                    if image_dir.is_dir():
+                        shutil.rmtree(image_dir)
+        except Exception as e:
+            log.info(f"[ERROR] 削除に失敗しました {setting_file}: {e}")
+            return jsonify({"ok": False, "message": f"削除に失敗しました: {e}"}), 500
+
+        return jsonify({"ok": True, "message": "削除しました", "kind": kind, "id": item_id}), 200
+
+    # 指定したキャラクター・プレイヤーを登場人物にしている世界の一覧 [{id, name}]
+    def _worlds_using(self, base_chat_path: str, kind: str, item_id: str) -> list:
+        folder, suffix = LIST_SOURCES["world"]
+        worlds_dir = Path(base_chat_path) / folder / "settings"
+        used_in = []
+
+        if not worlds_dir.is_dir():
+            return used_in
+
+        for path in sorted(worlds_dir.glob(f"*{suffix}")):
+            data = file_utils.load_yaml_file(path)
+            participants = (data.get("登場人物") or {}).get("世界の登場人物") or []
+            if any(isinstance(p, dict) and p.get("参照種別") == kind and str(p.get("参照ID")) == item_id
+                   for p in participants):
+                world_id = path.name[:-len(suffix)]
+                used_in.append({"id": world_id, "name": data.get("世界名") or world_id})
+
+        return used_in
 
     # プレイヤー設定を読み込んで返却（キャラクター設定の読み込みと同じ形）
     def load_player_settings(self, payload):

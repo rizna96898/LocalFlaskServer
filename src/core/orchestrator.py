@@ -113,6 +113,10 @@ class ChatOrchestrator:
     def list_settings(self, payload):
         return self.chat_settings.list_settings(payload)
 
+    # 世界・キャラクター・プレイヤーを削除（設定YAMLと画像）
+    def delete_setting(self, payload):
+        return self.chat_settings.delete_setting(payload)
+
     # 画像ファイルの場所を決める。問題があれば (None, エラーレスポンス) を返す
     # owner_type: character(省略時) / player
     # 保存先: {base_chat_path}/characters|players/icon|standing/{owner_id}/

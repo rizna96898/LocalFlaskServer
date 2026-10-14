@@ -318,6 +318,40 @@ def main() -> int:
     body = t.api(client, "一覧（削除後）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
     t.check("  一覧が空に戻った", body.get("sessions") == [])
 
+    # ---------------------------------------------------------------- 世界・キャラクター・プレイヤーの削除
+    print("\n# 世界・キャラクター・プレイヤーの削除")
+
+    def delete(name, status, **body):
+        return t.api(client, name, "post", "/settings/delete_setting", status, status == 200,
+                     json=dict(base_chat_path=web, **body))
+
+    body = delete("世界で使われているキャラクター → 409", 409, kind="character", id=cid)
+    t.check("  使っている世界の名前が message に出る", world_name in (body.get("message") or ""), body.get("message"))
+    t.check("  使っている世界の一覧が返る", any(w.get("id") == world_id for w in body.get("worlds", [])), body.get("worlds"))
+    t.check("  ファイルは残っている", (box.web / "characters" / "settings" / f"{cid}_setting.yaml").exists())
+    delete("世界で使われているプレイヤー → 409", 409, kind="player", id=pid)
+    t.check("  ファイルは残っている", (box.web / "players" / "settings" / f"{pid}_setting.yaml").exists())
+
+    client.post("/settings/save_character_setting", json={
+        "base_chat_path": web, "character_id": "zz_c", "character_name": "消す人", "content": "名前:\n  表示名: 消す人\n"})
+    delete("使われていないキャラクター", 200, kind="character", id="zz_c")
+    t.check("  設定と画像のフォルダが消える", not any((box.web / "characters" / d).exists() for d in
+            ("settings/zz_c_setting.yaml", "icon/zz_c", "standing/zz_c")))
+    t.check("  他のキャラクターの画像は残る", (box.web / "characters" / "icon" / cid / f"{cid}.png").exists())
+
+    # 世界を消しても、その世界のセッションは残る
+    dsid = (client.post("/chat_startup", json={"world_id": "zz_verify", "base_chat_path": web}).get_json() or {}).get("session_id", "")
+    delete("世界", 200, kind="world", id="zz_verify")
+    t.check("  世界設定のファイルが消える", not (box.web / "worlds" / "settings" / "zz_verify_world.yaml").exists())
+    t.api(client, "  消した世界のセッションは開ける", "post", "/selected_session", 200, True, ["message_list"],
+          json={"session_id": dsid})
+    client.post("/delete_session", json={"session_ids": [dsid]})
+
+    delete("無いID → 404", 404, kind="world", id="no_such_world")
+    delete("kind 不正 → 400", 400, kind="session", id="zz_c")
+    delete("ID に ../ を含む → 400", 400, kind="character", id="../x")
+    t.check("  サンドボックスの外が消えていない", (box.web / "characters" / "settings").exists())
+
     # ---------------------------------------------------------------- 形の統一
     print("\n# レスポンスの形")
     samples = {
