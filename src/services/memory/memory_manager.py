@@ -29,6 +29,26 @@ from memory_builders import load_init_files
 from services.status import status_manager
 from logger import log
 
+# 初期記憶の進み具合。段階を始めるたびに step() を呼ぶと、状態ファイルに「何段目か」を書く。
+# 全段階 = 世界の記憶(1) + メインキャラクター1人につき7段階（要約・場所・分類・服装・所持品・意識・所持金）
+CHARACTER_STAGES = 7
+
+
+class _Progress:
+    def __init__(self, session_id: str, main_count: int):
+        self.session_id = session_id
+        self.total = 1 + CHARACTER_STAGES * main_count
+        self.done = 0
+
+    def step(self, label: str):
+        """これから label の段階を始める。直前の段階は終わったものとして数える。"""
+        status_manager.mark_progress(self.session_id, min(self.done, self.total), self.total, label)
+        self.done += 1
+
+    def finish(self):
+        status_manager.mark_progress(self.session_id, self.total, self.total, "完了")
+
+
 class MemoryManager:
     def __init__(self):
         self.prompt_builder = MemoryPromptBuilder()
@@ -94,6 +114,10 @@ class MemoryManager:
 
                 if operation == "create":
                     current_stage = "world"
+
+                    main_count = sum(1 for c in character if isinstance(c, dict) and c.get("参照種別") == "character")
+                    progress = _Progress(session_id, main_count)
+                    progress.step("世界の記憶")
 
                     # characterとstoryがセットで入っている？
                     # 世界の初期記憶作成
@@ -191,11 +215,13 @@ class MemoryManager:
                         world_file_data["開始メッセージ"],
                         world_file_data["シナリオパラメータ"],
                         base_file_obj,
-                        normalized_memory
+                        normalized_memory,
+                        progress,
                     )
 
                     # 世界の記憶とキャラクターの記憶が全部できてから ready にする
                     # （ready = 初期記憶が完成。それまでは processing のまま）
+                    progress.finish()
                     status_manager.mark_prepare_ready(session_id, "new_chat")
 
             except Exception as e:
@@ -221,6 +247,7 @@ class MemoryManager:
         scenario_parameter: dict = {},
         base_file_obj: dict[str, Any] = {},
         world_memory_data: dict[str, Any] = {},
+        progress: "_Progress" = None,
     ):
         log.info("_run_character_memory_create_sync start")
         # log.info(f"[CHAR MEMORY] relation_names = {relation_names}")
@@ -246,6 +273,7 @@ class MemoryManager:
                 
                 # キャラの状況一覧を問い合わせ
                 log.info("[CHAR MEMORY MIDDLE SUMMARY] start")
+                if progress: progress.step(f"{character.get('表示名') or char_id}: 要約")
                 temp_file = self.proc_middle_summary(base_file_obj,
                                                      character,
                                                      char_id,
@@ -259,11 +287,13 @@ class MemoryManager:
                 # 現在の状態(current_state)の作成
                 # 場所(location)の特定
                 log.info(f"[CHAR MEMORY PLACE] start: ")
+                if progress: progress.step(f"{character.get('表示名') or char_id}: 場所")
                 location = self.proc_middle_location(base_file_obj, temp_file,)
                 log.info(f"[CHAR MEMORY PLACE] end: ")
 
                 # キャラの状況一覧から、分類を判定
                 log.info(f"[CHAR MEMORY CATEGORIZE] start: ")
+                if progress: progress.step(f"{character.get('表示名') or char_id}: 分類")
                 temp_file_path = self.proc_middle_categorize(temp_file,
                                                              base_file_obj,
                                                              temp_dir,
@@ -289,6 +319,7 @@ class MemoryManager:
                 # キャラの状況一覧から、分類を判定
                 # 服装を判定
                 log.info(f"[CHAR MEMORY  CLOTHING] start: ")
+                if progress: progress.step(f"{character.get('表示名') or char_id}: 服装")
                 clothing_data = self.proc_middle_clothing(                                         session_char_dir,
                                                           base_file_obj,
                                                           char_id,)
@@ -296,6 +327,7 @@ class MemoryManager:
 
                 # 所持品を判定
                 log.info(f"[CHAR MEMORY ITEMS] start: ")
+                if progress: progress.step(f"{character.get('表示名') or char_id}: 所持品")
                 item_data = self.proc_middle_items(                                         session_char_dir,
                                                           base_file_obj,
                                                           char_id,
@@ -307,6 +339,7 @@ class MemoryManager:
                 # 意識（forcus_target）の特定（多分作成済み）
                 log.info(f"[CHAR MEMORY TARGET] start: ")
                 
+                if progress: progress.step(f"{character.get('表示名') or char_id}: 意識")
                 target_data = self.proc_middle_target(                                         base_file_obj,
                                                           character["表示名"],
                                                           world_memory_data,
@@ -317,6 +350,7 @@ class MemoryManager:
 
                 # 所持金（currency）の特定
                 log.info(f"[CHAR MEMORY CURRENCY] start: ")
+                if progress: progress.step(f"{character.get('表示名') or char_id}: 所持金")
                 currency_data = self.proc_middle_currency(                                         session_char_dir,
                                                         base_file_obj,
                                                         char_id,

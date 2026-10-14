@@ -190,6 +190,10 @@ class ChatOrchestrator:
     def delete_session(self, payload):
         return self.chat_execute.delete_session(payload)
     
+    # セッションの進行状態（初期記憶の進み具合など）を返却する
+    def session_status(self, payload):
+        return self.chat_execute.session_status(payload)
+
     # セッションリストから選択した際に、会話履歴を読み込んで返却する
     def selected_session(self, payload):
         return self.chat_execute.selected_session(payload)

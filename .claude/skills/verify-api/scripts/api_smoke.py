@@ -86,6 +86,12 @@ def main() -> int:
     t.api(client, "世界設定の保存 player が2人 → 400", "post", "/settings/save_world_setting", 400, False, json={
         "base_chat_path": web, "world_id": "zz_two_players", "world_name": "x", "include_data": dump(two_players),
         "goal_data": dump(world["シナリオの目標"]), "parameter_data": dump(world["シナリオパラメータ"])})
+    no_ref_id = dict(world["登場人物"])
+    no_ref_id["世界の登場人物"] = list(no_ref_id["世界の登場人物"]) + [
+        {"参照種別": "inline", "参照ID": None, "表示名": "名無し", "役割": "mob"}]
+    t.api(client, "世界設定の保存 inline の参照IDなし → 400", "post", "/settings/save_world_setting", 400, False, json={
+        "base_chat_path": web, "world_id": "zz_no_ref_id", "world_name": "x", "include_data": dump(no_ref_id),
+        "goal_data": dump(world["シナリオの目標"]), "parameter_data": dump(world["シナリオパラメータ"])})
     t.api(client, "世界設定の保存 ID不正", "post", "/settings/save_world_setting", 400, False,
           json={"base_chat_path": web, "world_id": "a-b", "world_name": "x"})
     t.api(client, "世界設定の読み込み 無いID → 404", "post", "/settings/load_world_settings", 404, False,
@@ -193,11 +199,41 @@ def main() -> int:
 
     # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）
     print("\n# 初期記憶の生成")
-    scripted = box.client(llm=sandbox.scripted_llm)     # 段階ごとに、それらしい返事を返す偽モデル
+    # 段階ごとに、それらしい返事を返す偽モデル。送られるたびに、その時点の進み具合を控える
+    watched = {"sid": "", "progress": []}
+
+    def watching_llm(prompt):
+        path = box.sessions / watched["sid"] / "prepare_status.yaml"
+        if watched["sid"] and path.exists():
+            s = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            watched["progress"].append((s.get("progress_done"), s.get("progress_total"), s.get("progress_label")))
+        return sandbox.scripted_llm(prompt)
+
+    scripted = box.client(llm=watching_llm)
     before = len(box.llm_requests)
     msid = (scripted.post("/chat_startup", json={"world_id": world_id, "base_chat_path": web}).get_json() or {}).get("session_id", "")
+    watched["sid"] = msid
     scripted.post("/new_chat", json={"session_id": msid})
     t.check("裏の処理が終わる", box.wait_background(60))
+
+    # 進み具合（/session_status）。全段階 = 世界(1) + メインキャラクター1人につき7段階
+    mains = sum(1 for c in world["登場人物"]["世界の登場人物"] if isinstance(c, dict) and c.get("参照種別") == "character")
+    total = 1 + 7 * mains
+    seen = watched["progress"]
+    t.check("作成中の進み具合: 全段階の数が 1 + 7 × メイン人数", bool(seen) and all(p[1] == total for p in seen), (total, seen[:3]))
+    t.check("作成中の進み具合: 終わった数は 0 から増えていき、全段階に届かない",
+            bool(seen) and seen[0][0] == 0 and all(a[0] <= b[0] for a, b in zip(seen, seen[1:])) and seen[-1][0] < total,
+            [p[0] for p in seen])
+    t.check("作成中の進み具合: 最初は世界の記憶", bool(seen) and seen[0][2] == "世界の記憶", seen[:1])
+    body = t.api(scripted, "session_status（完了）", "post", "/session_status", 200, True,
+                 ["session_id", "status", "complete_stage", "progress"], json={"session_id": msid})
+    t.check("  ready で、進み具合は 全段階/全段階", body.get("status") == "ready"
+            and body.get("progress") == {"done": total, "total": total, "label": "完了"}, body.get("progress"))
+    t.api(scripted, "session_status session_id なし → 400", "post", "/session_status", 400, False, json={})
+    t.api(scripted, "session_status session_id 不正 → 400", "post", "/session_status", 400, False,
+          json={"session_id": "../x"})
+    t.api(scripted, "session_status 無いセッション → 404", "post", "/session_status", 404, False,
+          json={"session_id": "no_such_session"})
     status = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
     t.check("進行状態が ready（エラーなし）", status.get("status") == "ready", status)
     t.check("世界の記憶ができる", (box.sessions / msid / "world_memory.yaml").exists())
@@ -225,6 +261,10 @@ def main() -> int:
     box.wait_background(60)
     status = yaml.safe_load((box.sessions / fsid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
     t.check("世界の記憶で失敗: 状態は error、失敗した場所は world", (status.get("status"), status.get("error_stage")) == ("error", "world"), status)
+    body = t.api(broken, "session_status（失敗）", "post", "/session_status", 200, True,
+                 ["status", "error_stage", "error_message"], json={"session_id": fsid})
+    t.check("  画面に出す失敗の情報が返る", (body.get("status"), body.get("error_stage")) == ("error", "world")
+            and bool(body.get("error_message")), body)
     t.check("世界の記憶で失敗: キャラクターの記憶には進まない",
             not any("情報抽出担当" in q.get("prompt", "") for q in box.llm_requests[before:]))
     broken.post("/delete_session", json={"session_ids": [fsid]})
