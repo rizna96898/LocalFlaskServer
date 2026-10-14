@@ -20,6 +20,9 @@ def update_prepare_status(
     needs_mob_chat: bool | None = None,
     mob_count: int | None = None,
     next_speakers: list | None = None,   # ← 追加
+    progress_done: int | None = None,
+    progress_total: int | None = None,
+    progress_label: str | None = None,
 ) -> bool:
     path = get_prepare_status_path(session_id)
     data = file_utils.load_yaml_file(path) or {}
@@ -53,6 +56,16 @@ def update_prepare_status(
             if x
         ]
 
+    # 初期記憶の進み具合（画面のプログレスバー用）
+    if progress_done is not None:
+        data["progress_done"] = progress_done
+
+    if progress_total is not None:
+        data["progress_total"] = progress_total
+
+    if progress_label is not None:
+        data["progress_label"] = progress_label
+
     return file_utils.save_yaml_file(path, data)
 
 # 実行ステータスの更新（実行中に変更）
@@ -77,6 +90,19 @@ def create_prepare_status(session_id: str) -> bool:
             needs_mob_chat = False,
             mob_count = 0,
             next_speakers = [],
+            progress_done = 0,
+            progress_total = 0,
+            progress_label = "準備中",
+    )
+
+
+# 初期記憶の進み具合を記録する。done は終わった段階の数、total は全段階の数、label は今やっていること
+def mark_progress(session_id: str, done: int, total: int, label: str) -> bool:
+    return update_prepare_status(
+        session_id,
+        progress_done=done,
+        progress_total=total,
+        progress_label=label,
     )
 
 # 処理完了時、実行ステータスの更新

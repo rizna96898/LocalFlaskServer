@@ -19,6 +19,7 @@ from constant import (
     PromptsPostprocess,
 )
 from helpers import response_checker
+from services.status import status_manager
 from helpers.chat_utils import ChatUtils
 from services.memory.memory_manager import MemoryManager
 from services.chat.chat_manager import ChatManager
@@ -155,6 +156,33 @@ class ChatExecute:
         return response_checker.response_ok(
             deleted_session_ids=deleted_session_ids,
             failed_session_ids=failed_session_ids,
+        )
+
+    # セッションの進行状態を返す。画面は、初期記憶を作っている間これを繰り返し問い合わせ、
+    # 発言系のボタンを止めたり、プログレスバーを出したりする
+    def session_status(self, payload):
+        session_id = (payload or {}).get("session_id") or ""
+
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
+            return response_checker.response_error("session_id が不正です", 400)
+
+        status_path = status_manager.get_prepare_status_path(session_id)
+        if not status_path.exists():
+            return response_checker.response_error("セッションの状態がありません", 404)
+
+        data = file_utils.load_yaml_file(status_path) or {}
+
+        return response_checker.response_ok(
+            session_id=session_id,
+            status=data.get("status"),
+            complete_stage=data.get("complete_stage"),
+            error_stage=data.get("error_stage"),
+            error_message=data.get("error_message"),
+            progress={
+                "done": data.get("progress_done") or 0,
+                "total": data.get("progress_total") or 0,
+                "label": data.get("progress_label") or "",
+            },
         )
 
     def selected_session(self, payload):

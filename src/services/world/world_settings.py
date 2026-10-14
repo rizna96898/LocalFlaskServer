@@ -48,6 +48,17 @@ class WorldSettings:
             include_data = yaml.safe_load(include_str)
             data_list = include_data["世界の登場人物"]
 
+            # 参照IDは全員に必須（サブ・モブも、セッションのファイル名に使う）
+            for no, c in enumerate(data_list, 1):
+                if not isinstance(c, dict) or c.get("参照種別") in (None, "null"):
+                    continue
+                ref_id = str(c.get("参照ID") or "")
+                if not re.fullmatch(r"[A-Za-z0-9_]+", ref_id):
+                    return jsonify({
+                        "ok": False,
+                        "message": f"登場人物の{no}件目: 参照IDは半角英数字と_で必ず入れてください"
+                    }), 400
+
             # プレイヤーは必ず1人
             player_count = sum(1 for c in data_list if isinstance(c, dict) and c.get("参照種別") == "player")
             if player_count != 1:

@@ -38,9 +38,10 @@
   - [`POST /chat`](#s8-5)
   - [`POST /re_chat`](#s8-6)
   - [`POST /selected_session`](#s8-7)
-  - [`POST /selected_message`](#s8-8)
-  - [`POST /delete_session`](#s8-9)
-  - [履歴のファイル](#s8-10)
+  - [`POST /session_status`](#s8-8)
+  - [`POST /selected_message`](#s8-9)
+  - [`POST /delete_session`](#s8-10)
+  - [履歴のファイル](#s8-11)
 - [その他](#s9)
   - [`/v1/chat/check_stability`（GET / POST）](#s9-1)
 - [要確認の一覧](#s10)
@@ -135,6 +136,7 @@
 | `POST /chat` | 発言する | メイン |
 | `POST /re_chat` | 再送する | メイン |
 | `POST /selected_session` | セッションを開く（履歴を返す） | メイン |
+| `POST /session_status` | セッションの進行状態（初期記憶の進み具合）を返す | メイン |
 | `POST /selected_message` | 畳まれた過去の履歴を展開する | メイン |
 | `POST /delete_session` | セッションを削除する | メイン |
 | `GET /session_image/{セッションID}/{種別}/{キャラクターID}` | チャット画面用のアイコン・立ち絵を返す | メイン |
@@ -275,7 +277,8 @@
 | `start_message` | 任意 | チャット開始時に最初に出るメッセージ | `開始メッセージ` |
 
 - 返却: `{"ok": true, "message": "世界設定を保存しました", "path": "保存先"}`
-- 失敗（400）: 必須項目が無い・空、IDの文字種が違う、YAMLとして読めない
+- 失敗（400）: 必須項目が無い・空、IDの文字種が違う、YAMLとして読めない、`player` が1人でない、
+  登場人物（`参照種別` が `null` 以外）の `参照ID` が空か文字種が違う（半角英数字と `_`。`inline` も必須）
 - **登場人物の表示名の自動補完**: `世界の登場人物` の各人物について、`表示名` が空なら、`参照種別` と `参照ID` から
   プレイヤーまたはキャラクターの設定YAMLを読み、その `名前` → `表示名` を入れて保存する。
 - 登場人物が実在するかは、保存時には確かめない。世界画面の「隣のyaml内容を反映」が、`player` と `character` の参照IDを
@@ -544,6 +547,7 @@
 3. 世界YAMLの `開始メッセージ` を履歴に書き、返す。裏の生成の終わりは待たない。
 
 - 返却: `{"ok": true, "session_id": ..., "line_id": "1", "message": "開始メッセージ", "icon_data": {"character_id": ..., "character_name": ...}}`
+- 画面は、このあと `/session_status` で初期記憶ができたかを問い合わせ、できるまで「発言」「再送」を止める。
 
 <a id="s8-5"></a>
 
@@ -596,6 +600,23 @@
 
 <a id="s8-8"></a>
 
+### `POST /session_status`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+セッションの進行状態を返す。画面は、初期記憶を作っている間これを1秒ごとに問い合わせ、プログレスバーを出したり、
+「発言」「再送」を止めたりする。
+
+| 項目 | 必須 | 内容 |
+|---|---|---|
+| `session_id` | 必須 | |
+
+- 返却: `{"ok": true, "session_id": ..., "status": ..., "complete_stage": ..., "error_stage": ..., "error_message": ..., "progress": {"done": 3, "total": 8, "label": "白井　結: 分類"}}`
+- `status` などの意味は [`chat-flow.md`](chat-flow.md) の「進行状態」。初期記憶を作っている間は、`complete_stage` が `new_chat`、`status` が `processing`。
+- 失敗: `session_id` が無い・文字種が違う（400）、セッションに進行状態のファイルが無い（404）
+
+<a id="s8-9"></a>
+
 ### `POST /selected_message`
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
@@ -610,7 +631,7 @@
 - 返却: `{"ok": true, "session_id": ..., "message_list": [10件]}`
 - 画面は、クリックされた印を、返ってきた10件で置き換える。
 
-<a id="s8-9"></a>
+<a id="s8-10"></a>
 
 ### `POST /delete_session`
 
@@ -624,7 +645,7 @@
 - 1件ずつ、一覧から外し、セッションフォルダを消す。途中で失敗したものは `failed_session_ids` に入り、残りは続ける。
 - 一部が失敗しても全体は `ok: true`。画面は2つの配列を見て結果を表示する。
 
-<a id="s8-10"></a>
+<a id="s8-11"></a>
 
 ### 履歴のファイル
 

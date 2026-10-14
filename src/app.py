@@ -141,6 +141,11 @@ def world_start():
 def delete_session():
     return orchestrator.delete_session(request.get_json())
 
+# セッションの進行状態（初期記憶の進み具合など）を返却する
+@app.post("/session_status")
+def session_status():
+    return orchestrator.session_status(request.get_json(silent=True))
+
 # セッションリストから選択した際に、会話履歴を読み込んで返却する
 @app.post("/selected_session")
 def selected_session():

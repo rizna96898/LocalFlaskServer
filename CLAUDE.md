@@ -81,7 +81,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
    退避した画像は `files/sessions/{session_id}/picture/icon/{id}.png` と `picture/standing/{id}_standing.png` に入り、チャット画面は `/session_image/{session_id}/{icon|standing}/{id}` でこれを読む（Web側フォルダの最新の画像は読まない）。プレイヤーの画像も退避する。元に画像が無い人物は退避しない（無くてもチャットは始められる）。
 2. `/new_chat`: `prepare_status.yaml` を作り、初期記憶の生成を別スレッドで開始して、世界YAMLの `開始メッセージ` を返す。
 
-`prepare_status.yaml` の `status`（`processing` / `ready` / `error`）と `complete_stage`（`new_chat` → `prepare` → `main_chat` → `mob_chat` → `after`）が、非同期処理の進行と次に進めるかどうかの判定に使われる。
+`prepare_status.yaml` の `status`（`processing` / `ready` / `error`）と `complete_stage`（`new_chat` → `prepare` → `main_chat` → `mob_chat` → `after`）が、非同期処理の進行と次に進めるかどうかの判定に使われる。初期記憶の進み具合は `progress_done` / `progress_total` / `progress_label` に書き、画面は `/session_status` を1秒ごとに問い合わせて、作成中は「発言」「再送」を止めプログレスバーを出す。
 
 ### ログ
 
