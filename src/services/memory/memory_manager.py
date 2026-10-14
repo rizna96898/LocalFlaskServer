@@ -179,7 +179,6 @@ class MemoryManager:
             try:
                 if operation == "create":
                     current_stage = "character"
-                    status_manager.mark_prepare_ready(session_id, "new_chat")
 
                     base_file_obj = load_init_files.load_base_character_yaml(session_id)
 
@@ -194,6 +193,10 @@ class MemoryManager:
                         base_file_obj,
                         normalized_memory
                     )
+
+                    # 世界の記憶とキャラクターの記憶が全部できてから ready にする
+                    # （ready = 初期記憶が完成。それまでは processing のまま）
+                    status_manager.mark_prepare_ready(session_id, "new_chat")
 
             except Exception as e:
                 log.info(f"[CHARACTER LOGIC ERROR] {type(e).__name__}: {e}")

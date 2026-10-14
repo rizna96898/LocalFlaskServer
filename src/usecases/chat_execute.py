@@ -142,6 +142,10 @@ class ChatExecute:
                     shutil.rmtree(session_dir)
                     deleted_session_ids.append(session_id)
 
+                # 記憶生成の途中結果（temp/{キャラクター}_{セッションID}_middle*.yaml）も消す
+                for temp_file in config.TEMP_DIR.glob(f"*_{session_id}_*"):
+                    temp_file.unlink(missing_ok=True)
+
             except Exception as error:
                 log.info(f"セッション削除失敗: {session_id}")
                 log.info(error)
@@ -247,6 +251,18 @@ class ChatExecute:
 
         return send_file(image_path)
 
+    # アイコンと立ち絵を、あればセッションへ退避する。無くてもチャットは始められる
+    # （チャット画面は、画像が無ければ名前の頭文字を出す）
+    def _copy_images_if_exist(self, owner_dir: Path, owner_id: str, dst_icon_dir: Path, dst_standing_dir: Path):
+        for src, dst_dir in (
+            (owner_dir / "icon" / owner_id / f"{owner_id}.png", dst_icon_dir),
+            (owner_dir / "standing" / owner_id / f"{owner_id}_standing.png", dst_standing_dir),
+        ):
+            if src.is_file():
+                copy2(src, dst_dir)
+            else:
+                log.info(f"画像が無いので退避しない: {src}")
+
     def chat_startup(self, payload):
         # """新規チャット作成（/new_chat）"""
         session_id = str(uuid4())
@@ -291,16 +307,13 @@ class ChatExecute:
                 log.info("プレイヤー用")
                 src = copy_source_players_dir / f"{character_id}_setting.yaml"
                 copy2(src, copy_dst_char_dir)
-            
+                self._copy_images_if_exist(Path(copy_source_dir) / "players", character_id, copy_dst_ico_dir, copy_dst_sta_dir)
+
             if characters_info.get("参照種別") == "character":
                 log.info("メインキャラ用")
                 src = copy_source_character_dir / f"{character_id}_setting.yaml"
-                src_ico = copy_source_character_ico_dir / f"{character_id}" / f"{character_id}.png"
-                src_sta = copy_source_character_sta_dir / f"{character_id}" / f"{character_id}_standing.png"
-
                 copy2(src, copy_dst_char_dir)
-                copy2(src_ico, copy_dst_ico_dir)
-                copy2(src_sta, copy_dst_sta_dir)
+                self._copy_images_if_exist(Path(copy_source_dir) / "characters", character_id, copy_dst_ico_dir, copy_dst_sta_dir)
             
             if characters_info.get("参照種別") == "inline":
                 log.info("その他作成する必要あり")
@@ -394,11 +407,10 @@ class ChatExecute:
                 "character_name": "白井　結"
             }
 
-            string_utils.history_append(
+            line_id = string_utils.history_append(
                 history,
                 "shirai_yui",
                 "main",
-                "1",
                 start_message,
                 icon_data
             )
@@ -408,7 +420,7 @@ class ChatExecute:
             log.info("ニューチャット終了")
             return response_checker.chat_response_ok(
                 payload,
-                "1",
+                line_id,
                 start_message,
                 icon_data
             ), 200
@@ -435,20 +447,20 @@ class ChatExecute:
             icon_data = {"character_id": "player",
                         "character_name": "プレイヤー"}
             
-            string_utils.history_append(history, "player", "player", "1", message, icon_data)
+            string_utils.history_append(history, "player", "player", message, icon_data)
 
             message = self.chat_utils.chat(session_id, payload, message)
 
             icon_data = {"character_id": "shirai_yui",
                         "character_name": "白井　結"}
             
-            string_utils.history_append(history, "shirai_yui", "main", "1", message, icon_data)
+            line_id = string_utils.history_append(history, "shirai_yui", "main", message, icon_data)
 
             file_utils.save_history(session_dir, history)
 
             log.info("チャット終了")
             # log.info("body全量", body)
-            return response_checker.chat_response_ok(payload, "1", message, icon_data), 200
+            return response_checker.chat_response_ok(payload, line_id, message, icon_data), 200
 
         except Exception as e:
             log.info(f"[ERROR] /chat: {e}")
@@ -515,19 +527,19 @@ class ChatExecute:
             icon_data = {"character_id": "player",
                         "character_name": "プレイヤー"}
             
-            string_utils.history_append(history, "player", "player", "1", message, icon_data)
+            string_utils.history_append(history, "player", "player", message, icon_data)
 
             message = "モデルを使わないテスト返却。再送ボタン"
             icon_data = {"character_id": "shirai_yui",
                         "character_name": "白井　結"}
             
-            string_utils.history_append(history, "player", "player", "1", message, icon_data)
+            line_id = string_utils.history_append(history, "player", "player", message, icon_data)
 
             file_utils.save_history(session_dir, history)
 
             log.info("再送終了")
             # log.info("body全量", body)
-            return response_checker.chat_response_ok(payload, "1", message, icon_data), 200
+            return response_checker.chat_response_ok(payload, line_id, message, icon_data), 200
 
         except Exception as e:
             log.info(f"[ERROR] /chat: {e}")

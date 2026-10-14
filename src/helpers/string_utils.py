@@ -337,7 +337,10 @@ def to_literal_if_multiline(value):
 
     return value
 
-def history_append(history: dict, speaker: str, role: str, line_id: str, message: str, icon_data: dict):
+# 履歴に1件足し、振った line_id を返す。
+# line_id は発言ごとの通し番号（1から）。履歴を読み出すAPIも「何件目か」で番号を振るので、それと一致する。
+def history_append(history: list, speaker: str, role: str, message: str, icon_data: dict) -> str:
+    line_id = str(len(history) + 1)
     history.append({
         "t": time.time(),
         "speaker": speaker,
@@ -346,6 +349,7 @@ def history_append(history: dict, speaker: str, role: str, line_id: str, message
         "message": message,
         "icon_data": icon_data
     })
+    return line_id
 
 def _join_sections(*parts: str) -> str:
     """空文字を除外しつつ、改行の崩れを抑えて連結する"""

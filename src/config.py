@@ -13,6 +13,7 @@ SESSIONS_DIR = FILES_DIR / "sessions"
 PROMPTS_DIR = FILES_DIR / "prompts"
 SETTINGS_DIR = FILES_DIR / "settings"
 TEMPLATES_DIR = FILES_DIR / "templates"
+TEMP_DIR = ROOT_DIR / "temp"   # 記憶生成の途中結果
 
 
 class Config:
@@ -28,6 +29,7 @@ class Config:
         self.SETTINGS_DIR = SETTINGS_DIR
 
         self.TEMPLATES_DIR  = TEMPLATES_DIR
+        self.TEMP_DIR       = TEMP_DIR
 
         self.settings = self._load_system_settings()
 
