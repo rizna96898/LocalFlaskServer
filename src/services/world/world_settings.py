@@ -123,6 +123,9 @@ class WorldSettings:
 
         world_setting_file = Path(base_chat_path) / f"worlds/settings/{world_id}_world.yaml"
 
+        if not world_setting_file.is_file():
+            return jsonify({"ok": False, "message": f"世界設定がありません: {world_id}"}), 404
+
         world_setting_data = file_utils.load_yaml_file(world_setting_file)
         
         world_id = world_setting_data.get("世界ID")
@@ -343,6 +346,9 @@ class WorldSettings:
         character_id = payload.get("character_id", "").strip()
 
         character_setting_file = Path(base_chat_path) / f"characters/settings/{character_id}_setting.yaml"
+
+        if not character_setting_file.is_file():
+            return jsonify({"ok": False, "message": f"キャラクター設定がありません: {character_id}"}), 404
 
         character_setting_data = file_utils.load_yaml_file(character_setting_file)
         result = yaml.safe_dump(

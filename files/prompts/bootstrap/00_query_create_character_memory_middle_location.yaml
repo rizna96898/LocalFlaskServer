@@ -4,7 +4,7 @@ system: |
 
 template: |
   対象:
-  {summary_data}
+  {summary}
 
   結果:
 

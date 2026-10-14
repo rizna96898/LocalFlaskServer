@@ -79,12 +79,9 @@ files/prompts/
 | `header` | 本文の前に置く文 |
 | `template` | 本文のひな形。`{名前}` の形の差し込み口を持てる |
 | `tail_template` | 本文の後に置く念押し。「出力開始は必ず『服装:』から」など |
-| `message_header` | `header` と同じ役割（分類のプロンプトだけがこの名前を使っている） |
 | `params` | そのプロンプトだけ生成の設定を変えたいときに書く（→「生成の設定」）。普段は書かない |
 
 全部が必須ではない。使うキーだけ書く。
-
-- **【要確認 Q38】** 分類のプロンプトだけ `header` ではなく `message_header` という名前になっている。`header` に揃えてよいか。
 
 <a id="s3-1"></a>
 
@@ -92,23 +89,21 @@ files/prompts/
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-`template` などの中の `{summary_data}` のような部分は、送る前にコードが実際の内容で置き換える。
+`template` などの中の `{summary}` のような部分は、送る前にコードが実際の内容で置き換える。
 
 | 差し込み口 | 入るもの |
 |---|---|
-| `{character_name}` | キャラクターの表示名（要約のプロンプトの本文だけは、表示名ではなくキャラクターIDが入る） |
+| `{character_name}` | キャラクターの表示名 |
 | `{character_data}` | キャラクター設定YAMLの全文 |
 | `{characters}` | 登場人物（要約のプロンプトでは、世界の記憶の `世界の状態` → `参加者`） |
 | `{scenario}` | シナリオ本文 |
-| `{first_mes}`、`{first_message}` | 開始メッセージ |
-| `{mes_example}` | シナリオパラメータ |
-| `{summary_data}`、`{summary}` | 要約の段階の結果 |
+| `{first_message}` | 開始メッセージ |
+| `{scenario_parameter}` | シナリオパラメータ |
+| `{summary}` | 要約の段階の結果 |
 | `{location}`、`{clothing_data}` | 場所・服装の段階の結果 |
 | `{participants_data}` | 世界の記憶の参加者 |
 
-- **【要確認 Q39】** 同じものに、プロンプトによって違う名前が付いている（`{first_mes}` と `{first_message}`、`{summary_data}` と `{summary}`）。
-  `{first_mes}`、`{mes_example}` は SillyTavern のキャラクターカードの項目名の名残に見える。揃えるか。
-  また、要約のプロンプトでは `{character_name}` に、system 側は表示名、本文側はIDが入る。どちらかに揃えるか。
+- 同じものには、どのプロンプトでも同じ名前を使う。新しく差し込み口を作るときは、上の表の名前に合わせる。
 
 <a id="s4"></a>
 
@@ -314,8 +309,7 @@ chat:
 - `generation.yaml` が壊れていても（YAMLとして読めない、形が違う）、止めずに、直前に読めた内容で送る。
 - `generation.yaml` は Git で管理する。`files/settings/` は丸ごと管理外だが、このファイルだけ例外にしている。
   APIキーなど秘密の値は書かない（それは `system_settings.yaml` に書く）。
-- **【要確認 Q44】** 今の呼び出しは、すべて用途が `memory` になっている（誰に向けた発言かの判定も `memory`）。
-  判定は `judge`、返答は `chat` にするのが本来の形か。
+- 誰に向けた発言かの判定は `judge`、キャラクターの返答は `chat` で送る。
 
 <a id="s6-2"></a>
 
@@ -378,9 +372,8 @@ response_text = self.model_handling_service.send_message(parameters)
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-| 番号 | 対象 | 確認したいこと |
-|---|---|---|
-| Q38 | YAMLのキー | `message_header` を `header` に揃えるか |
-| Q39 | 差し込み口 | 同じものの名前（`{first_mes}` と `{first_message}` など）を揃えるか |
-| Q40 | 組み立て方 | 2通りあるのを1つに揃えるか |
-| Q44 | 最大トークン数 | 判定は `judge`、返答は `chat` にするか |
+答えが決まっていても、コードに反映するまでは表に残す。反映したら、本文を仕様として書き直し、表から外す。
+
+| 番号 | 対象 | 確認したいこと | 回答・状況 |
+|---|---|---|---|
+| Q40 | 組み立て方 | 2通りあるのを1つに揃えるか | 回答: OK（揃える）。→ 未反映 |

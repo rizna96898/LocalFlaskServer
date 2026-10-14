@@ -81,6 +81,10 @@ def main() -> int:
     t.check("  保存した世界YAMLがある", (box.web / "worlds" / "settings" / "zz_verify_world.yaml").exists())
     t.api(client, "世界設定の保存 ID不正", "post", "/settings/save_world_setting", 400, False,
           json={"base_chat_path": web, "world_id": "a-b", "world_name": "x"})
+    t.api(client, "世界設定の読み込み 無いID → 404", "post", "/settings/load_world_settings", 404, False,
+          json={"base_chat_path": web, "world_id": "no_such_world"})
+    t.api(client, "キャラクター設定の読み込み 無いID → 404", "post", "/settings/load_character_settings", 404, False,
+          json={"base_chat_path": web, "character_id": "no_such_character"})
 
     # ---------------------------------------------------------------- 画像
     print("\n# 画像の保存と読み込み")
@@ -143,6 +147,9 @@ def main() -> int:
                  ["session_id", "world_id", "world_name", "display_name"],
                  json={"world_id": world_id, "base_chat_path": web})
     sid = body.get("session_id", "")
+    char_files = sorted(p.name for p in (box.sessions / sid / "character").glob("*.yaml"))
+    t.check("  登場人物の設定は全員 {ID}_setting.yaml の名前でコピーされる（inline も）",
+            bool(char_files) and all(n.endswith("_setting.yaml") for n in char_files), char_files)
     listed = t.api(client, "一覧（1件）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
     t.check("  作ったセッションが一覧にある", any(s.get("session_id") == sid for s in listed.get("sessions", [])))
     t.api(client, "selected_session", "post", "/selected_session", 200, True, ["session_id", "message_list"],
@@ -199,6 +206,18 @@ def main() -> int:
     t.check("送信した設定が generation.yaml の memory の値と一致", bool(expect) and not wrong,
             f"期待 {expect} / 違うもの {len(wrong)} 件")
     scripted.post("/delete_session", json={"session_ids": [msid]})
+
+    # 世界の記憶で失敗したら、そこで止まり、失敗した場所(world)が残る
+    broken = box.client(llm=lambda prompt: "壊れた返事" if "状態と記憶を構造化" in prompt else sandbox.scripted_llm(prompt))
+    fsid = (broken.post("/chat_startup", json={"world_id": world_id, "base_chat_path": web}).get_json() or {}).get("session_id", "")
+    before = len(box.llm_requests)
+    broken.post("/new_chat", json={"session_id": fsid})
+    box.wait_background(60)
+    status = yaml.safe_load((box.sessions / fsid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
+    t.check("世界の記憶で失敗: 状態は error、失敗した場所は world", (status.get("status"), status.get("error_stage")) == ("error", "world"), status)
+    t.check("世界の記憶で失敗: キャラクターの記憶には進まない",
+            not any("情報抽出担当" in q.get("prompt", "") for q in box.llm_requests[before:]))
+    broken.post("/delete_session", json={"session_ids": [fsid]})
     client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
 
     # ---------------------------------------------------------------- セッションに退避した画像

@@ -307,10 +307,10 @@ class ChatExecute:
                 #templateを一旦コピー
                 copy2(
                     copy_source_temp_file_path,
-                    copy_dst_char_dir / f"{character_id}.yaml"
+                    copy_dst_char_dir / f"{character_id}_setting.yaml"
                 )
                 #コピー先のテンプレートを読み込む
-                sub_char_yaml = file_utils.load_yaml_file(copy_dst_char_dir / f"{character_id}.yaml")
+                sub_char_yaml = file_utils.load_yaml_file(copy_dst_char_dir / f"{character_id}_setting.yaml")
 
                 #読み込んだテンプレートのIDと名前を変更
                 sub_display_name = characters_info.get("表示名")
@@ -320,7 +320,7 @@ class ChatExecute:
                 sub_char_yaml["名前"]["ふりがな"] = rubi
                 sub_char_yaml["名前"]["識別子"] = sub_character_id
                 #保存
-                file_utils.save_yaml_file(copy_dst_char_dir / f"{character_id}.yaml", sub_char_yaml)
+                file_utils.save_yaml_file(copy_dst_char_dir / f"{character_id}_setting.yaml", sub_char_yaml)
             log.info("その他作成する必要なし")
         
         #sessions_listの最終行へ追記
