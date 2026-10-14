@@ -69,7 +69,8 @@ def main() -> int:
     def dump(value):
         return yaml.safe_dump(value, allow_unicode=True, sort_keys=False)
 
-    t.api(client, "世界設定の読み込み", "post", "/settings/load_world_settings", 200, True,
+    t.api(client, "世界設定の読み込み（項目名は保存と同じ）", "post", "/settings/load_world_settings", 200, True,
+          ["include_data", "goal_data", "parameter_data", "past", "current", "future", "purpose", "supplement", "start_message"],
           json={"base_chat_path": web, "world_id": world_id})
     t.api(client, "キャラクター設定の読み込み", "post", "/settings/load_character_settings", 200, True,
           ["character_id", "character_name", "character_info"], json={"base_chat_path": web, "character_id": cid})
@@ -79,6 +80,12 @@ def main() -> int:
         "parameter_data": dump(world["シナリオパラメータ"]),
         "past": "", "current": "いま", "future": "", "start_message": "開始"})
     t.check("  保存した世界YAMLがある", (box.web / "worlds" / "settings" / "zz_verify_world.yaml").exists())
+    two_players = dict(world["登場人物"])
+    two_players["世界の登場人物"] = list(two_players["世界の登場人物"]) + [
+        next(p for p in two_players["世界の登場人物"] if p.get("参照種別") == "player")]
+    t.api(client, "世界設定の保存 player が2人 → 400", "post", "/settings/save_world_setting", 400, False, json={
+        "base_chat_path": web, "world_id": "zz_two_players", "world_name": "x", "include_data": dump(two_players),
+        "goal_data": dump(world["シナリオの目標"]), "parameter_data": dump(world["シナリオパラメータ"])})
     t.api(client, "世界設定の保存 ID不正", "post", "/settings/save_world_setting", 400, False,
           json={"base_chat_path": web, "world_id": "a-b", "world_name": "x"})
     t.api(client, "世界設定の読み込み 無いID → 404", "post", "/settings/load_world_settings", 404, False,
@@ -144,7 +151,7 @@ def main() -> int:
           json={"world_id": world_id, "world_name": world_name})
 
     body = t.api(client, "chat_startup", "post", "/chat_startup", 200, True,
-                 ["session_id", "world_id", "world_name", "display_name"],
+                 ["session_id", "world_id", "world_name", "display_name", "created_at", "updated_at"],
                  json={"world_id": world_id, "base_chat_path": web})
     sid = body.get("session_id", "")
     char_files = sorted(p.name for p in (box.sessions / sid / "character").glob("*.yaml"))

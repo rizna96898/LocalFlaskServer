@@ -47,6 +47,15 @@ class WorldSettings:
         try:
             include_data = yaml.safe_load(include_str)
             data_list = include_data["世界の登場人物"]
+
+            # プレイヤーは必ず1人
+            player_count = sum(1 for c in data_list if isinstance(c, dict) and c.get("参照種別") == "player")
+            if player_count != 1:
+                return jsonify({
+                    "ok": False,
+                    "message": f"登場人物の player は1人だけにしてください（今は {player_count} 人）"
+                }), 400
+
             for index, character_data in enumerate(data_list):
                 if character_data["表示名"] is None:
                     reference_file_path = ""
@@ -156,21 +165,21 @@ class WorldSettings:
             sort_keys=False
         )
 
+        # 項目名は、保存(/settings/save_world_setting)で受け取る名前と揃えている
         return jsonify({
             "ok": True,
             "message": "",
             "world_id": world_id,
             "world_name": world_name,
-            "characters": characters,
-            "goal_target": goal_target,
+            "include_data": characters,
+            "goal_data": goal_target,
             "past": past,
-            "now": now,
+            "current": now,
             "future": future,
             "purpose": purpose,
             "supplement": supplement,
-            "scenario_parameter": scenario_parameter,
+            "parameter_data": scenario_parameter,
             "start_message": start_message,
-
         }), 200
 
     def save_player_setting(self, payload):
