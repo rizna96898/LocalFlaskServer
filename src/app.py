@@ -100,6 +100,17 @@ def save_character_setting():
 def load_character_settings():
     return orchestrator.load_character_settings(request.get_json())
 
+# プレイヤー設定を読み込んで返却
+@app.post("/settings/load_player_settings")
+def load_player_settings():
+    return orchestrator.load_player_settings(request.get_json(silent=True))
+
+# 世界・キャラクター・プレイヤーの一覧を、フォルダのYAMLから作って返却
+# kind は world / character / player
+@app.post("/settings/list_settings")
+def list_settings():
+    return orchestrator.list_settings(request.get_json(silent=True))
+
 # キャラクター・プレイヤーの画像を読み込んで返却
 # owner_type は character(省略時) / player
 @app.get("/settings/load_image/<image_type>/<owner_id>")

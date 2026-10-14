@@ -7,6 +7,15 @@ from helpers import file_utils
 from helpers import string_utils
 from logger import log
 
+# 一覧の種類ごとの、フォルダとファイル名の末尾
+# {base_chat_path}/{フォルダ}/settings/{ID}{末尾}
+LIST_SOURCES = {
+    "world": ("worlds", "_world.yaml"),
+    "character": ("characters", "_setting.yaml"),
+    "player": ("players", "_setting.yaml"),
+}
+
+
 class WorldSettings:
     def __init__(self):
         self.model_handling_service = None
@@ -359,6 +368,81 @@ class WorldSettings:
             "message": "キャラクター設定を保存しました",
             "path": str(save_path)
         })
+
+    # 世界・キャラクター・プレイヤーの一覧を、フォルダのYAMLから作って返す
+    # kind: world / character / player
+    def list_settings(self, payload):
+        payload = payload or {}
+        base_chat_path = (payload.get("base_chat_path") or "").strip()
+        kind = (payload.get("kind") or "").strip()
+
+        if not base_chat_path:
+            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+
+        if kind not in LIST_SOURCES:
+            return jsonify({"ok": False, "message": f"kind は {' / '.join(LIST_SOURCES)} のどれかにしてください"}), 400
+
+        if not Path(base_chat_path).is_dir():
+            return jsonify({"ok": False, "message": f"base_chat_pathのフォルダがありません: {base_chat_path}"}), 404
+
+        folder, suffix = LIST_SOURCES[kind]
+        settings_dir = Path(base_chat_path) / folder / "settings"
+
+        items = []
+        if settings_dir.is_dir():
+            for path in sorted(settings_dir.glob(f"*{suffix}")):
+                item_id = path.name[:-len(suffix)]
+
+                # ID に使えない文字のファイルは、画面から開けないので一覧に出さない
+                if not re.fullmatch(r"[A-Za-z0-9_]+", item_id):
+                    continue
+
+                data = file_utils.load_yaml_file(path)
+                if kind == "world":
+                    name = data.get("世界名")
+                else:
+                    name_block = data.get("名前")
+                    name = name_block.get("表示名") if isinstance(name_block, dict) else None
+
+                items.append({"id": item_id, "name": name or item_id})
+
+        return jsonify({"ok": True, "message": "", "kind": kind, "items": items}), 200
+
+    # プレイヤー設定を読み込んで返却（キャラクター設定の読み込みと同じ形）
+    def load_player_settings(self, payload):
+        payload = payload or {}
+        base_chat_path = (payload.get("base_chat_path") or "").strip()
+        player_id = (payload.get("player_id") or "").strip()
+
+        if not base_chat_path:
+            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+
+        if not re.fullmatch(r"[A-Za-z0-9_]+", player_id):
+            return jsonify({"ok": False, "message": "プレイヤーIDは半角英数字と_で指定してください"}), 400
+
+        player_setting_file = Path(base_chat_path) / f"players/settings/{player_id}_setting.yaml"
+
+        if not player_setting_file.is_file():
+            return jsonify({"ok": False, "message": f"プレイヤー設定がありません: {player_id}"}), 404
+
+        player_setting_data = file_utils.load_yaml_file(player_setting_file)
+        result = yaml.safe_dump(
+            player_setting_data,
+            allow_unicode=True,
+            sort_keys=False
+        )
+
+        name_block = player_setting_data.get("名前")
+        if not isinstance(name_block, dict):
+            name_block = {}
+
+        return jsonify({
+            "ok": True,
+            "message": "",
+            "player_id": name_block.get("識別子") or player_id,
+            "player_name": name_block.get("表示名") or player_id,
+            "player_info": result,
+        }), 200
 
     def load_character_settings(self, payload):
 
