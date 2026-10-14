@@ -99,6 +99,30 @@ def main() -> int:
     t.api(client, "キャラクター設定の読み込み 無いID → 404", "post", "/settings/load_character_settings", 404, False,
           json={"base_chat_path": web, "character_id": "no_such_character"})
 
+    # 一覧はフォルダの中身から作る（→ docs/spec/api.md「一覧」）
+    pid = next(p.get("参照ID") for p in world["登場人物"]["世界の登場人物"] if p.get("参照種別") == "player")
+    for kind, wanted in (("world", "zz_verify"), ("character", cid), ("player", pid)):
+        body = t.api(client, f"一覧 {kind}", "post", "/settings/list_settings", 200, True, ["items"],
+                     json={"base_chat_path": web, "kind": kind})
+        items = body.get("items", [])
+        t.check(f"  {wanted} が一覧にあり、名前が付いている",
+                any(i.get("id") == wanted and i.get("name") for i in items), items)
+    body = t.api(client, "一覧 world の名前は 世界名", "post", "/settings/list_settings", 200, True, ["items"],
+                 json={"base_chat_path": web, "kind": "world"})
+    t.check("  保存した世界の名前", any(i == {"id": "zz_verify", "name": "検証用の世界"} for i in body.get("items", [])))
+    t.api(client, "一覧 kind 不正 → 400", "post", "/settings/list_settings", 400, False, json={"base_chat_path": web, "kind": "x"})
+    t.api(client, "一覧 base_chat_path なし → 400", "post", "/settings/list_settings", 400, False, json={"kind": "world"})
+    t.api(client, "一覧 base_chat_path が無いフォルダ → 404", "post", "/settings/list_settings", 404, False,
+          json={"base_chat_path": web + "_x", "kind": "world"})
+
+    body = t.api(client, "プレイヤー設定の読み込み", "post", "/settings/load_player_settings", 200, True,
+                 ["player_id", "player_name", "player_info"], json={"base_chat_path": web, "player_id": pid})
+    t.check("  ファイルの中身が返る", body.get("player_id") == pid and "名前" in (body.get("player_info") or ""), body.get("player_id"))
+    t.api(client, "プレイヤー設定の読み込み 無いID → 404", "post", "/settings/load_player_settings", 404, False,
+          json={"base_chat_path": web, "player_id": "no_such_player"})
+    t.api(client, "プレイヤー設定の読み込み ID不正 → 400", "post", "/settings/load_player_settings", 400, False,
+          json={"base_chat_path": web, "player_id": "../x"})
+
     # ---------------------------------------------------------------- 画像
     print("\n# 画像の保存と読み込み")
 

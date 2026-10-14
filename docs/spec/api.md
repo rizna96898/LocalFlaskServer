@@ -25,7 +25,8 @@
   - [`POST /settings/save_character_setting`](#s6-1)
   - [`POST /settings/load_character_settings`](#s6-2)
   - [`POST /settings/save_player_setting`](#s6-3)
-  - [一覧と削除について](#s6-4)
+  - [`POST /settings/load_player_settings`](#s6-4)
+  - [一覧と削除について](#s6-5)
 - [画像](#s7)
   - [`POST /settings/save_image`](#s7-1)
   - [`GET /settings/load_image/{image_type}/{owner_id}`](#s7-2)
@@ -127,6 +128,8 @@
 | `POST /settings/save_character_setting` | キャラクター設定を保存 | キャラクター |
 | `POST /settings/load_character_settings` | キャラクター設定を読み込む | キャラクター |
 | `POST /settings/save_player_setting` | プレイヤー設定を保存 | プレイヤー |
+| `POST /settings/load_player_settings` | プレイヤー設定を読み込む | プレイヤー |
+| `POST /settings/list_settings` | 世界・キャラクター・プレイヤーの一覧を、フォルダから作って返す | 世界、キャラクター、プレイヤー、メイン |
 | `POST /settings/save_image` | アイコン・立ち絵を保存 | キャラクター、プレイヤー |
 | `GET /settings/load_image/{種別}/{ID}` | アイコン・立ち絵を返す（編集画面用） | キャラクター、プレイヤー |
 | `POST /world_start` | 世界を選ぶ | メイン |
@@ -360,19 +363,50 @@
 プレイヤー設定を `players/settings/{player_id}_setting.yaml` に保存する。
 項目は `player_id`、`player_name`、`content`、`base_chat_path`。動きはキャラクター設定の保存と同じ。
 
-- **【要確認 Q7】** プレイヤー設定を**読み込む**APIが無い（キャラクターにはある）。プレイヤー画面は、ブラウザに保存した内容だけを表示している。
-  意図したものか、作り忘れか。
-
 <a id="s6-4"></a>
+
+### `POST /settings/load_player_settings`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+| 項目 | 必須 | 内容 |
+|---|---|---|
+| `base_chat_path` | 必須 | |
+| `player_id` | 必須 | 半角英数字と `_` |
+
+- 返却: `{"ok": true, "player_id": ..., "player_name": ..., "player_info": "設定YAML全体の文字列"}`（キャラクターの読み込みと同じ形）
+- 失敗: `base_chat_path` が無い・IDの文字種が違う（400）、設定YAMLが無い（404）
+
+<a id="s6-5"></a>
 
 ### 一覧と削除について
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-- **【要確認 Q8】** 世界・キャラクター・プレイヤーの**一覧を返すAPIが無い**。各画面の一覧は、ブラウザの `localStorage`
-  （`world_list`、`char_list`、`player_list`）に持っている。そのため、別のブラウザや別のPCで開くと一覧が空になり、
-  フォルダにYAMLがあっても表示されない。フォルダの中身から一覧を作るべきか。
-- **【要確認 Q9】** **削除するAPIも無い**。各画面の「削除」は、ブラウザの一覧から消すだけで、YAMLや画像のファイルは残る。意図したものか。
+#### `POST /settings/list_settings`
+
+世界・キャラクター・プレイヤーの一覧を、フォルダのYAMLから作って返す。画面は、一覧を出すたびにこれを呼ぶ。
+
+| 項目 | 必須 | 内容 |
+|---|---|---|
+| `base_chat_path` | 必須 | |
+| `kind` | 必須 | `world` / `character` / `player` |
+
+| `kind` | 読むファイル | `name` に入るもの |
+|---|---|---|
+| `world` | `worlds/settings/{ID}_world.yaml` | `世界名` |
+| `character` | `characters/settings/{ID}_setting.yaml` | `名前` → `表示名` |
+| `player` | `players/settings/{ID}_setting.yaml` | `名前` → `表示名` |
+
+- 返却: `{"ok": true, "kind": ..., "items": [{"id": ..., "name": ...}]}`。IDの順に並ぶ。
+- IDはファイル名から取る。IDに使えない文字（半角英数字と `_` 以外）のファイルは、一覧に出さない。名前が無ければIDを入れる。
+- 失敗: `base_chat_path` が無い・`kind` が違う（400）、`base_chat_path` のフォルダが無い（404）。
+  `settings` フォルダが無いだけなら、空の一覧を返す。
+- 画面は、受け取った一覧をブラウザ（`world_list`、`char_list`、`player_list`）にも書き、他の処理はそこから読む。
+
+#### 削除
+
+- **【要確認 Q9】** **削除するAPIは無い**。各画面の「削除」は、ブラウザの一覧から消すだけで、YAMLや画像のファイルは残る。一覧はフォルダから作るので、画面を開き直すと戻ってくる。意図したものか。
 
 ---
 
@@ -700,8 +734,6 @@
 | 番号 | 対象 | 確認したいこと | 回答・状況 |
 |---|---|---|---|
 | Q3 | `/settings/load_model` | 「モデルロード」ボタンに本来させたかったこと | 回答: モデルを変えたとき、サーバーの再起動を不要にするためのボタン。<br>→ 未反映（モデルサーバーへの読み直しの指示が要る） |
-| Q7 | プレイヤー設定 | 読み込むAPIが無いのは意図したものか | 回答: ファイルから読む（サーバーから引く）。保存は既にファイルへ書いている。→ 未反映（Q8・Q9 と一緒に進める） |
-| Q8 | 一覧 | 世界・キャラクター・プレイヤーの一覧を、ブラウザではなくフォルダの中身から作るべきか | 回答: 可能ならその方が安全。→ 未反映 |
 | Q9 | 削除 | 画面の「削除」でファイルも消すべきか | 回答: 削除すべき。→ 未反映 |
 | Q10 | `/world_start` | `/load_session_list` と分けている意図。まとめてよいか | 回答: 違いを忘れたので後で |
 | Q16 | `/re_chat` | 「再送」の本来の動き | 回答: 失敗したときの保険。会話欄の最終行のプレイヤーの発言を送信し直すボタン。→ 未反映（Q35 と合わせて詰める） |

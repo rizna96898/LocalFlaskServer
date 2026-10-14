@@ -105,6 +105,14 @@ class ChatOrchestrator:
     def load_character_settings(self, payload):
         return self.chat_settings.load_character_settings(payload)
 
+    # プレイヤー設定を読み込んで返却
+    def load_player_settings(self, payload):
+        return self.chat_settings.load_player_settings(payload)
+
+    # 世界・キャラクター・プレイヤーの一覧を、フォルダのYAMLから作って返却
+    def list_settings(self, payload):
+        return self.chat_settings.list_settings(payload)
+
     # 画像ファイルの場所を決める。問題があれば (None, エラーレスポンス) を返す
     # owner_type: character(省略時) / player
     # 保存先: {base_chat_path}/characters|players/icon|standing/{owner_id}/
