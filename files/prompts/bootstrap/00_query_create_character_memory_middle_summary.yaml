@@ -64,10 +64,10 @@ template: |
   {scenario}
 
   【状態変数】
-  {mes_example}
+  {scenario_parameter}
 
   開始文:
-  {first_mes}
+  {first_message}
 
 tail_template: |
   上記をもとに要約結果のみを出力してください。

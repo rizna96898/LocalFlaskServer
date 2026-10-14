@@ -171,6 +171,10 @@ class MemoryManager:
                     complete_stage="new_chat",
                 )
 
+                # 世界の記憶が無いとキャラクターの記憶は作れないので、ここで止める。
+                # 続けると、次の段階が状態を ready で上書きしたうえで別のエラーになり、本当の原因(world)が消える
+                return
+
             # ここからキャラクター情報の作成
             try:
                 if operation == "create":
@@ -393,7 +397,7 @@ class MemoryManager:
         system_prompt = base_file_obj["prompt_categorize_yaml"].get("system")
         # systemの中も置換しないといけないような気がする・・・
         for temp_categorize_str in temp_categorize_data:
-            temp_str = base_file_obj["prompt_categorize_yaml"].get("message_header") + "\n" + temp_categorize_str + "\n" + base_file_obj["prompt_categorize_yaml"].get("tail_template")
+            temp_str = base_file_obj["prompt_categorize_yaml"].get("header") + "\n" + temp_categorize_str + "\n" + base_file_obj["prompt_categorize_yaml"].get("tail_template")
 
             parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_categorize_yaml"])
 
@@ -445,7 +449,7 @@ class MemoryManager:
         # # systemの中も置換しないといけないような気がする・・・
         temp_str = base_file_obj["prompt_location_yaml"].get("template") + "\n" + base_file_obj["prompt_location_yaml"].get("tail_template")
 
-        temp_str = temp_str.replace("{summary_data}", temp_place_str)
+        temp_str = temp_str.replace("{summary}", temp_place_str)
 
         # # ここでreplaceが必要かな？
         # # 後共通化できそう？
@@ -656,8 +660,8 @@ class MemoryManager:
         # template_promptの置換
         template_prompt = template_prompt.replace("{character_name}", char_id)
         template_prompt = template_prompt.replace("{scenario}", scenario_str or "")
-        template_prompt = template_prompt.replace("{mes_example}", scenario_parameter_str or "")
-        template_prompt = template_prompt.replace("{first_mes}", start_message or "")
+        template_prompt = template_prompt.replace("{scenario_parameter}", scenario_parameter_str or "")
+        template_prompt = template_prompt.replace("{first_message}", start_message or "")
         template_prompt = template_prompt.replace("{characters}", relationships_str)
 
         result = {}

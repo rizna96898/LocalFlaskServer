@@ -17,9 +17,9 @@ class ChatManager:
         prompt_messages = self.prompt_builder.create_discrimination_prompt(session_id, message)
         log.info("プロンプトエラーが無い事", prompt_messages)
 
-        # TODO 用途は judge が本来の形と思われるが、今は memory のまま（docs/spec/prompts.md の Q44）
+        # 誰に向けた発言かの判定なので、用途は judge（短い答えで足りる）
         parameters = generation_params.build_send_parameters(
-            "memory",
+            "judge",
             messages=prompt_messages,
             prompt_data=file_utils.load_yaml_file(config.MAIN / PromptsMain.CHARACTER_IDENTIFICATION),
         )

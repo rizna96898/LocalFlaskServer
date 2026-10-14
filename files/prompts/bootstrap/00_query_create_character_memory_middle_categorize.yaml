@@ -28,7 +28,7 @@ system: |
 
   分類名: 行動
 
-message_header: |
+header: |
   判定文
 
 tail_template: |
