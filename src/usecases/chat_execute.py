@@ -389,6 +389,8 @@ class ChatExecute:
             world_id=world_id,
             world_name=world_name,
             display_name=display_name,
+            created_at=now_text,
+            updated_at=now_text,
         )
 
     # ニューチャットの入り口

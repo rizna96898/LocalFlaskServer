@@ -35,9 +35,10 @@ orchestrator = ChatOrchestrator()
 ############################################################################
 
 # server起動確認
+# サーバーの起動確認。status が ok なら正常、ng なら起動はしているが異常あり（message に理由）
 @app.get("/health")
 def health():
-    return response_checker.response_ok(status="ok")
+    return orchestrator.health()
 
 # folder選択ウィンドウを表示（したかったけど今は使えない）
 @app.post("/settings/select_base_path")

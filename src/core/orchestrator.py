@@ -8,8 +8,9 @@
 """
 
 import re
-from flask import send_file
+from flask import jsonify, send_file
 from pathlib import Path
+from config import config
 from helpers import response_checker
 from services.llm import llm_service
 # ヘルパー
@@ -26,6 +27,35 @@ class ChatOrchestrator:
         self.model_handling_service = None
         self.chat_execute = ChatExecute()
         self.chat_settings = WorldSettings()
+
+    # サーバーの起動確認。動くのに最低限必要なものが揃っているかを確かめる。
+    # 正常: {"ok": true, "status": "ok"}
+    # 異常: {"ok": false, "status": "ng", "message": 理由}（HTTP 503）
+    # 応答が無い場合（サーバーが止まっている）は、画面側で「未接続」と判断する
+    def health(self):
+        try:
+            problems = []
+
+            if not config.settings:
+                problems.append("設定ファイル(system_settings.yaml)を読めていません")
+
+            if not config.PROMPTS_DIR.is_dir():
+                problems.append(f"プロンプトのフォルダがありません: {config.PROMPTS_DIR}")
+
+            config.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+            if problems:
+                return self._health_ng(" / ".join(problems))
+
+            return response_checker.response_ok(status="ok")
+
+        except Exception as e:
+            log.info(f"[ERROR] health: {type(e).__name__}: {e}")
+            return self._health_ng(f"{type(e).__name__}: {e}")
+
+    # 異常の応答。response_error は引数名 status をHTTPステータスに使うので、ここでは直接組み立てる
+    def _health_ng(self, message):
+        return jsonify({"ok": False, "status": "ng", "message": message}), 503
 
     # folder選択ウィンドウを表示（したかったけど今は使えない）
     def select_base_path(self, payload):
