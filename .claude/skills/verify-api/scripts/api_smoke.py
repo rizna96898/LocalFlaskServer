@@ -278,6 +278,9 @@ def main() -> int:
               "「現在の所持品」を特定", "「意識を向けている相手」を特定", "「所持金」を確定"]
     missing = [s for s in stages if not any(s in q.get("prompt", "") for q in sent)]
     t.check("全段階（世界 ＋ キャラクター7段階）のプロンプトが送られる", not missing, f"送られていない段階: {missing}")
+    # 組み立て方は全段階共通（header ＋ 本文 ＋ template ＋ tail_template）。要約の tail_template も送る
+    summary = [q.get("prompt", "") for q in sent if "情報抽出担当" in q.get("prompt", "")]
+    t.check("要約の段階に tail_template が入る", bool(summary) and all("要約結果のみを出力" in s for s in summary))
 
     # 生成の設定は files/settings/generation.yaml から読む（→ docs/spec/prompts.md「生成の設定」）
     wanted = yaml.safe_load(box.generation_file.read_text(encoding="utf-8")) or {}

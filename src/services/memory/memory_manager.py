@@ -407,7 +407,13 @@ class MemoryManager:
         log.info("[CHAR MEMORY MIDDLE SUMMARY] replace end")
         
         log.info("[CHAR MEMORY MIDDLE SUMMARY] send message start")
-        parameters = generation_params.build_send_parameters("memory", system_prompt=result["system_prompt"], user_content=result["template_prompt"], prompt_data=base_file_obj["prompt_data"])
+        # 差し込み口を埋めた system と template で、共通の形に組み立てる（tail_template も送る）
+        prompt_messages = string_utils.build_messages({
+            **base_file_obj["prompt_data"],
+            "system": result["system_prompt"],
+            "template": result["template_prompt"],
+        })
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_data"])
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         list_input = string_utils.extract_list_items(response_text)
@@ -431,12 +437,12 @@ class MemoryManager:
                                char_id: str = "",
                                session_id: str = "",):
         temp_categorize_data = file_utils.load_yaml_file(temp_file) or {}
-        system_prompt = base_file_obj["prompt_categorize_yaml"].get("system")
         # systemの中も置換しないといけないような気がする・・・
         for temp_categorize_str in temp_categorize_data:
-            temp_str = base_file_obj["prompt_categorize_yaml"].get("header") + "\n" + temp_categorize_str + "\n" + base_file_obj["prompt_categorize_yaml"].get("tail_template")
+            # header ＋ 要約の1行 ＋ tail_template
+            prompt_messages = string_utils.build_messages(base_file_obj["prompt_categorize_yaml"], [temp_categorize_str])
 
-            parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_categorize_yaml"])
+            parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_categorize_yaml"])
 
             response_text = self.model_handling_service.send_message(parameters)
             response_text = string_utils.strip_code_block(response_text)
@@ -482,15 +488,13 @@ class MemoryManager:
             sort_keys=False
         )
 
-        system_prompt = base_file_obj["prompt_location_yaml"].get("system")
         # # systemの中も置換しないといけないような気がする・・・
-        temp_str = base_file_obj["prompt_location_yaml"].get("template") + "\n" + base_file_obj["prompt_location_yaml"].get("tail_template")
-
-        temp_str = temp_str.replace("{summary}", temp_place_str)
+        prompt_yaml = string_utils.fill_template(base_file_obj["prompt_location_yaml"], {"summary": temp_place_str})
 
         # # ここでreplaceが必要かな？
         # # 後共通化できそう？
-        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_location_yaml"])
+        prompt_messages = string_utils.build_messages(prompt_yaml)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_location_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -510,14 +514,10 @@ class MemoryManager:
             sort_keys=False
         )
 
-        system_prompt = base_file_obj["prompt_clothing_yaml"].get("system")
-        temp_str = base_file_obj["prompt_clothing_yaml"].get("template")
-        tail_str = base_file_obj["prompt_clothing_yaml"].get("tail_template")
+        prompt_yaml = string_utils.fill_template(base_file_obj["prompt_clothing_yaml"], {"character_data": character_data})
 
-        temp_str = temp_str.replace("{character_data}", character_data)
-        temp_str = temp_str + "\n" + tail_str
-
-        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_clothing_yaml"])
+        prompt_messages = string_utils.build_messages(prompt_yaml)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_clothing_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -554,18 +554,15 @@ class MemoryManager:
             sort_keys=False
         )
 
-        system_prompt = base_file_obj["prompt_items_yaml"].get("system")
-        temp_str = base_file_obj["prompt_items_yaml"].get("template")
-        tail_str = base_file_obj["prompt_items_yaml"].get("tail_template")
+        prompt_yaml = string_utils.fill_template(base_file_obj["prompt_items_yaml"], {
+            "clothing_data": clothing_str,
+            "character_data": character_data,
+            "location": location,
+            "summary": summary_str,
+        })
 
-        temp_str = temp_str.replace("{clothing_data}", clothing_str)
-        temp_str = temp_str.replace("{character_data}", character_data)
-        temp_str = temp_str.replace("{location}", location)
-        temp_str = temp_str.replace("{summary}", summary_str)
-
-        temp_str = temp_str + "\n" + tail_str
-
-        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_items_yaml"])
+        prompt_messages = string_utils.build_messages(prompt_yaml)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_items_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -585,18 +582,15 @@ class MemoryManager:
             sort_keys=False
         )
 
-        system_prompt = base_file_obj["prompt_target_yaml"].get("system")
-        temp_str = base_file_obj["prompt_target_yaml"].get("template")
-        tail_str = base_file_obj["prompt_target_yaml"].get("tail_template")
+        prompt_yaml = string_utils.fill_template(base_file_obj["prompt_target_yaml"], {
+            "character_name": character_name,
+            "participants_data": participants_str,
+            "first_message": first_message,
+        })
 
-        temp_str = temp_str.replace("{character_name}", character_name or "")
-        temp_str = temp_str.replace("{participants_data}", participants_str or "")
-        temp_str = temp_str.replace("{first_message}", first_message or "")
-
-        temp_str = temp_str + "\n" + tail_str
-
-        log.info("置換後", temp_str)
-        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_target_yaml"])
+        prompt_messages = string_utils.build_messages(prompt_yaml)
+        log.info("置換後", prompt_messages[-1]["content"])
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_target_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -620,17 +614,14 @@ class MemoryManager:
             sort_keys=False
         )
 
-        system_prompt = base_file_obj["prompt_currency_yaml"].get("system")
-        temp_str = base_file_obj["prompt_currency_yaml"].get("template")
-        tail_str = base_file_obj["prompt_currency_yaml"].get("tail_template")
+        prompt_yaml = string_utils.fill_template(base_file_obj["prompt_currency_yaml"], {
+            "character_name": character_name,
+            "character_data": character_data,
+            "first_message": first_message,
+        })
 
-        temp_str = temp_str.replace("{character_name}", character_name)
-        temp_str = temp_str.replace("{character_data}", character_data)
-        temp_str = temp_str.replace("{first_message}", first_message)
-
-        temp_str = temp_str + "\n" + tail_str
-
-        parameters = generation_params.build_send_parameters("memory", system_prompt=system_prompt, user_content=temp_str, prompt_data=base_file_obj["prompt_currency_yaml"])
+        prompt_messages = string_utils.build_messages(prompt_yaml)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_currency_yaml"])
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)

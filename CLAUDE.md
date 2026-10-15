@@ -67,7 +67,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 - `bootstrap/`: 新規チャット時の初期記憶生成
 - `chat/01_preprocess/`、`chat/02_main/`、`chat/03_postprocess/`: 発言ごとの前処理・本処理・後処理
 - ファイル名は `src/constant.py` の `Bootstrap` / `PromptsPreprocess` / `PromptsMain` / `PromptsPostprocess` に定数として持つ。YAMLを追加・改名したらここも直す。
-- YAMLのキーは `system`、`header`、`template`、`tail_template`。`_build_messages` が `header` + 動的部分 + `template` + `tail_template` をuserメッセージに連結する。
+- YAMLのキーは `system`、`header`、`template`、`tail_template`。組み立ては全プロンプト共通の `string_utils.build_messages` で、`header` + 動的部分 + `template` + `tail_template` をuserメッセージに連結する（各段階で個別に文字列をつながない）。差し込み口は先に `string_utils.fill_template` などで埋める。
 - ローカルモデルへは `messages_to_prompt` が1本の文字列に変換して送る。形式は設定 `local_model_prompt_format` で決まり、既定は `chatml`（`<|im_start|>` で区切る形。返事の出だしに空の思考ブロックを置く）。**形式はモデルに合わせる。`<think>` を `logit_bias` で禁止しない**（空の返事の原因になる。経緯は `docs/spec/prompts.md`）。
 - `files/prompts/backups/` は使っていない古いプロンプトの置き場で、Git管理外。
 
