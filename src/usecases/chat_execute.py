@@ -35,6 +35,26 @@ class ChatExecute:
         self.chat_manager = ChatManager()
         self.chat_utils = ChatUtils(self.memory_manager, self.chat_manager)
 
+    # 世界に属するセッションの一覧（sessions_list.yaml から、その世界の分だけ取り出す）
+    def _world_sessions(self, world_id: str) -> list:
+        sessions_list_path = config.SYSTEM_DIR / "sessions_list.yaml"
+
+        if sessions_list_path.exists():
+            with sessions_list_path.open("r", encoding="utf-8") as f:
+                sessions_data = yaml.safe_load(f) or {}
+        else:
+            sessions_data = {}
+
+        sessions = sessions_data.get("sessions")
+        if not isinstance(sessions, list):
+            sessions = []
+
+        return [
+            session for session in sessions
+            if session.get("world_id") == world_id
+        ]
+
+    # セッション一覧の読み込み（画面を開いたときなど）
     def load_session_list(self, payload):
 
         try:
@@ -43,27 +63,14 @@ class ChatExecute:
             if not world_id:
                 return response_checker.response_error("world_id がありません", 400)
 
-            sessions_list_path = config.SYSTEM_DIR / "sessions_list.yaml"
-
-            if sessions_list_path.exists():
-                with sessions_list_path.open("r", encoding="utf-8") as f:
-                    sessions_data = yaml.safe_load(f) or {}
-            else:
-                sessions_data = {}
-
-            sessions = sessions_data.get("sessions")
-            if not isinstance(sessions, list):
-                sessions = []
-
-            world_sessions = [
-                session for session in sessions
-                if session.get("world_id") == world_id
-            ]
+            world_sessions = self._world_sessions(world_id)
 
             return response_checker.response_ok(sessions=world_sessions)
         except Exception as e:
             return response_checker.response_error(str(e), 500)
 
+    # 世界の開始（世界を選んだときの入口）。/load_session_list とは別物として残す。
+    # 今はその世界のセッション一覧を添えて返すだけ。世界を選んだときにサーバーで準備することができたら、ここに入れる
     def world_start(self, payload):
         try:
 
@@ -76,22 +83,7 @@ class ChatExecute:
             if not world_name:
                 return response_checker.response_error("world_name がありません", 400)
 
-            sessions_list_path = config.SYSTEM_DIR / "sessions_list.yaml"
-
-            if sessions_list_path.exists():
-                with sessions_list_path.open("r", encoding="utf-8") as f:
-                    sessions_data = yaml.safe_load(f) or {}
-            else:
-                sessions_data = {}
-
-            sessions = sessions_data.get("sessions")
-            if not isinstance(sessions, list):
-                sessions = []
-
-            world_sessions = [
-                session for session in sessions
-                if session.get("world_id") == world_id
-            ]
+            world_sessions = self._world_sessions(world_id)
 
             return response_checker.response_ok(
                 world_id=world_id,
