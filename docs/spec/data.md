@@ -43,6 +43,10 @@
 
 サーバーは LLM_CHAT_CONSOLE の場所を自分では知らない。画面がリクエストのたびに `base_chat_path` として送る。
 
+- **【要確認 Q62】** 古いメモのファイルをどうするか。
+  - LocalFlaskServer のルートの `構成.txt`（Git管理外）: 初期の構想で、今のフォルダ構成と一致しない
+  - LLM_CHAT_CONSOLE の `README.txt`: 設定画面を足したときのメモ。書かれている `flask_settings_api.py` は存在しない
+
 <a id="s2"></a>
 
 ## 元データ（LLM_CHAT_CONSOLE 配下）
@@ -299,11 +303,20 @@ sessions:
 
 - Git で管理する。リポジトリは公開なので、**秘密の値は書かない**（下の「秘密の値」）。
 - 読み込むのは起動時。`src/config.py` の `config` がまとめて持つ。
-- 生成の設定（温度、最大トークン数）は、今は用途ごとにコードで決めている（→ [`prompts.md`](prompts.md)）。
+- 生成の設定（温度、最大トークン数）は、`files/settings/generation.yaml` で用途ごとに決める（下の「生成の設定」、→ [`prompts.md`](prompts.md)）。
   設定ファイルの `temperature`、`max_tokens`、`default_model` が効くのは、OpenRouter を使う場合だけ。
 - `log_level`、`enable_image_generation`、`characters_dir`、`openrouter_max_tokens`、`local_mode_max_tokens` は、
   設定にはあるが、コードのどこからも読まれていない。OpenRouter は使わない方向に寄せる予定だが、
   今はローカルモデルの作り込みを優先するので、これらはそのまま置いておく。
+
+- **【要確認 Q59】** `config.reload()` は `system_settings.yaml` を読み直すが、`config.LOCALMODEL_PATH` などの値は起動時のまま更新されない（不具合）。
+  読み直したら値も更新するように直してよいか。ポートのように、再起動しないと効かない値もある。
+- **【要確認 Q60】** 設定項目名 `local_mode_name` は `local_model_name` の綴り違いに見える。直してよいか。
+  直すと、サブPCの `system_settings.yaml` も書き換えが要る（しばらくは古い名前も読む形にもできる）。
+- **【要確認 Q61】** OpenRouter は「使わない方向に寄せるが、今はそのまま置く」と決めている（上の段落）。そのうえで、次をどうするか。
+  - `OpenRouterService`（どこからも使われていない）と、読まれていない設定項目（上の段落の5つ）を、消すか、置いておくか
+  - 置いておくなら、`OpenRouterService` の送信内容に直書きされた `logit_bias: {"248068": -100}` だけは外すか。
+    この番号はローカルの Qwen の `<think>` で、OpenRouter のモデルでは別の語を禁止してしまう
 
 <a id="s3-4"></a>
 
@@ -363,3 +376,7 @@ APIキーなど、人に見せてはいけない値だけを書くファイル�
 | 番号 | 対象 | 確認したいこと | 回答・状況 |
 |---|---|---|---|
 | Q23 | 登場人物の `役割` | `役割`（main / sub / mob）で動きを変えるか | 回答: どう変えるかが決まっていないので、今は答えられない |
+| Q59 | `config.reload()` | 読み直しで値が更新されない不具合を直すか | 未回答（status.md から上げたもの） |
+| Q60 | 設定項目名 | `local_mode_name` を `local_model_name` に直すか | 未回答（status.md から上げたもの） |
+| Q61 | OpenRouter | 使っていない `OpenRouterService` と設定項目を消すか。直書きの `logit_bias` をどうするか | 未回答（status.md から上げたもの） |
+| Q62 | 古いメモ | `構成.txt` と `README.txt` を消すか、書き直すか | 未回答（status.md から上げたもの） |
