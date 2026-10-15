@@ -88,6 +88,11 @@
 - 画像を返すAPIは、成功時はJSONではなく画像そのもの（`image/png`）を返す。失敗時は上の形のJSON。
 - サーバー側では `helpers/response_checker.py` の `response_ok` / `response_error` で返す。
 
+- **【要確認 Q58】** 小さな片付けをまとめて直してよいか。
+  - `services/world/world_settings.py` と `services/template/template.py` が、`response_checker` を使わず `jsonify` を直接書いている（形は合っている）
+  - `src/constant.py` の `Bootstrap.CHARACTER_ITEMS`、`CHARACTER_MEMORY`、`SUB_CHARACTER_MEMORY` は、指すYAMLが無く、どこからも使われていない
+  - 使われていない import が3つある（`static_check.py` で表示される）
+
 <a id="s1-3"></a>
 
 ### 場所を表す2つの項目
@@ -610,6 +615,8 @@
 - 返却: `{"ok": true, "session_id": ..., "line_id": "1", "message": "開始メッセージ", "icon_data": {"character_id": ..., "character_name": ...}}`
 - 画面は、このあと `/session_status` で初期記憶ができたかを問い合わせ、できるまで「発言」を止める。
 
+- **【要確認 Q57】** 存在しないセッションIDでも成功を返す。404 を返すように直してよいか。
+
 <a id="s8-5"></a>
 
 ### `POST /chat`
@@ -753,3 +760,5 @@
 | Q10 | `/world_start` | `/load_session_list` と分けている意図。まとめてよいか | 回答: 違いを忘れたので後で |
 | Q20 | セッション一覧 | `updated_at` を発言のたびに更新するか | 回答: 覚えていないので、もう少し話す |
 | Q21 | `/v1/chat/check_stability` | 残すか消すか | 回答: 残す。起動確認をしないと余計な待ちや処理が発生する。<br>→ 補足: 今はどこからも呼ばれておらず、中身は仮実装（常に「起動してないよ。」）。画像生成の連携を作るときに本物にする |
+| Q57 | `/new_chat` | 存在しないセッションIDで成功を返す件を 404 にするか | 未回答（status.md から上げたもの） |
+| Q58 | 片付け | `jsonify` の直書き、未使用の定数3つ、未使用の import 3つを直すか | 未回答（status.md から上げたもの） |
