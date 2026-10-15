@@ -61,7 +61,6 @@
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-- 「モデルロード」（`/settings/load_model`）: 設定YAMLがあることを確かめて「ロード完了」と返すだけ。
 - `/v1/chat/check_stability`: 常に「起動してないよ。」を返す。画面からは呼ばれていない。
 
 <a id="s2"></a>
@@ -90,6 +89,8 @@
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
 - **存在しないセッションIDでも成功を返す**: `/new_chat`。
+- **`config.reload()` が設定の値を更新しない**: `system_settings.yaml` を読み直すが、`config.LOCALMODEL_PATH` などの値は起動時のまま。
+  モデルサーバーの読み直し（`/reload`）は、読み直した設定の中身から直接モデルの場所を取るので、影響を受けない。
 - **プレイヤー画面のアイコンに切り抜きが無い**: キャラクター画面は正方形に切り抜いてから保存するが、プレイヤー画面は選んだ画像をそのまま保存する。
 
 <a id="s4"></a>

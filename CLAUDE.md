@@ -43,7 +43,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 - 生成の設定（温度、最大トークン数）は `files/settings/generation.yaml`。
 - モデルの切り替えは `open_router_use_flag` / `local_model_use_flag` と、`ModelHandlingService("local" | "openrouter")` の引数で決まる。現在の呼び出し側はすべて `"local"` 固定。
 - APサーバーのポートは `port`（未設定なら5000）。Web側の接続先の既定値は `http://127.0.0.1:5000` なので、変える場合は画面の「接続環境設定」も合わせる。
-- モデルサーバーが読み込むモデルは `local_model_path`（フォルダ）と `local_mode_name`（ファイル名）で決まる。未設定やファイルが無い場合、`src/server.py` は起動時にエラーで止まる。
+- モデルサーバーが読み込むモデルは `local_model_path`（フォルダ）と `local_mode_name`（ファイル名）で決まる。未設定やファイルが無い場合、`src/server.py` は起動時にエラーで止まる。設定を変えたら、設定画面の「モデルロード」（`/settings/load_model` → モデルサーバーの `/reload`）で再起動せずに読み直せる。VRAMに余裕が無いので、今のモデルを先に捨ててから読み込む（ファイルが無いときは捨てずに断る）。
 - モデルサーバーのポートは `local_model_server_port`（未設定なら5001）。`src/server.py` の待ち受けと、APサーバーからの送信先（`config.LOCALMODEL_SERVER_URL`）の両方がこれを使う。モデルサーバーはAPサーバーと同じPCで動かす前提（`127.0.0.1` 固定）。
 
 ## 構成

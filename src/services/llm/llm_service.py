@@ -439,15 +439,39 @@ def load_model(payload):
     if not full_path.exists() or not full_path.is_file():
         return response_checker.response_error("ファイル読み込み失敗", status=404, full_path=str(full_path))
 
+    # TODO:
+    # ここを既存のモデルロード処理に差し替えてください。
+    # 例:
+    # global loaded_model
+    # loaded_model = load_model_from_yaml(full_path)
+    # → モデルはモデルサーバー(src/server.py)が持っているので、そこへ読み直しを頼む形にした
+
+    # モデルサーバーの送り先は、起動時に決まったもの（/generate と同じ所）
+    reload_url = config.LOCALMODEL_SERVER_URL.rsplit("/", 1)[0] + "/reload"
+
     try:
-        # TODO:
-        # ここを既存のモデルロード処理に差し替えてください。
-        # 例:
-        # global loaded_model
-        # loaded_model = load_model_from_yaml(full_path)
-        return response_checker.response_ok(message="ロード完了", full_path=str(full_path))
+        # 大きいモデルは読み込みに時間がかかるので、待ち時間を長めにとる
+        response = requests.post(reload_url, timeout=(10, 900))
+    except requests.ConnectionError:
+        return response_checker.response_error(
+            "モデルサーバーに接続できません。src/server.py が起動しているか確認してください。", status=503)
+    except requests.Timeout:
+        return response_checker.response_error(
+            "モデルの読み込みが時間内に終わりませんでした。モデルサーバーのログを確認してください。", status=504)
     except Exception as exc:
         return response_checker.response_error(f"モデルロード失敗しました。{exc}", status=500, full_path=str(full_path))
+
+    try:
+        data = response.json()
+    except ValueError:
+        data = {}
+
+    if response.status_code != 200 or not data.get("ok"):
+        message = data.get("message") or f"モデルロード失敗しました（モデルサーバーの応答 {response.status_code}）。"
+        return response_checker.response_error(message, status=response.status_code if response.status_code >= 400 else 500)
+
+    model_name = data.get("model_name") or ""
+    return response_checker.response_ok(message=f"ロード完了: {model_name}", model_name=model_name, full_path=str(full_path))
 
 # stability matrix起動確認。入り口
 def check_stability(payload):

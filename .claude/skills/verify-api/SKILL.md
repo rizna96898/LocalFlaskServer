@@ -75,6 +75,15 @@ sys.exit(t.finish())
 - `box.generation_file` … 生成の設定（`generation.yaml`）のコピー。書き換えて、送信に反映されるかを試せる
 - `box.wait_background()` … `/new_chat` が裏で始める記憶生成スレッドの終了を待つ
 
+### モデルサーバー（`src/server.py`）を変えたとき
+
+```
+py -3 .claude/skills/verify-api/scripts/model_server_check.py
+```
+
+モデルサーバーを偽の llama で動かし、起動時の読み込み、モデルロード（`/reload`）での入れ替え、
+ファイルが無い・読み込みに失敗したときの扱い、発言との重なりを確かめる。本物のモデルは読み込まない。
+
 ### 4. 既存のスモークテストを育てる
 
 APIを足した・形を変えたときは、`scripts/api_smoke.py` にもその確認を足す。
@@ -86,10 +95,12 @@ APIを足した・形を変えたときは、`scripts/api_smoke.py` にもその
 
 | 指定 | 動き |
 |---|---|
-| `box.client()` | モデルサーバーに接続できない扱い。`/chat` は500になる |
-| `box.client(llm="現在の状態:\n  ...")` | その文字列をモデルの返事として返す |
+| `box.client()` | モデルサーバーに接続できない扱い。`/chat` は500、`/settings/load_model` は503になる |
+| `box.client(llm="現在の状態:\n  ...")` | その文字列をモデルの返事として返す。モデルの読み直し（`/reload`）は成功した扱い（`fake.gguf`） |
 | `box.client(llm=lambda prompt: ...)` | プロンプトに応じて返事を変える |
 | `box.client(llm=sandbox.scripted_llm)` | 段階ごとにそれらしい返事を返す。初期記憶の生成を最後まで走らせられる |
+
+`box.client(...)` を呼ぶたびに、送信の差し替えは全体で入れ替わる。前に作った client も、最後に指定した動きになる。
 
 送られたプロンプトは `box.llm_calls` に、送信した内容の全体（`prompt`、`stop`、温度など）は `box.llm_requests` に溜まるので、「どんなプロンプトを、どんな設定で送ったか」を確かめられる。
 
