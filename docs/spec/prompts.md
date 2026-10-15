@@ -168,10 +168,10 @@ system  ←  YAMLの system
 user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_template   （空のものは飛ばし、空行でつなぐ）
 ```
 
-- 世界の記憶は、この形（`MemoryPromptBuilder._build_messages`）で組み立てる。
-- キャラクターの記憶の各段階は、`memory_manager.py` の中で、`template` の差し込み口を置き換えてから `tail_template` をつなげている。
-
-- **【要確認 Q40】** 組み立て方が2通りある（共通の関数を使うものと、各段階で個別につなげるもの）。1つに揃えるか。
+- 組み立ては、すべてのプロンプトで共通の関数 `string_utils.build_messages` を使う。各段階で個別に文字列をつながない。
+- 差し込み口（`{summary}` など）は、組み立ての前に埋める。`template` の差し込み口は `string_utils.fill_template` で埋める。
+  `system` にも差し込み口がある段階（キャラクターの記憶の要約）は、その段階で埋めてから渡す。
+- 各部分は前後の空白を取ってから、空行1つで区切る。YAMLの値の先頭や末尾の改行は、送る内容には残らない。
 
 <a id="s5-1"></a>
 
@@ -376,4 +376,3 @@ response_text = self.model_handling_service.send_message(parameters)
 
 | 番号 | 対象 | 確認したいこと | 回答・状況 |
 |---|---|---|---|
-| Q40 | 組み立て方 | 2通りあるのを1つに揃えるか | 回答: OK（揃える）。→ 未反映 |

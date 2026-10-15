@@ -361,3 +361,32 @@ def _join_sections(*parts: str) -> str:
         if text:
             cleaned.append(text)
     return "\n\n".join(cleaned)
+
+def build_messages(prompt_data: dict, user_parts: list | tuple = ()) -> list[dict]:
+    """プロンプトYAMLから、モデルへ送る system と user のメッセージを作る（全プロンプト共通の組み立て方）
+
+    system ← YAMLの system
+    user   ← header ＋ user_parts ＋ template ＋ tail_template（空のものは飛ばし、空行でつなぐ）
+
+    差し込み口（{summary} など）は、呼ぶ側で埋めた prompt_data を渡す。
+    """
+    user_content = _join_sections(
+        prompt_data.get("header", ""),
+        *user_parts,
+        prompt_data.get("template", ""),
+        prompt_data.get("tail_template", ""),
+    )
+
+    return [
+        {"role": "system", "content": prompt_data.get("system", "")},
+        {"role": "user", "content": user_content},
+    ]
+
+def fill_template(prompt_data: dict, values: dict) -> dict:
+    """prompt_data の写しを作り、template の差し込み口 {キー} を values で埋めて返す"""
+    filled = dict(prompt_data)
+    template = filled.get("template") or ""
+    for key, value in values.items():
+        template = template.replace("{" + key + "}", value or "")
+    filled["template"] = template
+    return filled

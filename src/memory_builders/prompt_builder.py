@@ -18,6 +18,7 @@ from constant import (
 )
 from helpers.string_utils import normalize_newlines
 from helpers import file_utils
+from helpers import string_utils
 from logger import log
 
 class MemoryPromptBuilder:
@@ -113,14 +114,5 @@ class MemoryPromptBuilder:
         prompt_data: Dict[str, Any],
         user_parts: list[str],
     ) -> List[Dict]:
-        user_content = self._join_sections(
-            prompt_data.get("header", ""),
-            *user_parts,
-            prompt_data.get("template", ""),
-            prompt_data.get("tail_template", ""),
-        )
-
-        return [
-            {"role": "system", "content": prompt_data.get("system", "")},
-            {"role": "user", "content": user_content},
-        ]
+        # 組み立て方は全プロンプト共通（string_utils.build_messages）
+        return string_utils.build_messages(prompt_data, user_parts)
