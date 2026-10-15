@@ -198,13 +198,6 @@ def chat():
 
     return orchestrator.chat(request.get_json())
 
-# 再送。チャット欄の最終発言を送信し直す
-@app.post("/re_chat")
-def re_chat():
-    if request.method == "OPTIONS":
-        return "", 200
-    return orchestrator.re_chat(request.get_json())
-
 # StabilityMatrix起動確認受け口
 @app.route("/v1/chat/check_stability", methods=["GET", "POST", "OPTIONS"])
 def check_stability():

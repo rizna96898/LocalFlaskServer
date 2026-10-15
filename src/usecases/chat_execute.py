@@ -544,33 +544,3 @@ class ChatExecute:
     #         import traceback
     #         log.info(traceback.format_exc())
     #         return jsonify({"error": "Internal server error"}), 500
-
-    # 再送。入り口
-    def re_chat(self, payload):
-        log.info("再送開始")
-
-        try:            
-            session_id = payload.get("session_id")
-            session_dir = config.SESSIONS_DIR / session_id
-            history = file_utils.load_history(session_dir)
-            message = payload.get("message")
-            icon_data = {"character_id": "player",
-                        "character_name": "プレイヤー"}
-            
-            string_utils.history_append(history, "player", "player", message, icon_data)
-
-            message = "モデルを使わないテスト返却。再送ボタン"
-            icon_data = {"character_id": "shirai_yui",
-                        "character_name": "白井　結"}
-            
-            line_id = string_utils.history_append(history, "player", "player", message, icon_data)
-
-            file_utils.save_history(session_dir, history)
-
-            log.info("再送終了")
-            # log.info("body全量", body)
-            return response_checker.chat_response_ok(payload, line_id, message, icon_data), 200
-
-        except Exception as e:
-            log.info(f"[ERROR] /chat: {e}")
-            return response_checker.response_error(str(e), 500)

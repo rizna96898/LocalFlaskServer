@@ -5,7 +5,7 @@
 確かめること:
 - レスポンスの形（成功は ok: true、失敗は ok: false + message + HTTPステータス）
 - 設定系（テンプレート、世界・キャラクターの保存と読み込み、画像）
-- セッション系（一覧、作成、履歴、再送、削除）
+- セッション系（一覧、作成、履歴、発言の失敗と送り直し、削除）
 - 画像（キャラクター／プレイヤーの保存と読み込み、セッションに退避した画像）
 
 呼ばないもの:
@@ -210,16 +210,26 @@ def main() -> int:
         t.check("  打ち切りの文字列は <|im_end|>", sent.get("stop") == ["<|im_end|>"], sent.get("stop"))
         t.check("  <think> を logit_bias で禁止していない", not sent.get("logit_bias"), sent.get("logit_bias"))
 
+    def history():
+        body = client.post("/selected_session", json={"session_id": sid}).get_json() or {}
+        return [(m.get("line_id"), m.get("icon_data", {}).get("character_id"), m.get("message"))
+                for m in body.get("message_list", [])]
+
+    # 発言に失敗したら、プレイヤーの発言も履歴に残さない（→ docs/spec/chat-flow.md「発言する」）
     t.api(client, "chat（モデルサーバー停止中）→ 500", "post", "/chat", 500, False,
           json={"session_id": sid, "message": "こんにちは"})
-    body = t.api(client, "re_chat", "post", "/re_chat", 200, True, ["session_id", "line_id", "message", "icon_data"],
-                 json={"session_id": sid, "message": "てすと"})
-    # 開始メッセージ(1)、再送のプレイヤーの発言(2)、再送の返事(3)。/chat は失敗したので何も足さない
-    t.check("  line_id は発言ごとの通し番号（再送の返事は 3）", body.get("line_id") == "3", body.get("line_id"))
-    body = t.api(client, "履歴に追記されている", "post", "/selected_session", 200, True, ["message_list"],
-                 json={"session_id": sid})
-    t.check("  履歴の番号が 1, 2, 3", [m.get("line_id") for m in body.get("message_list", [])] == ["1", "2", "3"],
-            [m.get("line_id") for m in body.get("message_list", [])])
+    t.check("  失敗した発言は履歴に残らない（開始メッセージだけ）", len(history()) == 1, history())
+    status = client.post("/re_chat", json={"session_id": sid}).status_code
+    t.check("/re_chat は無い（再送ボタンは無くした）→ 404", status == 404, f"status {status}")
+
+    # 失敗したあと、同じ発言を送り直せば、発言と返事が続きの番号で入る
+    client = box.client(llm="返事")
+    body = t.api(client, "chat（送り直し）", "post", "/chat", 200, True, ["line_id", "message"],
+                 json={"session_id": sid, "message": "こんにちは"})
+    t.check("  返事は 3 行目", (body.get("line_id"), body.get("message")) == ("3", "返事"), body)
+    t.check("  履歴: 開始メッセージ、発言、返事",
+            [h[:2] for h in history()][1:] == [("2", "player"), ("3", "shirai_yui")], history())
+    client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
 
     # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）
     print("\n# 初期記憶の生成")
