@@ -418,6 +418,13 @@ class ChatExecute:
         log.info("ニューチャット開始")
 
         try:
+            # セッションは /chat_startup で作ってあるはず。無ければ何も作らずに断る（中身の無いフォルダを作らない）
+            session_id = (payload or {}).get("session_id") or ""
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
+                return response_checker.response_error("session_id が不正です", 400)
+            if not (config.SESSIONS_DIR / session_id).is_dir():
+                return response_checker.response_error("セッションがありません。新規チャットを押し直してください", 404)
+
             start_message = self.chat_utils.create_new_session(payload)
 
             session_id = payload.get("session_id")

@@ -200,6 +200,12 @@ def main() -> int:
     t.api(client, "selected_session", "post", "/selected_session", 200, True, ["session_id", "message_list"],
           json={"session_id": sid})
 
+    # セッションは /chat_startup で作ってあるはず。無いIDなら何も作らずに断る
+    t.api(client, "new_chat 無いセッション → 404", "post", "/new_chat", 404, False, json={"session_id": "no_such_session"})
+    t.check("  フォルダを作らない", not (box.sessions / "no_such_session").exists())
+    t.api(client, "new_chat session_id なし → 400", "post", "/new_chat", 400, False, json={})
+    t.api(client, "new_chat session_id 不正 → 400", "post", "/new_chat", 400, False, json={"session_id": "../x"})
+
     body = t.api(client, "new_chat", "post", "/new_chat", 200, True, ["session_id", "line_id", "message", "icon_data"],
                  json={"session_id": sid})
     t.check("  開始メッセージが世界設定と一致", body.get("message") == world.get("開始メッセージ"))
