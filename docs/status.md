@@ -62,7 +62,7 @@
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-- `/v1/chat/check_stability`: 常に「起動してないよ。」を返す。画面からは呼ばれていない。（→ Q21）
+- `/v1/chat/check_stability`: 常に「起動してないよ。」を返す。画面からは呼ばれていない。画像生成の連携を作るときに本物にする（[`spec/api.md`](spec/api.md)）。
 
 <a id="s2"></a>
 
