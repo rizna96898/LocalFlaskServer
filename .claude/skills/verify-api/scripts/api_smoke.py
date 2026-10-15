@@ -195,6 +195,8 @@ def main() -> int:
             bool(char_files) and all(n.endswith("_setting.yaml") for n in char_files), char_files)
     listed = t.api(client, "一覧（1件）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
     t.check("  作ったセッションが一覧にある", any(s.get("session_id") == sid for s in listed.get("sessions", [])))
+    started = client.post("/world_start", json={"world_id": world_id, "world_name": world_name}).get_json() or {}
+    t.check("  世界を選んだとき（world_start）も、同じ一覧が返る", started.get("sessions") == listed.get("sessions"))
     t.api(client, "selected_session", "post", "/selected_session", 200, True, ["session_id", "message_list"],
           json={"session_id": sid})
 
