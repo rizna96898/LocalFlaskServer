@@ -55,7 +55,13 @@ def main() -> int:
     t.api(client, "テンプレート取得 パス未指定", "post", "/settings/get_template_player_yaml", 400, False, json={})
     t.api(client, "load_model パス未指定", "post", "/settings/load_model", 400, False, json={})
     t.api(client, "load_model 不正パス", "post", "/settings/load_model", 404, False, json={"base_path": web + "_x"})
-    t.api(client, "load_model", "post", "/settings/load_model", 200, True, json={"base_path": str(box.server)})
+    # モデルロードは、モデルサーバー(src/server.py)に読み直しを頼む（モデルサーバー自体は model_server_check.py で確かめる）
+    t.api(client, "load_model モデルサーバー停止中 → 503", "post", "/settings/load_model", 503, False,
+          json={"base_path": str(box.server)})
+    body = t.api(box.client(llm="x"), "load_model", "post", "/settings/load_model", 200, True, ["model_name"],
+                 json={"base_path": str(box.server)})
+    t.check("  読み込んだモデルの名前が返る", body.get("model_name") == "fake.gguf", body)
+    client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
     t.api(client, "open_system_yaml パス未指定", "post", "/settings/open_system_yaml", 400, False, json={})
     t.api(client, "open_system_yaml 不正パス", "post", "/settings/open_system_yaml", 404, False,
           json={"base_path": web + "_x"})

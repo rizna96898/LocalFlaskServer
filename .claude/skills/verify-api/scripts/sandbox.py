@@ -145,7 +145,21 @@ class Sandbox:
 
         requests_log = self.llm_requests
 
+        class _JsonResponse:
+            def __init__(self, status_code, data):
+                self.status_code = status_code
+                self._data = data
+
+            def json(self):
+                return self._data
+
         def fake_post(url, *args, **kwargs):
+            # モデルの読み直し（/reload）。llm が None なら接続できない扱い、それ以外は読み込めた扱い
+            if str(url).endswith("/reload"):
+                if llm is None:
+                    raise requests.exceptions.ConnectionError("検証中のためモデルサーバーには接続しません")
+                return _JsonResponse(200, {"ok": True, "message": "モデルを読み込みました", "model_name": "fake.gguf"})
+
             body = kwargs.get("json") or {}
             prompt = body.get("prompt", "")
             calls.append(prompt)
