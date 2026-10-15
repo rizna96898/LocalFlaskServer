@@ -1,6 +1,6 @@
 import re
 import yaml
-from flask import send_file, jsonify
+from flask import send_file
 from uuid import uuid4
 import time
 import shutil
@@ -544,61 +544,3 @@ class ChatExecute:
     #         import traceback
     #         log.info(traceback.format_exc())
     #         return jsonify({"error": "Internal server error"}), 500
-
-    # 再送。入り口
-    # 再送。返事を作り直す。
-    # 履歴の最後のプレイヤーの発言より後ろ（キャラクターの返事）を消し、同じ発言でもう一度返事を作る。
-    # 返事の生成に失敗したときは、履歴を変えない（消すはずだった返事も残る）
-    def re_chat(self, payload):
-        log.info("再送開始")
-
-        try:
-            payload = payload or {}
-            session_id = payload.get("session_id") or ""
-
-            if not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
-                return response_checker.response_error("session_id が不正です", 400)
-
-            session_dir = config.SESSIONS_DIR / session_id
-            if not session_dir.is_dir():
-                return response_checker.response_error("セッションがありません", 404)
-
-            history = file_utils.load_history(session_dir)
-
-            # 最後のプレイヤーの発言
-            player_index = next(
-                (i for i in range(len(history) - 1, -1, -1) if history[i].get("role") == "player"),
-                None,
-            )
-            if player_index is None:
-                return response_checker.response_error("送り直すプレイヤーの発言がありません", 400)
-
-            message = history[player_index].get("message") or ""
-            kept = history[:player_index + 1]
-            removed_line_ids = [str(h.get("line_id")) for h in history[player_index + 1:]]
-
-            reply = self.chat_utils.chat(session_id, payload, message)
-
-            icon_data = {"character_id": "shirai_yui",
-                        "character_name": "白井　結"}
-
-            line_id = string_utils.history_append(kept, "shirai_yui", "main", reply, icon_data)
-
-            file_utils.save_history(session_dir, kept)
-
-            log.info("再送終了")
-            # 画面は removed_line_ids の吹き出しを消してから、返事を足す
-            return jsonify({
-                "ok": True,
-                "session_id": session_id,
-                "line_id": line_id,
-                "message": reply,
-                "icon_data": icon_data,
-                "player_line_id": str(history[player_index].get("line_id")),
-                "player_message": message,
-                "removed_line_ids": removed_line_ids,
-            }), 200
-
-        except Exception as e:
-            log.info(f"[ERROR] /chat: {e}")
-            return response_checker.response_error(str(e), 500)

@@ -236,7 +236,3 @@ class ChatOrchestrator:
     def chat(self, payload):
         return self.chat_execute.chat(payload)
 
-    # 再送。チャット欄の最終発言を送信し直す
-    def re_chat(self, payload):
-        return self.chat_execute.re_chat(payload)
-

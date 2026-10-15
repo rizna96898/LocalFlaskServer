@@ -49,7 +49,7 @@
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-- `/new_chat`、`/chat`、`/re_chat` が返す発言者と、履歴に書く発言者が、`shirai_yui` / `白井　結` で固定。
+- `/new_chat`、`/chat` が返す発言者と、履歴に書く発言者が、`shirai_yui` / `白井　結` で固定。
   世界の登場人物が誰であっても、この名前で返る。
 - プレイヤーの発言者IDは、実際のプレイヤーIDではなく `player` で固定。
 - 世界の記憶を作るとき、プレイヤーのIDと名前が `kyuya` / `究也` で固定（`memory_manager.py`）。

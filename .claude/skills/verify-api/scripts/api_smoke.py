@@ -5,7 +5,7 @@
 確かめること:
 - レスポンスの形（成功は ok: true、失敗は ok: false + message + HTTPステータス）
 - 設定系（テンプレート、世界・キャラクターの保存と読み込み、画像）
-- セッション系（一覧、作成、履歴、再送、削除）
+- セッション系（一覧、作成、履歴、発言の失敗と送り直し、削除）
 - 画像（キャラクター／プレイヤーの保存と読み込み、セッションに退避した画像）
 
 呼ばないもの:
@@ -219,30 +219,17 @@ def main() -> int:
     t.api(client, "chat（モデルサーバー停止中）→ 500", "post", "/chat", 500, False,
           json={"session_id": sid, "message": "こんにちは"})
     t.check("  失敗した発言は履歴に残らない（開始メッセージだけ）", len(history()) == 1, history())
-    t.api(client, "re_chat 送り直す発言が無い → 400", "post", "/re_chat", 400, False, json={"session_id": sid})
-    t.api(client, "re_chat 無いセッション → 404", "post", "/re_chat", 404, False, json={"session_id": "no_such_session"})
-    t.api(client, "re_chat session_id 不正 → 400", "post", "/re_chat", 400, False, json={"session_id": "../x"})
+    status = client.post("/re_chat", json={"session_id": sid}).status_code
+    t.check("/re_chat は無い（再送ボタンは無くした）→ 404", status == 404, f"status {status}")
 
-    # 再送は「返事の作り直し」: 最後のプレイヤーの発言より後ろを消し、同じ発言で返事を作り直す
-    replies = iter(["最初の返事", "作り直した返事"])
-    client = box.client(llm=lambda prompt: next(replies))
-    body = t.api(client, "chat", "post", "/chat", 200, True, ["line_id", "message"],
+    # 失敗したあと、同じ発言を送り直せば、発言と返事が続きの番号で入る
+    client = box.client(llm="返事")
+    body = t.api(client, "chat（送り直し）", "post", "/chat", 200, True, ["line_id", "message"],
                  json={"session_id": sid, "message": "こんにちは"})
-    t.check("  返事は 3 行目", (body.get("line_id"), body.get("message")) == ("3", "最初の返事"), body)
-    body = t.api(client, "re_chat", "post", "/re_chat", 200, True,
-                 ["session_id", "line_id", "message", "icon_data", "player_line_id", "player_message", "removed_line_ids"],
-                 json={"session_id": sid})
-    t.check("  作り直した返事が 3 行目に入る", (body.get("line_id"), body.get("message")) == ("3", "作り直した返事"), body)
-    t.check("  送り直したのは最後のプレイヤーの発言", (body.get("player_line_id"), body.get("player_message")) == ("2", "こんにちは"), body)
-    t.check("  消した返事の番号が返る", body.get("removed_line_ids") == ["3"], body.get("removed_line_ids"))
-    t.check("  履歴: 開始メッセージ、発言、作り直した返事",
-            history() == [("1", history()[0][1], history()[0][2]), ("2", "player", "こんにちは"), ("3", "shirai_yui", "作り直した返事")],
-            history())
-
-    # 作り直しに失敗したら、履歴は変えない（前の返事が残る）
-    client = box.client()
-    t.api(client, "re_chat（モデルサーバー停止中）→ 500", "post", "/re_chat", 500, False, json={"session_id": sid})
-    t.check("  前の返事が残っている", history()[-1] == ("3", "shirai_yui", "作り直した返事"), history())
+    t.check("  返事は 3 行目", (body.get("line_id"), body.get("message")) == ("3", "返事"), body)
+    t.check("  履歴: 開始メッセージ、発言、返事",
+            [h[:2] for h in history()][1:] == [("2", "player"), ("3", "shirai_yui")], history())
+    client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
 
     # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）
     print("\n# 初期記憶の生成")

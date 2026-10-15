@@ -37,12 +37,11 @@
   - [`POST /chat_startup`](#s8-3)
   - [`POST /new_chat`](#s8-4)
   - [`POST /chat`](#s8-5)
-  - [`POST /re_chat`](#s8-6)
-  - [`POST /selected_session`](#s8-7)
-  - [`POST /session_status`](#s8-8)
-  - [`POST /selected_message`](#s8-9)
-  - [`POST /delete_session`](#s8-10)
-  - [履歴のファイル](#s8-11)
+  - [`POST /selected_session`](#s8-6)
+  - [`POST /session_status`](#s8-7)
+  - [`POST /selected_message`](#s8-8)
+  - [`POST /delete_session`](#s8-9)
+  - [履歴のファイル](#s8-10)
 - [その他](#s9)
   - [`/v1/chat/check_stability`（GET / POST）](#s9-1)
 - [要確認の一覧](#s10)
@@ -138,7 +137,6 @@
 | `POST /chat_startup` | セッションを新しく作る | メイン |
 | `POST /new_chat` | チャットを開始する | メイン |
 | `POST /chat` | 発言する | メイン |
-| `POST /re_chat` | 再送する | メイン |
 | `POST /selected_session` | セッションを開く（履歴を返す） | メイン |
 | `POST /session_status` | セッションの進行状態（初期記憶の進み具合）を返す | メイン |
 | `POST /selected_message` | 畳まれた過去の履歴を展開する | メイン |
@@ -601,7 +599,7 @@
 3. 世界YAMLの `開始メッセージ` を履歴に書き、返す。裏の生成の終わりは待たない。
 
 - 返却: `{"ok": true, "session_id": ..., "line_id": "1", "message": "開始メッセージ", "icon_data": {"character_id": ..., "character_name": ...}}`
-- 画面は、このあと `/session_status` で初期記憶ができたかを問い合わせ、できるまで「発言」「再送」を止める。
+- 画面は、このあと `/session_status` で初期記憶ができたかを問い合わせ、できるまで「発言」を止める。
 
 <a id="s8-5"></a>
 
@@ -616,33 +614,10 @@
 
 - 返却: `{"ok": true, "session_id": ..., "line_id": ..., "message": "返答", "icon_data": {...}}`
 - プレイヤーの発言と返答を、この順で履歴に足す。返答の生成に失敗した場合は、どちらも履歴に残さない。
+- 「再送」のAPIは無い。失敗したら、画面が文章を入力欄に戻すので、もう一度これを呼ぶ。
 - 返答の生成そのものは作りかけ。[`../status.md`](../status.md) を参照。
 
 <a id="s8-6"></a>
-
-### `POST /re_chat`
-
-<div align="right"><a href="#top">▲ 目次へ</a></div>
-
-返事を作り直す。返事が空だった・おかしかったときに使う。
-
-| 項目 | 必須 | 内容 |
-|---|---|---|
-| `session_id` | 必須 | |
-
-1. 履歴の**最後のプレイヤーの発言**を探す。
-2. その発言で返事を作る（作り方は `/chat` と同じ）。
-3. 作れたら、その発言より後ろ（前の返事）を履歴から消し、新しい返事を足して保存する。
-
-- 返却: `{"ok": true, "session_id": ..., "line_id": ..., "message": "返事", "icon_data": {...}, "player_line_id": ..., "player_message": ..., "removed_line_ids": [...]}`
-  - `player_line_id`、`player_message`: 送り直したプレイヤーの発言
-  - `removed_line_ids`: 消した行の `line_id`。画面はこの吹き出しを消してから、新しい返事を足す
-- 消した返事は戻せない。
-- 返事の生成に失敗したときは、履歴を変えない（前の返事が残る）。
-- 失敗: `session_id` が無い・文字種が違う（400）、プレイヤーの発言が1つも無い（400）、セッションが無い（404）、
-  返事の生成に失敗（500）
-
-<a id="s8-7"></a>
 
 ### `POST /selected_session`
 
@@ -665,14 +640,14 @@
 - 履歴がちょうど10の倍数のときは、本文が1件も返らず、印だけになる（20件なら印 `1`、`2` のみ）。
   印を開けば見えるので、この動きでよい。
 
-<a id="s8-8"></a>
+<a id="s8-7"></a>
 
 ### `POST /session_status`
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
 セッションの進行状態を返す。画面は、初期記憶を作っている間これを1秒ごとに問い合わせ、プログレスバーを出したり、
-「発言」「再送」を止めたりする。
+「発言」を止めたりする。
 
 | 項目 | 必須 | 内容 |
 |---|---|---|
@@ -682,7 +657,7 @@
 - `status` などの意味は [`chat-flow.md`](chat-flow.md) の「進行状態」。初期記憶を作っている間は、`complete_stage` が `new_chat`、`status` が `processing`。
 - 失敗: `session_id` が無い・文字種が違う（400）、セッションに進行状態のファイルが無い（404）
 
-<a id="s8-9"></a>
+<a id="s8-8"></a>
 
 ### `POST /selected_message`
 
@@ -698,7 +673,7 @@
 - 返却: `{"ok": true, "session_id": ..., "message_list": [10件]}`
 - 画面は、クリックされた印を、返ってきた10件で置き換える。
 
-<a id="s8-10"></a>
+<a id="s8-9"></a>
 
 ### `POST /delete_session`
 
@@ -712,7 +687,7 @@
 - 1件ずつ、一覧から外し、セッションフォルダを消す。途中で失敗したものは `failed_session_ids` に入り、残りは続ける。
 - 一部が失敗しても全体は `ok: true`。画面は2つの配列を見て結果を表示する。
 
-<a id="s8-11"></a>
+<a id="s8-10"></a>
 
 ### 履歴のファイル
 
@@ -730,7 +705,7 @@
 | `icon_data` | `{"character_id": ..., "character_name": ...}` |
 
 - `line_id` は、発言ごとの通し番号（`"1"` から）。書き込むときに、その時点の件数＋1を振る。
-  `/new_chat`、`/chat`、`/re_chat` は、書き込んだ発言の `line_id` を返す。履歴を読み出すAPIも「何件目か」で番号を振るので、両者は一致する。
+  `/new_chat`、`/chat` は、書き込んだ発言の `line_id` を返す。履歴を読み出すAPIも「何件目か」で番号を振るので、両者は一致する。
   （以前に保存された履歴は、全件 `"1"` のまま。読み出しは件数で番号を振り直すので、表示には影響しない）
 - **【要確認 Q20】** セッション一覧の `updated_at` は作成時に入るだけで、発言しても更新されない。画面の一覧に出る「更新」は、作成日時のままになる。
 
