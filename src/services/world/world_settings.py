@@ -2,7 +2,7 @@ import yaml
 
 import re
 import shutil
-from flask import jsonify
+from helpers import response_checker
 from pathlib import Path
 from helpers import file_utils
 from helpers import string_utils
@@ -33,25 +33,25 @@ class WorldSettings:
         parameter_str = payload.get("parameter_data", "")   
         
         if not base_chat_path:
-            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+            return response_checker.response_error("base_chat_pathが未指定です", 400)
 
         if not world_id:
-            return jsonify({"ok": False, "message": "世界IDが未指定です"}), 400
+            return response_checker.response_error("世界IDが未指定です", 400)
 
         if not re.fullmatch(r"[A-Za-z0-9_]+", world_id):
-            return jsonify({"ok": False, "message": "世界IDは半角英数字と_のみ使用できます"}), 400
+            return response_checker.response_error("世界IDは半角英数字と_のみ使用できます", 400)
 
         if not world_name:
-            return jsonify({"ok": False, "message": "世界名が未指定です"}), 400
+            return response_checker.response_error("世界名が未指定です", 400)
 
         if not include_str.strip():
-            return jsonify({"ok": False, "message": "登場人物が空です"}), 400
+            return response_checker.response_error("登場人物が空です", 400)
 
         if not goal_str.strip():
-            return jsonify({"ok": False, "message": "シナリオの目標が空です"}), 400
+            return response_checker.response_error("シナリオの目標が空です", 400)
 
         if not parameter_str.strip():
-            return jsonify({"ok": False, "message": "シナリオパラメーターが空です"}), 400
+            return response_checker.response_error("シナリオパラメーターが空です", 400)
 
 
         try:
@@ -64,18 +64,12 @@ class WorldSettings:
                     continue
                 ref_id = str(c.get("参照ID") or "")
                 if not re.fullmatch(r"[A-Za-z0-9_]+", ref_id):
-                    return jsonify({
-                        "ok": False,
-                        "message": f"登場人物の{no}件目: 参照IDは半角英数字と_で必ず入れてください"
-                    }), 400
+                    return response_checker.response_error(f"登場人物の{no}件目: 参照IDは半角英数字と_で必ず入れてください", 400)
 
             # プレイヤーは必ず1人
             player_count = sum(1 for c in data_list if isinstance(c, dict) and c.get("参照種別") == "player")
             if player_count != 1:
-                return jsonify({
-                    "ok": False,
-                    "message": f"登場人物の player は1人だけにしてください（今は {player_count} 人）"
-                }), 400
+                return response_checker.response_error(f"登場人物の player は1人だけにしてください（今は {player_count} 人）", 400)
 
             for index, character_data in enumerate(data_list):
                 if character_data["表示名"] is None:
@@ -97,27 +91,15 @@ class WorldSettings:
                 
                 
         except yaml.YAMLError as e:
-            return jsonify({
-                "ok": False,
-                "message": "YAML形式が正しくありません",
-                "detail": str(e)
-            }), 400
+            return response_checker.response_error("YAML形式が正しくありません", 400, detail=str(e))
         try:
             goal_data = yaml.safe_load(goal_str)
         except yaml.YAMLError as e:
-            return jsonify({
-                "ok": False,
-                "message": "YAML形式が正しくありません",
-                "detail": str(e)
-            }), 400
+            return response_checker.response_error("YAML形式が正しくありません", 400, detail=str(e))
         try:
             parameter_data = yaml.safe_load(parameter_str)
         except yaml.YAMLError as e:
-            return jsonify({
-                "ok": False,
-                "message": "YAML形式が正しくありません",
-                "detail": str(e)
-            }), 400
+            return response_checker.response_error("YAML形式が正しくありません", 400, detail=str(e))
             
         save_dir = Path(base_chat_path) / "worlds" / "settings"
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -140,11 +122,7 @@ class WorldSettings:
 
         save_path = self.save_world_yaml(world_id, world_form_data, save_dir)
 
-        return jsonify({
-            "ok": True,
-            "message": "世界設定を保存しました",
-            "path": str(save_path)
-        })
+        return response_checker.response_ok(message="世界設定を保存しました", path=str(save_path))
 
     def load_world_settings(self, payload):
 
@@ -154,7 +132,7 @@ class WorldSettings:
         world_setting_file = Path(base_chat_path) / f"worlds/settings/{world_id}_world.yaml"
 
         if not world_setting_file.is_file():
-            return jsonify({"ok": False, "message": f"世界設定がありません: {world_id}"}), 404
+            return response_checker.response_error(f"世界設定がありません: {world_id}", 404)
 
         world_setting_data = file_utils.load_yaml_file(world_setting_file)
         
@@ -187,21 +165,20 @@ class WorldSettings:
         )
 
         # 項目名は、保存(/settings/save_world_setting)で受け取る名前と揃えている
-        return jsonify({
-            "ok": True,
-            "message": "",
-            "world_id": world_id,
-            "world_name": world_name,
-            "include_data": characters,
-            "goal_data": goal_target,
-            "past": past,
-            "current": now,
-            "future": future,
-            "purpose": purpose,
-            "supplement": supplement,
-            "parameter_data": scenario_parameter,
-            "start_message": start_message,
-        }), 200
+        return response_checker.response_ok(
+            message="",
+            world_id=world_id,
+            world_name=world_name,
+            include_data=characters,
+            goal_data=goal_target,
+            past=past,
+            current=now,
+            future=future,
+            purpose=purpose,
+            supplement=supplement,
+            parameter_data=scenario_parameter,
+            start_message=start_message,
+        )
 
     def save_player_setting(self, payload):
 
@@ -216,37 +193,30 @@ class WorldSettings:
         log.info("content", content)
         
         if not base_chat_path:
-            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+            return response_checker.response_error("base_chat_pathが未指定です", 400)
 
         if not player_id:
-            return jsonify({"ok": False, "message": "プレイヤーIDが未指定です"}), 400
+            return response_checker.response_error("プレイヤーIDが未指定です", 400)
 
         if not re.fullmatch(r"[A-Za-z0-9_]+", player_id):
-            return jsonify({"ok": False, "message": "プレイヤーIDは半角英数字と_のみ使用できます"}), 400
+            return response_checker.response_error("プレイヤーIDは半角英数字と_のみ使用できます", 400)
 
         if not player_name:
-            return jsonify({"ok": False, "message": "プレイヤー名が未指定です"}), 400
+            return response_checker.response_error("プレイヤー名が未指定です", 400)
 
         if not content.strip():
-            return jsonify({"ok": False, "message": "プレイヤー設定が空です"}), 400
+            return response_checker.response_error("プレイヤー設定が空です", 400)
 
         try:
             yaml_data = yaml.safe_load(content)
         except yaml.YAMLError as e:
-            return jsonify({
-                "ok": False,
-                "message": "YAML形式が正しくありません",
-                "detail": str(e)
-            }), 400
+            return response_checker.response_error("YAML形式が正しくありません", 400, detail=str(e))
 
         if yaml_data is None:
             yaml_data = {}
 
         if not isinstance(yaml_data, dict):
-            return jsonify({
-                "ok": False,
-                "message": "プレイヤー設定YAMLの最上位はオブジェクト形式にしてください"
-            }), 400
+            return response_checker.response_error("プレイヤー設定YAMLの最上位はオブジェクト形式にしてください", 400)
 
         # 名前欄を画面入力で上書き
         name_block = yaml_data.get("名前")
@@ -277,17 +247,9 @@ class WorldSettings:
                     default_flow_style=False
                 )
         except Exception as e:
-            return jsonify({
-                "ok": False,
-                "message": "プレイヤー設定の保存に失敗しました",
-                "detail": str(e)
-            }), 500
+            return response_checker.response_error("プレイヤー設定の保存に失敗しました", 500, detail=str(e))
 
-        return jsonify({
-            "ok": True,
-            "message": "プレイヤー設定を保存しました",
-            "path": str(save_path)
-        })
+        return response_checker.response_ok(message="プレイヤー設定を保存しました", path=str(save_path))
 
     def save_character_setting(self, payload):
 
@@ -297,37 +259,30 @@ class WorldSettings:
         content = payload.get("content", "")
 
         if not base_chat_path:
-            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+            return response_checker.response_error("base_chat_pathが未指定です", 400)
 
         if not character_id:
-            return jsonify({"ok": False, "message": "キャラクターIDが未指定です"}), 400
+            return response_checker.response_error("キャラクターIDが未指定です", 400)
 
         if not re.fullmatch(r"[A-Za-z0-9_]+", character_id):
-            return jsonify({"ok": False, "message": "キャラクターIDは半角英数字と_のみ使用できます"}), 400
+            return response_checker.response_error("キャラクターIDは半角英数字と_のみ使用できます", 400)
 
         if not character_name:
-            return jsonify({"ok": False, "message": "キャラクター名が未指定です"}), 400
+            return response_checker.response_error("キャラクター名が未指定です", 400)
 
         if not content.strip():
-            return jsonify({"ok": False, "message": "キャラクター設定が空です"}), 400
+            return response_checker.response_error("キャラクター設定が空です", 400)
 
         try:
             yaml_data = yaml.safe_load(content)
         except yaml.YAMLError as e:
-            return jsonify({
-                "ok": False,
-                "message": "YAML形式が正しくありません",
-                "detail": str(e)
-            }), 400
+            return response_checker.response_error("YAML形式が正しくありません", 400, detail=str(e))
 
         if yaml_data is None:
             yaml_data = {}
 
         if not isinstance(yaml_data, dict):
-            return jsonify({
-                "ok": False,
-                "message": "キャラクター設定YAMLの最上位はオブジェクト形式にしてください"
-            }), 400
+            return response_checker.response_error("キャラクター設定YAMLの最上位はオブジェクト形式にしてください", 400)
 
         # 名前欄を画面入力で上書き
         name_block = yaml_data.get("名前")
@@ -358,17 +313,9 @@ class WorldSettings:
                     default_flow_style=False
                 )
         except Exception as e:
-            return jsonify({
-                "ok": False,
-                "message": "キャラクター設定の保存に失敗しました",
-                "detail": str(e)
-            }), 500
+            return response_checker.response_error("キャラクター設定の保存に失敗しました", 500, detail=str(e))
 
-        return jsonify({
-            "ok": True,
-            "message": "キャラクター設定を保存しました",
-            "path": str(save_path)
-        })
+        return response_checker.response_ok(message="キャラクター設定を保存しました", path=str(save_path))
 
     # 世界・キャラクター・プレイヤーの一覧を、フォルダのYAMLから作って返す
     # kind: world / character / player
@@ -378,13 +325,13 @@ class WorldSettings:
         kind = (payload.get("kind") or "").strip()
 
         if not base_chat_path:
-            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+            return response_checker.response_error("base_chat_pathが未指定です", 400)
 
         if kind not in LIST_SOURCES:
-            return jsonify({"ok": False, "message": f"kind は {' / '.join(LIST_SOURCES)} のどれかにしてください"}), 400
+            return response_checker.response_error(f"kind は {' / '.join(LIST_SOURCES)} のどれかにしてください", 400)
 
         if not Path(base_chat_path).is_dir():
-            return jsonify({"ok": False, "message": f"base_chat_pathのフォルダがありません: {base_chat_path}"}), 404
+            return response_checker.response_error(f"base_chat_pathのフォルダがありません: {base_chat_path}", 404)
 
         folder, suffix = LIST_SOURCES[kind]
         settings_dir = Path(base_chat_path) / folder / "settings"
@@ -407,7 +354,7 @@ class WorldSettings:
 
                 items.append({"id": item_id, "name": name or item_id})
 
-        return jsonify({"ok": True, "message": "", "kind": kind, "items": items}), 200
+        return response_checker.response_ok(message="", kind=kind, items=items)
 
     # 世界・キャラクター・プレイヤーを削除する（設定YAMLと、キャラクター・プレイヤーは画像のフォルダも）
     # kind: world / character / player
@@ -420,29 +367,25 @@ class WorldSettings:
         item_id = (payload.get("id") or "").strip()
 
         if not base_chat_path:
-            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+            return response_checker.response_error("base_chat_pathが未指定です", 400)
 
         if kind not in LIST_SOURCES:
-            return jsonify({"ok": False, "message": f"kind は {' / '.join(LIST_SOURCES)} のどれかにしてください"}), 400
+            return response_checker.response_error(f"kind は {' / '.join(LIST_SOURCES)} のどれかにしてください", 400)
 
         if not re.fullmatch(r"[A-Za-z0-9_]+", item_id):
-            return jsonify({"ok": False, "message": "IDは半角英数字と_で指定してください"}), 400
+            return response_checker.response_error("IDは半角英数字と_で指定してください", 400)
 
         folder, suffix = LIST_SOURCES[kind]
         setting_file = Path(base_chat_path) / folder / "settings" / f"{item_id}{suffix}"
 
         if not setting_file.is_file():
-            return jsonify({"ok": False, "message": f"設定がありません: {item_id}"}), 404
+            return response_checker.response_error(f"設定がありません: {item_id}", 404)
 
         if kind != "world":
             used_in = self._worlds_using(base_chat_path, kind, item_id)
             if used_in:
                 names = "、".join(w["name"] for w in used_in)
-                return jsonify({
-                    "ok": False,
-                    "message": f"これらの世界で使われているので削除できません: {names}",
-                    "worlds": used_in,
-                }), 409
+                return response_checker.response_error(f"これらの世界で使われているので削除できません: {names}", 409, worlds=used_in)
 
         try:
             setting_file.unlink()
@@ -455,9 +398,9 @@ class WorldSettings:
                         shutil.rmtree(image_dir)
         except Exception as e:
             log.info(f"[ERROR] 削除に失敗しました {setting_file}: {e}")
-            return jsonify({"ok": False, "message": f"削除に失敗しました: {e}"}), 500
+            return response_checker.response_error(f"削除に失敗しました: {e}", 500)
 
-        return jsonify({"ok": True, "message": "削除しました", "kind": kind, "id": item_id}), 200
+        return response_checker.response_ok(message="削除しました", kind=kind, id=item_id)
 
     # 指定したキャラクター・プレイヤーを登場人物にしている世界の一覧 [{id, name}]
     def _worlds_using(self, base_chat_path: str, kind: str, item_id: str) -> list:
@@ -485,15 +428,15 @@ class WorldSettings:
         player_id = (payload.get("player_id") or "").strip()
 
         if not base_chat_path:
-            return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+            return response_checker.response_error("base_chat_pathが未指定です", 400)
 
         if not re.fullmatch(r"[A-Za-z0-9_]+", player_id):
-            return jsonify({"ok": False, "message": "プレイヤーIDは半角英数字と_で指定してください"}), 400
+            return response_checker.response_error("プレイヤーIDは半角英数字と_で指定してください", 400)
 
         player_setting_file = Path(base_chat_path) / f"players/settings/{player_id}_setting.yaml"
 
         if not player_setting_file.is_file():
-            return jsonify({"ok": False, "message": f"プレイヤー設定がありません: {player_id}"}), 404
+            return response_checker.response_error(f"プレイヤー設定がありません: {player_id}", 404)
 
         player_setting_data = file_utils.load_yaml_file(player_setting_file)
         result = yaml.safe_dump(
@@ -506,13 +449,12 @@ class WorldSettings:
         if not isinstance(name_block, dict):
             name_block = {}
 
-        return jsonify({
-            "ok": True,
-            "message": "",
-            "player_id": name_block.get("識別子") or player_id,
-            "player_name": name_block.get("表示名") or player_id,
-            "player_info": result,
-        }), 200
+        return response_checker.response_ok(
+            message="",
+            player_id=name_block.get("識別子") or player_id,
+            player_name=name_block.get("表示名") or player_id,
+            player_info=result,
+        )
 
     def load_character_settings(self, payload):
 
@@ -522,7 +464,7 @@ class WorldSettings:
         character_setting_file = Path(base_chat_path) / f"characters/settings/{character_id}_setting.yaml"
 
         if not character_setting_file.is_file():
-            return jsonify({"ok": False, "message": f"キャラクター設定がありません: {character_id}"}), 404
+            return response_checker.response_error(f"キャラクター設定がありません: {character_id}", 404)
 
         character_setting_data = file_utils.load_yaml_file(character_setting_file)
         result = yaml.safe_dump(
@@ -534,13 +476,12 @@ class WorldSettings:
         character_id = character_setting_data.get("名前").get("識別子")
         character_name = character_setting_data.get("名前").get("表示名")
 
-        return jsonify({
-            "ok": True,
-            "message": "",
-            "character_id": character_id,
-            "character_name": character_name,
-            "character_info": result,
-        }), 200
+        return response_checker.response_ok(
+            message="",
+            character_id=character_id,
+            character_name=character_name,
+            character_info=result,
+        )
 
     # 世界設定を保存
     def save_world_yaml(self, world_id: str, form_data: dict, save_dir: Path):

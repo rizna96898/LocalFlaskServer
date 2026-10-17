@@ -1,10 +1,10 @@
 import os
-from flask import jsonify
+from helpers import response_checker
 
 def get_template_world_include_player_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
-        return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+        return response_checker.response_error("base_chat_pathが未指定です", 400)
 
     file_path = os.path.join(
         base_chat_path,
@@ -14,23 +14,20 @@ def get_template_world_include_player_yaml(payload):
     )
 
     if not os.path.exists(file_path):
-        return jsonify({"ok": False, "message": f"ファイルが存在しません: {file_path}"}), 404
+        return response_checker.response_error(f"ファイルが存在しません: {file_path}", 404)
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception as e:
-        return jsonify({"ok": False, "message": str(e)}), 500
+        return response_checker.response_error(str(e), 500)
 
-    return jsonify({
-        "ok": True,
-        "content": content
-    }) 
+    return response_checker.response_ok(content=content) 
 
 def get_template_world_goal_setting_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
-        return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+        return response_checker.response_error("base_chat_pathが未指定です", 400)
 
     file_path = os.path.join(
         base_chat_path,
@@ -40,23 +37,20 @@ def get_template_world_goal_setting_yaml(payload):
     )
 
     if not os.path.exists(file_path):
-        return jsonify({"ok": False, "message": f"ファイルが存在しません: {file_path}"}), 404
+        return response_checker.response_error(f"ファイルが存在しません: {file_path}", 404)
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception as e:
-        return jsonify({"ok": False, "message": str(e)}), 500
+        return response_checker.response_error(str(e), 500)
 
-    return jsonify({
-        "ok": True,
-        "content": content
-    })
+    return response_checker.response_ok(content=content)
 
 def get_template_world_parameter_setting_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
-        return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+        return response_checker.response_error("base_chat_pathが未指定です", 400)
 
     file_path = os.path.join(
         base_chat_path,
@@ -66,23 +60,20 @@ def get_template_world_parameter_setting_yaml(payload):
     )
 
     if not os.path.exists(file_path):
-        return jsonify({"ok": False, "message": f"ファイルが存在しません: {file_path}"}), 404
+        return response_checker.response_error(f"ファイルが存在しません: {file_path}", 404)
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception as e:
-        return jsonify({"ok": False, "message": str(e)}), 500
+        return response_checker.response_error(str(e), 500)
 
-    return jsonify({
-        "ok": True,
-        "content": content
-    })
+    return response_checker.response_ok(content=content)
 
 def get_template_player_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
-        return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+        return response_checker.response_error("base_chat_pathが未指定です", 400)
 
     file_path = os.path.join(
         base_chat_path,
@@ -92,23 +83,20 @@ def get_template_player_yaml(payload):
     )
 
     if not os.path.exists(file_path):
-        return jsonify({"ok": False, "message": f"ファイルが存在しません: {file_path}"}), 404
+        return response_checker.response_error(f"ファイルが存在しません: {file_path}", 404)
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception as e:
-        return jsonify({"ok": False, "message": str(e)}), 500
+        return response_checker.response_error(str(e), 500)
 
-    return jsonify({
-        "ok": True,
-        "content": content
-    })
+    return response_checker.response_ok(content=content)
 
 def get_template_character_yaml(payload):
     base_chat_path = payload.get("base_chat_path", "")
     if not base_chat_path:
-        return jsonify({"ok": False, "message": "base_chat_pathが未指定です"}), 400
+        return response_checker.response_error("base_chat_pathが未指定です", 400)
 
     file_path = os.path.join(
         base_chat_path,
@@ -118,15 +106,12 @@ def get_template_character_yaml(payload):
     )
 
     if not os.path.exists(file_path):
-        return jsonify({"ok": False, "message": f"ファイルが存在しません: {file_path}"}), 404
+        return response_checker.response_error(f"ファイルが存在しません: {file_path}", 404)
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception as e:
-        return jsonify({"ok": False, "message": str(e)}), 500
+        return response_checker.response_error(str(e), 500)
 
-    return jsonify({
-        "ok": True,
-        "content": content
-    })
+    return response_checker.response_ok(content=content)

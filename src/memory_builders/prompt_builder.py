@@ -19,7 +19,6 @@ from constant import (
 from helpers.string_utils import normalize_newlines
 from helpers import file_utils
 from helpers import string_utils
-from logger import log
 
 class MemoryPromptBuilder:
 
