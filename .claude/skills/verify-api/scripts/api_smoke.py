@@ -237,12 +237,37 @@ def main() -> int:
     t.check("/re_chat は無い（再送ボタンは無くした）→ 404", status == 404, f"status {status}")
 
     # 失敗したあと、同じ発言を送り直せば、発言と返事が続きの番号で入る
-    client = box.client(llm="返事")
-    body = t.api(client, "chat（送り直し）", "post", "/chat", 200, True, ["line_id", "message"],
+    # 発言者は実際の人物（→ docs/spec/chat-flow.md「発言する」Q53・Q54）
+    people = [x for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") not in (None, "null")]
+    mains = [x["参照ID"] for x in people if x.get("参照種別") == "character"]
+    others = [x["参照ID"] for x in people if x.get("参照種別") not in ("player", "character")]
+    client = box.client(llm="返事（判定できない答え）")
+    before = len(box.llm_requests)
+    body = t.api(client, "chat（送り直し）", "post", "/chat", 200, True, ["line_id", "message", "icon_data", "player_line_id"],
                  json={"session_id": sid, "message": "こんにちは"})
-    t.check("  返事は 3 行目", (body.get("line_id"), body.get("message")) == ("3", "返事"), body)
-    t.check("  履歴: 開始メッセージ、発言、返事",
-            [h[:2] for h in history()][1:] == [("2", "player"), ("3", "shirai_yui")], history())
+    t.check("  返事は 3 行目、プレイヤーの発言は 2 行目", (body.get("line_id"), body.get("player_line_id")) == ("3", "2"), body)
+    t.check("  判定できなければ、返事をするのは最初のメイン", body.get("icon_data", {}).get("character_id") == mains[0], body.get("icon_data"))
+    t.check("  履歴: 開始メッセージ（最初のメイン）、発言（実際のプレイヤー）、返事",
+            [h[:2] for h in history()] == [("1", mains[0]), ("2", pid), ("3", mains[0])], history())
+    judge = box.llm_requests[before].get("prompt", "") if len(box.llm_requests) > before else ""
+    t.check("  判定プロンプトに、世界の登場人物が入る（直書きでない）",
+            all(f"{x['参照ID']}（" in judge for x in people if x.get("参照種別") != "player"), judge[:300])
+    t.check("  判定プロンプトに、直前の発言（開始メッセージ）と今回の発言が入る",
+            world.get("開始メッセージ", "")[:20] in judge and "こんにちは" in judge)
+    t.check("  判定プロンプトに、置換前の差し込み口が残っていない",
+            not any(k in judge for k in ("{characters}", "{player_message}", "{player_answer}")))
+    body = t.api(client, "selected_session（役割とプレイヤー）", "post", "/selected_session", 200, True, ["message_list", "player"],
+                 json={"session_id": sid})
+    t.check("  履歴の各行に role が付く", [m.get("role") for m in body.get("message_list", [])] == ["main", "player", "main"],
+            [m.get("role") for m in body.get("message_list", [])])
+    t.check("  プレイヤーの情報が返る", body.get("player", {}).get("character_id") == pid, body.get("player"))
+
+    # 判定で言われた相手が分かれば、その人が返事をする
+    if others:
+        client = box.client(llm=f"target_speakers: {others[0]}")
+        body = t.api(client, "chat（言われた相手が返事をする）", "post", "/chat", 200, True, ["icon_data"],
+                     json={"session_id": sid, "message": "あなたに話しています"})
+        t.check(f"  返事をするのは {others[0]}", body.get("icon_data", {}).get("character_id") == others[0], body.get("icon_data"))
     client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
 
     # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）
@@ -285,6 +310,9 @@ def main() -> int:
     status = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
     t.check("進行状態が ready（エラーなし）", status.get("status") == "ready", status)
     t.check("世界の記憶ができる", (box.sessions / msid / "world_memory.yaml").exists())
+    wm = yaml.safe_load((box.sessions / msid / "world_memory.yaml").read_text(encoding="utf-8")) or {}
+    t.check("世界の記憶のプレイヤーは、世界の登場人物の player（固定の名前でない）", wm.get("プレイヤーID") == pid,
+            (wm.get("プレイヤーID"), wm.get("プレイヤー名")))
     memories = sorted(p.name for p in (box.sessions / msid / "character").glob("*_memory.yaml"))
     t.check("キャラクターの記憶ができる", len(memories) >= 1, memories)
     sent = box.llm_requests[before:]

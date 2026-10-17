@@ -21,6 +21,7 @@ from constant import (
 )
 from memory_builders.prompt_builder import MemoryPromptBuilder
 from helpers import string_utils
+from helpers import session_cast
 from helpers import file_utils
 from services.llm.llm_service import ModelHandlingService
 from helpers import response_checker
@@ -148,8 +149,10 @@ class MemoryManager:
                         log.info(f"[WORLD ERROR] response_text head: {response_text[:500]!r}")
                         parsed_yaml = {}
                     # 何のために必要なのか忘れた
-                    player_id = "kyuya"
-                    player_name = "究也"
+                    # プレイヤーは、世界の登場人物の player から取る（固定の名前を書かない）
+                    player = session_cast.load_cast(session_id)["player"]
+                    player_id = player["id"]
+                    player_name = player["name"]
 
                     # world_memoryのオブジェクトを作成
                     normalized_memory = string_utils.normalize_world_memory_data(

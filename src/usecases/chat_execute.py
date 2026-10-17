@@ -21,6 +21,7 @@ from constant import (
 from helpers import response_checker
 from services.status import status_manager
 from helpers.chat_utils import ChatUtils
+from helpers import session_cast
 from services.memory.memory_manager import MemoryManager
 from services.chat.chat_manager import ChatManager
 import os
@@ -193,7 +194,8 @@ class ChatExecute:
                 history = {
                     "line_id": message,
                     "message": message,
-                    "icon_data": icon_data
+                    "icon_data": icon_data,
+                    "role": "system",
                 }
 
                 makeHistoryList.append(history)
@@ -205,13 +207,15 @@ class ChatExecute:
             history = {
                 "line_id": str(i + 1),
                 "message": historyList[i]["message"],
-                "icon_data": historyList[i]["icon_data"]
+                "icon_data": historyList[i]["icon_data"],
+                "role": historyList[i].get("role"),
             }
             makeHistoryList.append(history)
 
         return response_checker.response_ok(
             session_id=payload.get("session_id"),
             message_list=makeHistoryList,
+            player=session_cast.icon_data(session_cast.load_cast(session_id)["player"]),
         )
 
     def selected_message(self, payload):
@@ -235,6 +239,7 @@ class ChatExecute:
             message_obj["message"] = historyList[i]["message"]
             message_obj["line_id"] = index
             message_obj["icon_data"] =  historyList[i]["icon_data"]
+            message_obj["role"] = historyList[i].get("role")
             message_list.append(message_obj)
 
         return response_checker.response_ok(
@@ -430,14 +435,14 @@ class ChatExecute:
             session_dir = config.SESSIONS_DIR / session_id
             history = file_utils.load_history(session_dir)
 
-            icon_data = {
-                "character_id": "shirai_yui",
-                "character_name": "白井　結"
-            }
+            # 開始メッセージの発言者は、最初のメインキャラクター
+            cast = session_cast.load_cast(session_id)
+            speaker = session_cast.first_main(cast)
+            icon_data = session_cast.icon_data(speaker)
 
             line_id = string_utils.history_append(
                 history,
-                "shirai_yui",
+                speaker["id"],
                 "main",
                 start_message,
                 icon_data
@@ -446,11 +451,12 @@ class ChatExecute:
             file_utils.save_history(session_dir, history)
 
             log.info("ニューチャット終了")
-            return response_checker.chat_response_ok(
-                payload,
-                line_id,
-                start_message,
-                icon_data
+            return response_checker.response_ok(
+                session_id=session_id,
+                line_id=line_id,
+                message=start_message,
+                icon_data=icon_data,
+                player=session_cast.icon_data(cast["player"]),
             ), 200
         except Exception as e:
             log.info(f"[ERROR] /new_chat: {e}")
@@ -472,23 +478,31 @@ class ChatExecute:
             history = file_utils.load_history(session_dir)
 
             message = payload.get("message")
-            icon_data = {"character_id": "player",
-                        "character_name": "プレイヤー"}
-            
-            string_utils.history_append(history, "player", "player", message, icon_data)
+            cast = session_cast.load_cast(session_id)
+            player = cast["player"]
 
-            message = self.chat_utils.chat(session_id, payload, message)
+            # 直前の発言（判定の材料）。プレイヤーの発言を足す前に取る
+            previous_message = history[-1].get("message", "") if history else ""
 
-            icon_data = {"character_id": "shirai_yui",
-                        "character_name": "白井　結"}
-            
-            line_id = string_utils.history_append(history, "shirai_yui", "main", message, icon_data)
+            player_line_id = string_utils.history_append(history, player["id"], "player", message, session_cast.icon_data(player))
+
+            message, responder = self.chat_utils.chat(session_id, payload, message, cast, previous_message)
+
+            icon_data = session_cast.icon_data(responder)
+
+            line_id = string_utils.history_append(history, responder["id"], "main", message, icon_data)
 
             file_utils.save_history(session_dir, history)
 
             log.info("チャット終了")
             # log.info("body全量", body)
-            return response_checker.chat_response_ok(payload, line_id, message, icon_data), 200
+            return response_checker.response_ok(
+                session_id=session_id,
+                line_id=line_id,
+                message=message,
+                icon_data=icon_data,
+                player_line_id=player_line_id,
+            ), 200
 
         except Exception as e:
             log.info(f"[ERROR] /chat: {e}")

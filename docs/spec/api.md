@@ -609,7 +609,8 @@
 2. 初期記憶の生成を**裏で**始める（世界の記憶、続いてキャラクターの記憶。モデルを何度も呼ぶので時間がかかる）。
 3. 世界YAMLの `開始メッセージ` を履歴に書き、返す。裏の生成の終わりは待たない。
 
-- 返却: `{"ok": true, "session_id": ..., "line_id": "1", "message": "開始メッセージ", "icon_data": {"character_id": ..., "character_name": ...}}`
+- 返却: `{"ok": true, "session_id": ..., "line_id": "1", "message": "開始メッセージ", "icon_data": {"character_id": ..., "character_name": ...}, "player": {"character_id": ..., "character_name": ...}}`
+  - `icon_data`: 開始メッセージの発言者（最初のメインキャラクター）。`player`: このセッションのプレイヤー（発言した直後の吹き出しに使う）
 - 画面は、このあと `/session_status` で初期記憶ができたかを問い合わせ、できるまで「発言」を止める。
 
 - セッションは `/chat_startup` で作ってあるはず。そのIDのセッション（フォルダ）が無ければ、何も作らずに断る。
@@ -626,7 +627,8 @@
 | `session_id` | 必須 | |
 | `message` | 必須 | プレイヤーの発言 |
 
-- 返却: `{"ok": true, "session_id": ..., "line_id": ..., "message": "返答", "icon_data": {...}}`
+- 返却: `{"ok": true, "session_id": ..., "line_id": ..., "message": "返答", "icon_data": {...}, "player_line_id": ...}`
+  - `icon_data`: 返事をした人（判定で選んだ人）。`player_line_id`: プレイヤーの発言を書いた行の番号
 - プレイヤーの発言と返答を、この順で履歴に足す。返答の生成に失敗した場合は、どちらも履歴に残さない。
 - 「再送」のAPIは無い。失敗したら、画面が文章を入力欄に戻すので、もう一度これを呼ぶ。
 - 返答の生成そのものは作りかけ。[`../status.md`](../status.md) を参照。
@@ -643,8 +645,10 @@
 |---|---|---|
 | `session_id` | 必須 | |
 
-- 返却: `{"ok": true, "session_id": ..., "message_list": [...]}`
-- `message_list` の1件: `{"line_id": "番号", "message": "本文", "icon_data": {"character_id": ..., "character_name": ...}}`
+- 返却: `{"ok": true, "session_id": ..., "message_list": [...], "player": {"character_id": ..., "character_name": ...}}`
+- `message_list` の1件: `{"line_id": "番号", "message": "本文", "icon_data": {"character_id": ..., "character_name": ...}, "role": ...}`
+  - `role`: `player`（プレイヤーの発言）／`main`（キャラクターの発言）／`system`（畳まれた履歴の印）。画面はこれでプレイヤーの吹き出しかを見分ける。
+    古い履歴は `role` が無いことがあり、そのときは `character_id` が `player`。
 - **履歴は10件ごとに畳む**: 全部は返さず、最後の区切り（10件未満）だけを本文つきで返す。それより前は、10件につき1つ、
   `character_id` が `system` で `message` が区切りの番号（`"1"`、`"2"`…）の「畳まれた印」を返す。
   画面はこの印をクリックすると `/selected_message` で中身を取り寄せる。
@@ -712,7 +716,7 @@
 | 項目 | 内容 |
 |---|---|
 | `t` | 書いた時刻 |
-| `speaker` | 発言者のID |
+| `speaker` | 発言者のID（実際の人物のID。古い履歴では `player`、`shirai_yui` 固定のものがある） |
 | `role` | `player`／`main` |
 | `line_id` | |
 | `message` | 本文 |
