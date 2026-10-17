@@ -52,6 +52,8 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 
 `src/app.py`（ルート定義のみ） → `core/orchestrator.py`（`ChatOrchestrator`、振り分けのみ） → `usecases/chat_execute.py`（`ChatExecute`、チャット系の本体）または `services/*`
 
+APIの返事は、必ず `helpers/response_checker.py` の `response_ok(...)` / `response_error(message, status, ...)` を通して返す（成功は `{"ok": true, ...}`、失敗は `{"ok": false, "message": ...}` とHTTPステータス）。`jsonify` をその場で書かない。
+
 - `services/world/world_settings.py`: 世界・キャラクター・プレイヤー設定の保存と読み込み（Web側フォルダを操作）
 - `services/memory/memory_manager.py`: 世界記憶・キャラクター記憶の生成。LLMを何段も呼ぶ
 - `services/chat/chat_manager.py`: 本番チャットの応答生成

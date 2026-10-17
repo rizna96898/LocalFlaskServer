@@ -102,7 +102,5 @@
 - `src/constant.py` の `Bootstrap.CHARACTER_ITEMS`、`CHARACTER_MEMORY`、`SUB_CHARACTER_MEMORY`: 指しているYAMLが無く、コードからも使われていない。（→ Q58）
 - 設定項目名 `local_mode_name`: `local_model_name` の綴り違いに見える。直すと設定ファイル側の書き換えも必要。（→ Q60）
 - `OpenRouterService`（未使用）: 送信内容に `logit_bias: {"248068": -100}` が直書きされている。この番号はローカルの Qwen の `<think>` で、OpenRouter のモデルでは別の語を指す。OpenRouter を使い始める前に外すこと。（→ Q61）
-- `services/world/world_settings.py` と `services/template/template.py`: レスポンスの形は合っているが、`response_checker` を使わず `jsonify` を直接書いている。（→ Q58）
-- 使われていない import が3つ（`verify-api` の `static_check.py` で表示される）。（→ Q58）
 - ルートの `構成.txt`: 初期の構想で、今のフォルダ構成とは一致しない（Git管理外）。（→ Q62）
 - LLM_CHAT_CONSOLE の `README.txt`: 設定画面を足したときのメモ。書かれている `flask_settings_api.py` は存在せず、該当のAPIはこのリポジトリにある。（→ Q62）
