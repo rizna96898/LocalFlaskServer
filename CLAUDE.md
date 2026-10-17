@@ -59,6 +59,7 @@ APIの返事は、必ず `helpers/response_checker.py` の `response_ok(...)` / 
 - `services/chat/chat_manager.py`: 本番チャットの応答生成
 - `services/llm/llm_service.py`: `ModelHandlingService` が `LocalModelService` / `OpenRouterService` を切り替える。`task_type`（`chat` / `memory` / `judge`）で `max_tokens` が決まる
 - `services/status/status_manager.py`: セッションごとの進行状態
+- `helpers/session_cast.py`: セッションの登場人物（プレイヤーとキャラクター）を、セッションに写した世界設定から読む。発言者のIDと名前はここから取り、`shirai_yui` のような固定の名前を書かない
 - `services/llm/generation_params.py`: モデルへ送る内容（メッセージと生成の設定）を組み立てる `build_send_parameters`。温度や最大トークン数は、コードに書かず `files/settings/generation.yaml` から読む（書き換えは再起動なしで反映）
 - `memory_builders/`、`chat_builders/`: プロンプト組み立て（`prompt_builder.py`）
 

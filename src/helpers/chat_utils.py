@@ -23,7 +23,8 @@ class ChatUtils:
         # 初期記憶の非同期作成
         return self.memory_manager.create_initial_memory(session_id)
 
-    def chat(self, session_id, body:Dict, message) -> str:
+    # 戻り値は (返事の文, 返事をする人)。返事の文は、今はまだ判定の答えそのもの（仮）
+    def chat(self, session_id, body:Dict, message, cast, previous_message="") -> tuple:
         #session_id = body.get("session_id")
 
         #実行中に更新
@@ -32,7 +33,7 @@ class ChatUtils:
             complete_stage="main_chat",
         )
 
-        message = self.chat_manager.main_chat(body, session_id, message)
+        message, responder = self.chat_manager.main_chat(body, session_id, message, cast, previous_message)
 
         #待機中に更新
         status_manager.update_prepare_status(
@@ -46,7 +47,7 @@ class ChatUtils:
             next_speakers=None,
         )
 
-        return message
+        return message, responder
 
 
     # 前処理・後処理は事前且つ、個別に呼ぶことがあるのかがポイント
