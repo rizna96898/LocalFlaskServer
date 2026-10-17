@@ -89,10 +89,6 @@
 - サーバー側では、必ず `helpers/response_checker.py` の `response_ok` / `response_error` を通して返す（`jsonify` をその場で書かない）。
   形を変えるときに、1か所の修正で済むようにするため。
 
-- **【要確認 Q58】** `src/constant.py` の `Bootstrap.CHARACTER_ITEMS`、`CHARACTER_MEMORY`、`SUB_CHARACTER_MEMORY` は、
-  指すYAMLが無く、どこからも使われていない。消すか、将来のために残すか。
-  （同じQで聞いていた `jsonify` の直書きと、使われていない import は直した）
-
 <a id="s1-3"></a>
 
 ### 場所を表す2つの項目
@@ -762,4 +758,3 @@
 | 番号 | 対象 | 確認したいこと | 回答・状況 |
 |---|---|---|---|
 | Q20 | セッション一覧 | `updated_at` を発言のたびに更新するか | 回答: 覚えていないので、もう少し話す |
-| Q58 | 未使用の定数 | `constant.py` の使われていない定数3つを消すか（`jsonify` の直書きと未使用の import は直した） | 未回答（status.md から上げたもの） |

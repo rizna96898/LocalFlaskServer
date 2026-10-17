@@ -14,9 +14,6 @@ class Bootstrap:
     MEMORY_MIDDLE_CURRENCY = "00_query_create_character_memory_middle_currency.yaml"
     EDIT_SUMMARY         = "01_query_create_edit_summary.yaml"
     WORLD_MEMORY         = "01_query_create_world_memory.yaml"
-    CHARACTER_ITEMS      = "02_query_create_character_items.yaml"
-    CHARACTER_MEMORY     = "02_query_create_character_memory.yaml"
-    SUB_CHARACTER_MEMORY = "03_query_create_sub_character_memory.yaml"
     SUB_CHARACTER_TEMPLATE = "sub_character.yaml"
       
 class PromptsPreprocess:
