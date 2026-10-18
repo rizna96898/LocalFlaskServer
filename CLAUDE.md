@@ -88,7 +88,7 @@ APIの返事は、必ず `helpers/response_checker.py` の `response_ok(...)` / 
 
 ### ログ
 
-`logger/log.py` の `log.info(...)` を使う（`print` は使わない。コンソールがcp932のため文字化け対策が入っている）。ローカルモデルへ送るたびに `log.debug_dump_all` が `logs/{ミリ秒}_prompt.txt` と `_params.json` を書き出すので、プロンプトの確認はここを見る。
+`logger/log.py` の `log.info(...)` を使う（`print` は使わない。コンソールがcp932のため文字化け対策が入っている）。ローカルモデルへ送るたびに `log.debug_dump_all` が `logs/{ミリ秒}_prompt.txt` と `_params.json` を、返事が来たら `log.debug_dump_response` が同じ名前の `_response.txt` を書き出すので、プロンプトと返事の確認はここを見る。
 
 ## 作業の進め方
 

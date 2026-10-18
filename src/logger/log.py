@@ -27,6 +27,7 @@ def _print_safe(*values, sep=" ", end="\n"):
     )
 
 
+# 送る内容を logs/{ミリ秒}_prompt.txt と _params.json に書く。返事を同じ名前で残せるよう、ミリ秒（ts）を返す
 def debug_dump_all(prompt, params):
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
@@ -51,6 +52,23 @@ def debug_dump_all(prompt, params):
             ensure_ascii=False,
             indent=2,
         )
+
+    return ts
+
+
+# モデルの返事を logs/{ミリ秒}_response.txt に書く（ts は debug_dump_all が返したもの）。
+# 読みやすいよう、そのままの文字列で書く。後始末の前と後で違えば、両方書く
+def debug_dump_response(ts, text, raw_text=None):
+    try:
+        log_dir = Path("logs")
+        log_dir.mkdir(exist_ok=True)
+        body = text or ""
+        if raw_text is not None and raw_text != text:
+            body = f"{body}\n\n----- 後始末の前（モデルの返事そのまま） -----\n{raw_text}"
+        with open(log_dir / f"{ts}_response.txt", "w", encoding="utf-8") as f:
+            f.write(body)
+    except Exception as e:
+        info(f"[LOG] 返事のログを書けませんでした: {e}")
 
 
 def info(*args):

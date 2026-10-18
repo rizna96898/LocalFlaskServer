@@ -438,6 +438,21 @@ def main() -> int:
                 bool(update_prompts) and all(j in update_prompts[0] for j in jobs) and "{participants}" not in update_prompts[0], jobs)
 
         # 返事を記憶として読めなければ、error になり、記憶は前のまま
+        update_calls = []
+
+        def flaky_update(prompt):
+            if "キャラクターの状態と記憶を更新するAI" in prompt:
+                update_calls.append(1)
+                if len(update_calls) == 1:
+                    return "壊れた返事"            # 1回目だけ壊れている
+            return update_llm(prompt)
+
+        flaky = box.client(llm=flaky_update)
+        flaky.post("/chat", json={"session_id": msid, "message": "聞き直しの確認"})
+        box.wait_background(30)
+        st = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
+        t.check("記憶の更新: 1回目が読めなくても、1回だけ聞き直して読めれば ready", (st.get("status"), len(update_calls)) == ("ready", 2), (st, len(update_calls)))
+
         broken_update = box.client(llm=lambda prompt: "壊れた返事" if "キャラクターの状態と記憶を更新するAI" in prompt else update_llm(prompt))
         before_text = mem_path.read_text(encoding="utf-8")
         broken_update.post("/chat", json={"session_id": msid, "message": "もう一度"})
@@ -450,6 +465,37 @@ def main() -> int:
     else:
         t.check("記憶のあるセッションが作れている", False, "初期記憶の生成で記憶ができていない")
     scripted.post("/delete_session", json={"session_ids": [msid]})
+
+    # キャラクターの記憶の段階（服装など）は、YAMLとして読めなければ1回だけ聞き直す
+    def clothing_broken(times):
+        count = []
+
+        def llm(prompt):
+            if "「現在の服装」を特定" in prompt:
+                count.append(1)
+                if len(count) <= times:
+                    return "服装は、たぶんブレザーです"   # YAML の形でない返事
+            return sandbox.scripted_llm(prompt)
+        return llm, count
+
+    for times, expect in ((1, "ready"), (2, "error")):
+        llm, count = clothing_broken(times)
+        c2 = box.client(llm=llm)
+        rsid = (c2.post("/chat_startup", json={"world_id": world_id, "base_chat_path": web}).get_json() or {}).get("session_id", "")
+        c2.post("/new_chat", json={"session_id": rsid})
+        box.wait_background(60)
+        st = yaml.safe_load((box.sessions / rsid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
+        label = "1回目だけ壊れている → 聞き直して ready" if times == 1 else "2回とも壊れている → character で error"
+        t.check(f"服装の段階: {label}", st.get("status") == expect and len(count) == 2
+                and (expect == "ready" or st.get("error_stage") == "character"), (st.get("status"), st.get("error_stage"), len(count)))
+        c2.post("/delete_session", json={"session_ids": [rsid]})
+
+    # モデルの返事も logs/ に残す（送った内容と同じ名前の _response.txt）
+    log_dir = box.server / "logs"
+    prompts = sorted(log_dir.glob("*_prompt.txt")) if log_dir.exists() else []
+    responses = {x.name.replace("_response.txt", "") for x in log_dir.glob("*_response.txt")} if log_dir.exists() else set()
+    paired = [x for x in prompts if x.name.replace("_prompt.txt", "") in responses]
+    t.check("モデルの返事が logs/ に {時刻}_response.txt で残る（送った内容と同じ時刻）", bool(paired), f"prompt {len(prompts)} 件 / response {len(responses)} 件")
 
     # 世界の記憶で失敗したら、そこで止まり、失敗した場所(world)が残る
     broken = box.client(llm=lambda prompt: "壊れた返事" if "状態と記憶を構造化" in prompt else sandbox.scripted_llm(prompt))

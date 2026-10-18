@@ -131,6 +131,22 @@ class MemoryManager:
 
         Thread(target=task, daemon=True).start()
 
+    # モデルに送り、返事をYAMLとして読む。読めない・形が違う（check が False）ときは、1回だけ聞き直す。
+    # 2回とも読めなければ ValueError。label はログと失敗の文に使う段階の名前
+    def _ask_yaml(self, parameters, label: str, check=None):
+        for attempt in (1, 2):
+            response_text = string_utils.strip_code_block(self.model_handling_service.send_message(parameters) or "")
+            log.info(f"[{label}] 返事", response_text)
+            try:
+                data = yaml.safe_load(response_text)
+            except yaml.YAMLError as e:
+                log.info(f"[{label}] YAMLとして読めませんでした（{attempt}回目）: {e}")
+                continue
+            if data is not None and (check is None or check(data)):
+                return data
+            log.info(f"[{label}] 返事の形が違いました（{attempt}回目）")
+        raise ValueError(f"{label}: 返事をYAMLとして読めませんでした（2回聞いた）")
+
     def _update_character_memory(self, char_dir: Path, person: Dict, conversation: str, participants: str = "") -> None:
         memory_path = char_dir / f"{person['id']}_memory.yaml"
         current = file_utils.load_yaml_file(memory_path)
@@ -145,10 +161,8 @@ class MemoryManager:
         prompt_messages = string_utils.build_messages(prompt_data)
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
 
-        response_text = self.model_handling_service.send_message(parameters)
-        updated = yaml.safe_load(string_utils.strip_code_block(response_text or "")) or {}
-        if not _is_valid_character_memory(updated):
-            raise ValueError("返事を記憶として読めませんでした（「現在の状態」が無い）")
+        # 読めない・「現在の状態」が無いときは、1回だけ聞き直す
+        updated = self._ask_yaml(parameters, f"記憶の更新 {person['id']}", check=_is_valid_character_memory)
 
         # 関係性は、前からいる人を消さない。今回の会話で初めて出てきた人だけを足す
         old_state = current.get("現在の状態") if isinstance(current.get("現在の状態"), dict) else {}
@@ -623,11 +637,8 @@ class MemoryManager:
         prompt_messages = string_utils.build_messages(prompt_yaml)
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_clothing_yaml"])
 
-        response_text = self.model_handling_service.send_message(parameters)
-        response_text = string_utils.strip_code_block(response_text)
-        
-        log.info("response_text", response_text)
-        return yaml.safe_load(response_text) or {}
+        # 所持品の段階で「服装」を使うので、その欄があることまで確かめる。読めなければ1回だけ聞き直す
+        return self._ask_yaml(parameters, "服装", check=lambda d: isinstance(d, dict) and "服装" in d)
 
     # 所持品の問い合わせ
     def proc_middle_items(self,
@@ -668,11 +679,8 @@ class MemoryManager:
         prompt_messages = string_utils.build_messages(prompt_yaml)
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_items_yaml"])
 
-        response_text = self.model_handling_service.send_message(parameters)
-        response_text = string_utils.strip_code_block(response_text)
-        
-        log.info("返却前全文", response_text)
-        return yaml.safe_load(response_text) or {}
+        # 読めなければ1回だけ聞き直す
+        return self._ask_yaml(parameters, "キャラクターの記憶の段階", check=lambda d: isinstance(d, dict))
 
     # 意識を誰に向けているか問い合わせ
     def proc_middle_target(self,
@@ -696,11 +704,8 @@ class MemoryManager:
         log.info("置換後", prompt_messages[-1]["content"])
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_target_yaml"])
 
-        response_text = self.model_handling_service.send_message(parameters)
-        response_text = string_utils.strip_code_block(response_text)
-        
-        log.info("返却前全文", response_text)
-        return yaml.safe_load(response_text) or {}
+        # 読めなければ1回だけ聞き直す
+        return self._ask_yaml(parameters, "キャラクターの記憶の段階", check=lambda d: isinstance(d, dict))
 
     # 所持金の問い合わせ
     def proc_middle_currency(self,
@@ -727,11 +732,8 @@ class MemoryManager:
         prompt_messages = string_utils.build_messages(prompt_yaml)
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_currency_yaml"])
 
-        response_text = self.model_handling_service.send_message(parameters)
-        response_text = string_utils.strip_code_block(response_text)
-        
-        log.info("返却前全文", response_text)
-        return yaml.safe_load(response_text) or {}
+        # 読めなければ1回だけ聞き直す
+        return self._ask_yaml(parameters, "キャラクターの記憶の段階", check=lambda d: isinstance(d, dict))
 
     # TODO 変動パラメータの作成（未実装、予定）
     def convert_dynamic_params(self, data):
