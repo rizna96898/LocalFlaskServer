@@ -250,6 +250,8 @@ def main() -> int:
     t.check("  履歴: 開始メッセージ（最初のメイン）、発言（実際のプレイヤー）、返事",
             [h[:2] for h in history()] == [("1", mains[0]), ("2", pid), ("3", mains[0])], history())
     judge = box.llm_requests[before].get("prompt", "") if len(box.llm_requests) > before else ""
+    t.check("  判定プロンプトの候補に、職業が付く",
+            all(f"・{x['職業']}）" in judge for x in people if x.get("参照種別") != "player" and x.get("職業")), judge[:400])
     t.check("  判定プロンプトに、世界の登場人物が入る（直書きでない）",
             all(f"{x['参照ID']}（" in judge for x in people if x.get("参照種別") != "player"), judge[:300])
     t.check("  判定プロンプトに、直前の発言（開始メッセージ）と今回の発言が入る",
@@ -395,7 +397,7 @@ def main() -> int:
         mem_path = mem_files[0]
         old_mem = yaml.safe_load(mem_path.read_text(encoding="utf-8")) or {}
         updated_yaml = ("現在の状態:\n  場所: 診察室\n  状態:\n  - 診察を受けている\n  心情:\n  - 安心\n"
-                        "  関係性:\n  - 書き換えてはいけない\n  意識:\n  - 先生\n")
+                        "  関係性:\n  - キャラクターID: kyuya\n    名前: 究也\n    役割: 先生\n  意識:\n  - 究也\n")
         update_prompts = []
 
         def update_llm(prompt):
@@ -415,11 +417,17 @@ def main() -> int:
                 and st.get("progress_done") == st.get("progress_total") == len(mem_files), st)
         new_mem = yaml.safe_load(mem_path.read_text(encoding="utf-8")) or {}
         t.check("  記憶が今回の会話で更新される", (new_mem.get("現在の状態") or {}).get("場所") == "診察室", new_mem)
-        t.check("  関係性は変えない（前の記憶のまま）",
-                (new_mem.get("現在の状態") or {}).get("関係性") == (old_mem.get("現在の状態") or {}).get("関係性"), new_mem)
+        old_rel = (old_mem.get("現在の状態") or {}).get("関係性") or []
+        new_rel = (new_mem.get("現在の状態") or {}).get("関係性") or []
+        t.check("  関係性: 前からいる人は、モデルが書き落としても残る", new_rel[:len(old_rel)] == old_rel, new_rel)
+        t.check("  関係性: 新しく会った人（究也）が足される", any(isinstance(r, dict) and r.get("キャラクターID") == "kyuya" for r in new_rel), new_rel)
+        t.check("  意識が更新される", (new_mem.get("現在の状態") or {}).get("意識") == ["究也"], new_mem)
         t.check("  更新のプロンプトに、今の記憶と今回の会話が入る",
                 bool(update_prompts) and "診察室へどうぞ" in update_prompts[0] and "よろしくお願いします" in update_prompts[0]
                 and "{current_memory}" not in update_prompts[0], update_prompts[:1])
+        jobs = [x.get("職業") for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") not in (None, "null") and x.get("職業")]
+        t.check("  更新のプロンプトに、登場人物が職業付きで入る（会話の「先生」と結び付けるため）",
+                bool(update_prompts) and all(j in update_prompts[0] for j in jobs) and "{participants}" not in update_prompts[0], jobs)
 
         # 返事を記憶として読めなければ、error になり、記憶は前のまま
         broken_update = box.client(llm=lambda prompt: "壊れた返事" if "キャラクターの状態と記憶を更新するAI" in prompt else update_llm(prompt))

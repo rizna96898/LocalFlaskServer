@@ -48,6 +48,7 @@ class ChatManager:
     # history: これまでの会話ログ（partner_message はまだ入っていないもの）
     def reply(self, session_id, speaker, partner, partner_message, history) -> str:
         context = self._context(session_id, speaker, history)
+        context["participants"] = self._participants(session_id, speaker)
         prompt_messages = self.prompt_builder.create_reply_prompt({
             **context,
             "partner_name": partner["name"],
@@ -61,7 +62,7 @@ class ChatManager:
         people = [cast["player"]] + list(cast.get("characters") or [])
         prompt_messages = self.prompt_builder.create_attention_prompt({
             "character_name": speaker["name"],
-            "participants": "\n".join(f"{p['id']}（{p['name']}）" for p in people if p["id"] != speaker["id"]),
+            "participants": "\n".join(session_cast.label(p) for p in people if p["id"] != speaker["id"]),
             "recent_log": self._recent_log(history),
         })
         result = self._send("judge", prompt_messages, PromptsMain.ATTENTION)
@@ -78,6 +79,7 @@ class ChatManager:
     # 掛け合いの話しかけ。speaker が target に一言話しかける
     def cross_talk(self, session_id, speaker, target, history) -> str:
         context = self._context(session_id, speaker, history)
+        context["participants"] = self._participants(session_id, speaker)
         prompt_messages = self.prompt_builder.create_cross_talk_prompt({
             **context,
             "target_name": target["name"],
@@ -118,6 +120,13 @@ class ChatManager:
             "character_memory": self._dump(memory),
             "recent_log": self._recent_log(history),
         }
+
+    # その場の登場人物（自分以外）。「ID（表示名・職業）」を1行ずつ
+    @staticmethod
+    def _participants(session_id, speaker) -> str:
+        cast = session_cast.load_cast(session_id)
+        people = [cast["player"]] + list(cast.get("characters") or [])
+        return "\n".join(session_cast.label(p) for p in people if p["id"] != speaker["id"])
 
     @staticmethod
     def _dump(data) -> str:

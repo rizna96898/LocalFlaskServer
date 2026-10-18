@@ -63,11 +63,13 @@ def load_cast(session_id: str) -> Dict[str, Any]:
             continue
 
         person_id = str(person_id)
+        job = person.get("職業")
         entry = {
             "id": person_id,
             "name": _display_name(session_id, person, person_id),
             "kind": kind,
             "role": person.get("役割"),
+            "job": "" if job in (None, "null") else str(job),
         }
 
         if kind == "player":
@@ -91,6 +93,15 @@ def first_main(cast: Dict[str, Any]) -> Dict[str, Any]:
     if characters:
         return characters[0]
     return {"id": "system", "name": "システム", "kind": "system", "role": None}
+
+
+def label(person: Dict[str, Any]) -> str:
+    """プロンプトの候補に並べる書き方。「ID（表示名・職業）」。職業が無ければ「ID（表示名）」。
+
+    職業（世界設定の登場人物の 職業。例: カッコウ医院の先生）を付けるのは、会話の「先生」と人物を結び付けられるようにするため。
+    """
+    detail = person["name"] + (f"・{person['job']}" if person.get("job") else "")
+    return f"{person['id']}（{detail}）"
 
 
 def icon_data(person: Dict[str, Any]) -> Dict[str, str]:

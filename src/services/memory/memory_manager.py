@@ -56,6 +56,26 @@ def _is_valid_character_memory(data) -> bool:
     return isinstance(data, dict) and isinstance(data.get("現在の状態"), dict)
 
 
+# 関係性をまとめる。前の関係性は全部残し、新しい関係性のうち、前に無い人（キャラクターID か 名前 で比べる）だけを足す
+def _merge_relations(old, new) -> list:
+    old = old if isinstance(old, list) else []
+    new = new if isinstance(new, list) else []
+
+    def key(item):
+        if isinstance(item, dict):
+            return str(item.get("キャラクターID") or "") or "".join(str(item.get("名前") or "").split())
+        return "".join(str(item).split())
+
+    known = {key(item) for item in old}
+    merged = list(old)
+    for item in new:
+        k = key(item)
+        if k and k not in known:
+            merged.append(item)
+            known.add(k)
+    return merged
+
+
 class MemoryManager:
     def __init__(self):
         self.prompt_builder = MemoryPromptBuilder()
@@ -78,6 +98,10 @@ class MemoryManager:
         status_manager.mark_prepare_processing(session_id, "after")
         status_manager.mark_progress(session_id, 0, len(targets), "準備中")
 
+        participants = "\n".join(
+            session_cast.label(p) for p in [cast["player"]] + list(cast.get("characters") or [])
+        )
+
         conversation = "\n".join(
             f"{(item.get('icon_data') or {}).get('character_name') or item.get('speaker', '')}: {item.get('message', '')}"
             for item in turn_log
@@ -88,7 +112,7 @@ class MemoryManager:
             for no, person in enumerate(targets):
                 status_manager.mark_progress(session_id, no, len(targets), f"{person['name']}: 記憶の更新")
                 try:
-                    self._update_character_memory(char_dir, person, conversation)
+                    self._update_character_memory(char_dir, person, conversation, participants)
                 except Exception as e:
                     log.info(f"[MEMORY UPDATE ERROR] {person['id']}: {type(e).__name__}: {e}")
                     failed.append(f"{person['name']}: {e}")
@@ -107,7 +131,7 @@ class MemoryManager:
 
         Thread(target=task, daemon=True).start()
 
-    def _update_character_memory(self, char_dir: Path, person: Dict, conversation: str) -> None:
+    def _update_character_memory(self, char_dir: Path, person: Dict, conversation: str, participants: str = "") -> None:
         memory_path = char_dir / f"{person['id']}_memory.yaml"
         current = file_utils.load_yaml_file(memory_path)
 
@@ -116,6 +140,7 @@ class MemoryManager:
             "character_name": person["name"],
             "current_memory": yaml.safe_dump(current, allow_unicode=True, sort_keys=False).strip(),
             "conversation": conversation,
+            "participants": participants,
         })
         prompt_messages = string_utils.build_messages(prompt_data)
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
@@ -125,10 +150,10 @@ class MemoryManager:
         if not _is_valid_character_memory(updated):
             raise ValueError("返事を記憶として読めませんでした（「現在の状態」が無い）")
 
-        # 関係性は変えない（初期記憶で世界の記憶から入れたもの）
+        # 関係性は、前からいる人を消さない。今回の会話で初めて出てきた人だけを足す
         old_state = current.get("現在の状態") if isinstance(current.get("現在の状態"), dict) else {}
         if "関係性" in old_state:
-            updated["現在の状態"]["関係性"] = old_state["関係性"]
+            updated["現在の状態"]["関係性"] = _merge_relations(old_state.get("関係性"), updated["現在の状態"].get("関係性"))
 
         file_utils.save_yaml_file(memory_path, updated)
         log.info(f"[MEMORY UPDATE] {person['id']} の記憶を更新しました")

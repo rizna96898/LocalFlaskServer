@@ -20,6 +20,7 @@ from helpers.string_utils import normalize_newlines
 from helpers import file_utils
 from logger import log
 from helpers import string_utils
+from helpers import session_cast
 
 class ChatPromptBuilder:
 
@@ -60,8 +61,8 @@ class ChatPromptBuilder:
 
         log.info("キャラデータ", prompt_data)
 
-        # 登場人物は世界の登場人物から作る。答えは ID で返させる
-        characters = "\n".join(f"{c['id']}（{c['name']}）" for c in candidates)
+        # 登場人物は世界の登場人物から作る。答えは ID で返させる。職業も付けて、会話の呼び方（先生など）と結び付けられるようにする
+        characters = "\n".join(session_cast.label(c) for c in candidates)
 
         prompt_data = string_utils.fill_template(prompt_data, {
             "characters": characters,
