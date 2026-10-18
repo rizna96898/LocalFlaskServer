@@ -272,6 +272,12 @@ def main() -> int:
     if others:
         main, sub = mains[0], others[0]
         names = {x["参照ID"]: x.get("表示名") for x in people}
+        names_player = names[pid]
+
+        def saved_history():
+            # 画面向けの /selected_session は10行ごとに畳むので、ファイルを直接読む
+            import json as _json
+            return [h.get("speaker") for h in _json.loads((box.sessions / sid / "history.json").read_text(encoding="utf-8"))]
         sent_prompts = []
 
         def talk_llm(prompt, attention_to=sub):
@@ -280,6 +286,8 @@ def main() -> int:
                 return f"target_speakers: {main}"
             if "意識を向けている相手" in prompt:
                 return f"相手: {attention_to}"
+            if f"今、あなたの意識は {names_player} に" in prompt:
+                return "（向き直って）\n先生、お願いします"
             if "今、あなたの意識は" in prompt:
                 return "（期待）\nね、いこ？"
             if f"あなたは {names[sub]} として" in prompt:
@@ -287,13 +295,16 @@ def main() -> int:
             return "（嬉しい）\nはーい"
 
         client = box.client(llm=talk_llm)
-        before = len(history())
+        before = len(saved_history())
         body = t.api(client, "chat（意識がサブに向いていれば掛け合い）", "post", "/chat", 200, True, ["messages"],
                      json={"session_id": sid, "message": "いらっしゃいませ"})
         got = [(m.get("icon_data", {}).get("character_id"), m.get("message")) for m in body.get("messages", [])]
-        t.check("  返事 → 話しかけ → 相手の返事 の3行", got == [(main, "（嬉しい）\nはーい"), (main, "（期待）\nね、いこ？"), (sub, "（うなずく）\nうん")], got)
+        t.check("  返事 → 話しかけ → 相手の返事 → プレイヤーへの向き直り の4行",
+                got == [(main, "（嬉しい）\nはーい"), (main, "（期待）\nね、いこ？"), (sub, "（うなずく）\nうん"),
+                        (main, "（向き直って）\n先生、お願いします")], got)
         t.check("  1件目は今までどおり line_id・message でも返る", body.get("message") == "（嬉しい）\nはーい")
-        t.check("  履歴に、発言 → 3行の順で入る", [h[1] for h in history()[before:]] == [pid, main, main, sub], history()[before:])
+        t.check("  履歴に、発言 → 4行の順で入る", saved_history()[before:] == [pid, main, main, sub, main], saved_history()[before:])
+        box.wait_background(20)
         reply_prompt = next((q for q in sent_prompts if f"あなたは {names[main]} として" in q and "今、あなたの意識は" not in q), "")
         t.check("  返事のプロンプトに、記憶・これまでの会話・プレイヤーの発言が入る",
                 "#今の記憶" in reply_prompt and "#これまでの会話" in reply_prompt and "いらっしゃいませ" in reply_prompt
@@ -377,6 +388,51 @@ def main() -> int:
     wrong = [q for q in sent if any(q.get(k) != v for k, v in expect.items())]
     t.check("送信した設定が generation.yaml の memory の値と一致", bool(expect) and not wrong,
             f"期待 {expect} / 違うもの {len(wrong)} 件")
+    # 発言のあと、裏でキャラクターの記憶を更新する（→ docs/spec/chat-flow.md「本番の発言の流れ」7）
+    print("\n# 発言のあとの記憶の更新")
+    mem_files = sorted((box.sessions / msid / "character").glob("*_memory.yaml"))
+    if mem_files:
+        mem_path = mem_files[0]
+        old_mem = yaml.safe_load(mem_path.read_text(encoding="utf-8")) or {}
+        updated_yaml = ("現在の状態:\n  場所: 診察室\n  状態:\n  - 診察を受けている\n  心情:\n  - 安心\n"
+                        "  関係性:\n  - 書き換えてはいけない\n  意識:\n  - 先生\n")
+        update_prompts = []
+
+        def update_llm(prompt):
+            if "キャラクターの状態と記憶を更新するAI" in prompt:
+                update_prompts.append(prompt)
+                return updated_yaml
+            if "誰に向けた物かを判別" in prompt or "意識を向けている相手" in prompt:
+                return "相手: null"
+            return "（ほっとして）\nよろしくお願いします"
+
+        updater = box.client(llm=update_llm)
+        body = t.api(updater, "chat（記憶のあるセッション）", "post", "/chat", 200, True, ["messages"],
+                     json={"session_id": msid, "message": "診察室へどうぞ"})
+        t.check("  裏の記憶の更新が終わる", box.wait_background(30))
+        st = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
+        t.check("  進行状態は after / ready、進み具合は全員分", (st.get("complete_stage"), st.get("status")) == ("after", "ready")
+                and st.get("progress_done") == st.get("progress_total") == len(mem_files), st)
+        new_mem = yaml.safe_load(mem_path.read_text(encoding="utf-8")) or {}
+        t.check("  記憶が今回の会話で更新される", (new_mem.get("現在の状態") or {}).get("場所") == "診察室", new_mem)
+        t.check("  関係性は変えない（前の記憶のまま）",
+                (new_mem.get("現在の状態") or {}).get("関係性") == (old_mem.get("現在の状態") or {}).get("関係性"), new_mem)
+        t.check("  更新のプロンプトに、今の記憶と今回の会話が入る",
+                bool(update_prompts) and "診察室へどうぞ" in update_prompts[0] and "よろしくお願いします" in update_prompts[0]
+                and "{current_memory}" not in update_prompts[0], update_prompts[:1])
+
+        # 返事を記憶として読めなければ、error になり、記憶は前のまま
+        broken_update = box.client(llm=lambda prompt: "壊れた返事" if "キャラクターの状態と記憶を更新するAI" in prompt else update_llm(prompt))
+        before_text = mem_path.read_text(encoding="utf-8")
+        broken_update.post("/chat", json={"session_id": msid, "message": "もう一度"})
+        box.wait_background(30)
+        st = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
+        t.check("記憶の更新に失敗: after / error、失敗した場所は character", (st.get("complete_stage"), st.get("status"), st.get("error_stage")) == ("after", "error", "character"), st)
+        t.check("  記憶は前のまま", mem_path.read_text(encoding="utf-8") == before_text)
+        body = t.api(broken_update, "  session_status で失敗が見える", "post", "/session_status", 200, True, ["status", "error_message"],
+                     json={"session_id": msid})
+    else:
+        t.check("記憶のあるセッションが作れている", False, "初期記憶の生成で記憶ができていない")
     scripted.post("/delete_session", json={"session_ids": [msid]})
 
     # 世界の記憶で失敗したら、そこで止まり、失敗した場所(world)が残る
