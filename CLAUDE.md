@@ -84,7 +84,7 @@ APIの返事は、必ず `helpers/response_checker.py` の `response_ok(...)` / 
    退避した画像は `files/sessions/{session_id}/picture/icon/{id}.png` と `picture/standing/{id}_standing.png` に入り、チャット画面は `/session_image/{session_id}/{icon|standing}/{id}` でこれを読む（Web側フォルダの最新の画像は読まない）。プレイヤーの画像も退避する。元に画像が無い人物は退避しない（無くてもチャットは始められる）。
 2. `/new_chat`: `prepare_status.yaml` を作り、初期記憶の生成を別スレッドで開始して、世界YAMLの `開始メッセージ` を返す。
 
-`prepare_status.yaml` の `status`（`processing` / `ready` / `error`）と `complete_stage`（`new_chat` → `prepare` → `main_chat` → `mob_chat` → `after`）が、非同期処理の進行と次に進めるかどうかの判定に使われる。初期記憶の進み具合は `progress_done` / `progress_total` / `progress_label` に書き、画面は `/session_status` を1秒ごとに問い合わせて、作成中は「発言」を止めプログレスバーを出す。
+`prepare_status.yaml` の `status`（`processing` / `ready` / `error`）と `complete_stage`（`new_chat` → `prepare` → `main_chat` → `mob_chat` → `after`）が、非同期処理の進行と次に進めるかどうかの判定に使われる。初期記憶の進み具合は `progress_done` / `progress_total` / `progress_label` に書き、画面は `/session_status` を1秒ごとに問い合わせて、作成中は「発言」を止めプログレスバーを出す。発言のあとのキャラクターの記憶の更新も同じ仕組みで、`complete_stage` が `after` になる。発言1回分の流れ（判定 → 返事 → 意識 → 掛け合い → 記憶の更新）は `docs/spec/chat-flow.md`。
 
 ### ログ
 

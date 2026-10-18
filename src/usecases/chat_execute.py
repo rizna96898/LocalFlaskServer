@@ -502,6 +502,9 @@ class ChatExecute:
 
             file_utils.save_history(session_dir, history)
 
+            # 裏で、記憶の更新と画像作成を始める（今回の会話 = プレイヤーの発言から最後まで）
+            self.chat_utils.after_chat(session_id, cast, history[int(player_line_id) - 1:])
+
             log.info("チャット終了")
             # log.info("body全量", body)
             return response_checker.response_ok(

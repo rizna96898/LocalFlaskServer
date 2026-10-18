@@ -28,6 +28,7 @@ from helpers import response_checker
 from services.llm import generation_params
 from memory_builders import load_init_files
 from services.status import status_manager
+from constant import PromptsPostprocess
 from logger import log
 
 # 初期記憶の進み具合。段階を始めるたびに step() を呼ぶと、状態ファイルに「何段目か」を書く。
@@ -50,6 +51,31 @@ class _Progress:
         status_manager.mark_progress(self.session_id, self.total, self.total, "完了")
 
 
+# 発言のあとの記憶の更新で、モデルの返事を記憶として受け取れるかを確かめる
+def _is_valid_character_memory(data) -> bool:
+    return isinstance(data, dict) and isinstance(data.get("現在の状態"), dict)
+
+
+# 関係性をまとめる。前の関係性は全部残し、新しい関係性のうち、前に無い人（キャラクターID か 名前 で比べる）だけを足す
+def _merge_relations(old, new) -> list:
+    old = old if isinstance(old, list) else []
+    new = new if isinstance(new, list) else []
+
+    def key(item):
+        if isinstance(item, dict):
+            return str(item.get("キャラクターID") or "") or "".join(str(item.get("名前") or "").split())
+        return "".join(str(item).split())
+
+    known = {key(item) for item in old}
+    merged = list(old)
+    for item in new:
+        k = key(item)
+        if k and k not in known:
+            merged.append(item)
+            known.add(k)
+    return merged
+
+
 class MemoryManager:
     def __init__(self):
         self.prompt_builder = MemoryPromptBuilder()
@@ -57,6 +83,81 @@ class MemoryManager:
         # log.info("[MemoryManager] Initialized")
 
     # 初期記憶の非同期作成
+    # 発言のあと、メインキャラクターの記憶を更新する（裏で動かす）。
+    # 「今の記憶 ＋ 今回の会話 → 更新した記憶」を、記憶のある人ごとに問い合わせ、character/{ID}_memory.yaml を書き換える。
+    # 進行状態は complete_stage=after。画面は終わるまで「発言」を止める。失敗した人の記憶は前のまま残す
+    # turn_log: 今回の会話（プレイヤーの発言から、返事・掛け合いまでの履歴の行）
+    def update_after_chat(self, session_id: str, cast: Dict, turn_log: list) -> None:
+        char_dir = config.SESSIONS_DIR / session_id / "character"
+        targets = [
+            c for c in (cast.get("characters") or [])
+            if c.get("kind") == "character" and (char_dir / f"{c['id']}_memory.yaml").exists()
+        ]
+
+        # 画面が問い合わせたときに、もう「更新中」になっているよう、スレッドを起こす前に書く
+        status_manager.mark_prepare_processing(session_id, "after")
+        status_manager.mark_progress(session_id, 0, len(targets), "準備中")
+
+        participants = "\n".join(
+            session_cast.label(p) for p in [cast["player"]] + list(cast.get("characters") or [])
+        )
+
+        conversation = "\n".join(
+            f"{(item.get('icon_data') or {}).get('character_name') or item.get('speaker', '')}: {item.get('message', '')}"
+            for item in turn_log
+        )
+
+        def task():
+            failed = []
+            for no, person in enumerate(targets):
+                status_manager.mark_progress(session_id, no, len(targets), f"{person['name']}: 記憶の更新")
+                try:
+                    self._update_character_memory(char_dir, person, conversation, participants)
+                except Exception as e:
+                    log.info(f"[MEMORY UPDATE ERROR] {person['id']}: {type(e).__name__}: {e}")
+                    failed.append(f"{person['name']}: {e}")
+
+            if failed:
+                status_manager.mark_prepare_error(
+                    session_id,
+                    complete_stage="after",
+                    error_stage="character",
+                    error_message=" / ".join(failed),
+                )
+                return
+
+            status_manager.mark_progress(session_id, len(targets), len(targets), "完了")
+            status_manager.mark_prepare_ready(session_id, "after")
+
+        Thread(target=task, daemon=True).start()
+
+    def _update_character_memory(self, char_dir: Path, person: Dict, conversation: str, participants: str = "") -> None:
+        memory_path = char_dir / f"{person['id']}_memory.yaml"
+        current = file_utils.load_yaml_file(memory_path)
+
+        prompt_data = file_utils.load_yaml_file(config.POSTPROCESS / PromptsPostprocess.CHARACTER_MEMORY)
+        prompt_data = string_utils.fill_template(prompt_data, {
+            "character_name": person["name"],
+            "current_memory": yaml.safe_dump(current, allow_unicode=True, sort_keys=False).strip(),
+            "conversation": conversation,
+            "participants": participants,
+        })
+        prompt_messages = string_utils.build_messages(prompt_data)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
+
+        response_text = self.model_handling_service.send_message(parameters)
+        updated = yaml.safe_load(string_utils.strip_code_block(response_text or "")) or {}
+        if not _is_valid_character_memory(updated):
+            raise ValueError("返事を記憶として読めませんでした（「現在の状態」が無い）")
+
+        # 関係性は、前からいる人を消さない。今回の会話で初めて出てきた人だけを足す
+        old_state = current.get("現在の状態") if isinstance(current.get("現在の状態"), dict) else {}
+        if "関係性" in old_state:
+            updated["現在の状態"]["関係性"] = _merge_relations(old_state.get("関係性"), updated["現在の状態"].get("関係性"))
+
+        file_utils.save_yaml_file(memory_path, updated)
+        log.info(f"[MEMORY UPDATE] {person['id']} の記憶を更新しました")
+
     def create_initial_memory(self, session_id: str) -> str:
         log.info(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
 

@@ -6,6 +6,7 @@
 #   {character_memory}  今の記憶
 #   {recent_log}        これまでの会話（今の返事まで）
 #   {target_name}       話しかける相手の表示名
+#   {participants}      その場の登場人物（自分以外）。「ID（表示名・職業）」の形
 system: |
   あなたは {character_name} として会話します。
   今、あなたの意識は {target_name} に向いています。
@@ -28,6 +29,9 @@ system: |
   {character_info}
 
 template: |
+  #その場の登場人物（ID（名前・職業））
+  {participants}
+
   #今の記憶
   {character_memory}
 

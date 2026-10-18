@@ -4,6 +4,7 @@ from uuid import uuid4
 from services.memory.memory_manager import MemoryManager
 from services.chat.chat_manager import ChatManager
 from services.status import status_manager
+from services.image import image_generation
 from logger import log
 # Orchestratorの初期化
 
@@ -53,6 +54,11 @@ class ChatUtils:
                 opener = self.chat_manager.cross_talk(session_id, responder, target, log_now)
                 answer = self.chat_manager.reply(session_id, target, responder, opener, log_now)
                 lines += [(responder, opener), (target, answer)]
+
+                # 掛け合いのあとは、メインがプレイヤーに向き直って一言かける（意識をプレイヤーに戻す）
+                log_after = log_now + [self._as_log(responder, opener), self._as_log(target, answer)]
+                closing = self.chat_manager.cross_talk(session_id, responder, cast["player"], log_after)
+                lines.append((responder, closing))
         except Exception as e:
             log.info(f"[CHAT] 意識の確認・掛け合いを飛ばしました: {type(e).__name__}: {e}")
 
@@ -69,6 +75,12 @@ class ChatUtils:
         )
 
         return lines
+
+    # 発言のあとの処理を、裏で始める。記憶の更新と画像作成を並べて動かす
+    # turn_log: 今回の会話（プレイヤーの発言から、返事・掛け合いまでの履歴の行）
+    def after_chat(self, session_id, cast, turn_log) -> None:
+        self.memory_manager.update_after_chat(session_id, cast, turn_log)
+        image_generation.start(session_id, turn_log)
 
     # 会話ログの1行の形（プロンプトの「これまでの会話」に使う）
     @staticmethod

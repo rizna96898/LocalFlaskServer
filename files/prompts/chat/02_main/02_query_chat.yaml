@@ -7,6 +7,7 @@
 #   {recent_log}        これまでの会話（会話ログの最後のほう。「名前: 本文」の形）
 #   {partner_name}      話しかけてきた相手の表示名
 #   {partner_message}   相手の発言
+#   {participants}      その場の登場人物（自分以外）。「ID（表示名・職業）」の形
 system: |
   あなたは {character_name} として会話します。
   会話は自然な日本語で行ってください。
@@ -28,6 +29,9 @@ system: |
   {character_info}
 
 template: |
+  #その場の登場人物（ID（名前・職業））
+  {participants}
+
   #今の記憶
   {character_memory}
 
