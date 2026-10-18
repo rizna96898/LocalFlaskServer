@@ -24,6 +24,8 @@ class PromptsMain:
     VALIDATION_CHAT          = "01_query_validation_chat.yaml"
     CHAT                     = "02_query_chat.yaml"
     CHARACTER_IDENTIFICATION = "02_query_judge_character_identification.yaml"
+    ATTENTION                = "03_query_judge_attention.yaml"
+    CROSS_TALK               = "04_query_cross_talk.yaml"
 
 class PromptsPostprocess:
     EDIT_SUMMARY          = "01_query_update_edit_summary.yaml"

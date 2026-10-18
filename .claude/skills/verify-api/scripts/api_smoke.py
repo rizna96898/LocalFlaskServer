@@ -268,6 +268,53 @@ def main() -> int:
         body = t.api(client, "chat（言われた相手が返事をする）", "post", "/chat", 200, True, ["icon_data"],
                      json={"session_id": sid, "message": "あなたに話しています"})
         t.check(f"  返事をするのは {others[0]}", body.get("icon_data", {}).get("character_id") == others[0], body.get("icon_data"))
+    # 返事と掛け合い（→ docs/spec/chat-flow.md「本番の発言の流れ」）
+    if others:
+        main, sub = mains[0], others[0]
+        names = {x["参照ID"]: x.get("表示名") for x in people}
+        sent_prompts = []
+
+        def talk_llm(prompt, attention_to=sub):
+            sent_prompts.append(prompt)
+            if "誰に向けた物かを判別" in prompt:
+                return f"target_speakers: {main}"
+            if "意識を向けている相手" in prompt:
+                return f"相手: {attention_to}"
+            if "今、あなたの意識は" in prompt:
+                return "（期待）\nね、いこ？"
+            if f"あなたは {names[sub]} として" in prompt:
+                return "（うなずく）\nうん"
+            return "（嬉しい）\nはーい"
+
+        client = box.client(llm=talk_llm)
+        before = len(history())
+        body = t.api(client, "chat（意識がサブに向いていれば掛け合い）", "post", "/chat", 200, True, ["messages"],
+                     json={"session_id": sid, "message": "いらっしゃいませ"})
+        got = [(m.get("icon_data", {}).get("character_id"), m.get("message")) for m in body.get("messages", [])]
+        t.check("  返事 → 話しかけ → 相手の返事 の3行", got == [(main, "（嬉しい）\nはーい"), (main, "（期待）\nね、いこ？"), (sub, "（うなずく）\nうん")], got)
+        t.check("  1件目は今までどおり line_id・message でも返る", body.get("message") == "（嬉しい）\nはーい")
+        t.check("  履歴に、発言 → 3行の順で入る", [h[1] for h in history()[before:]] == [pid, main, main, sub], history()[before:])
+        reply_prompt = next((q for q in sent_prompts if f"あなたは {names[main]} として" in q and "今、あなたの意識は" not in q), "")
+        t.check("  返事のプロンプトに、記憶・これまでの会話・プレイヤーの発言が入る",
+                "#今の記憶" in reply_prompt and "#これまでの会話" in reply_prompt and "いらっしゃいませ" in reply_prompt
+                and not any(k in reply_prompt for k in ("{character_name}", "{character_info}", "{partner_message}")), reply_prompt[-400:])
+        sub_prompt = next((q for q in sent_prompts if f"あなたは {names[sub]} として" in q), "")
+        t.check("  サブの返事のプロンプトに、話しかけられた一言と関係性が入る", "ね、いこ？" in sub_prompt and "関係性" in sub_prompt, sub_prompt[-400:])
+
+        client = box.client(llm=lambda prompt: talk_llm(prompt, attention_to=pid))
+        body = t.api(client, "chat（意識がプレイヤーなら掛け合いなし）", "post", "/chat", 200, True, ["messages"],
+                     json={"session_id": sid, "message": "どうぞ"})
+        t.check("  返事だけの1行", len(body.get("messages", [])) == 1, body.get("messages"))
+
+        def broken_attention(prompt):
+            if "意識を向けている相手" in prompt:
+                raise RuntimeError("意識の確認だけ失敗")
+            return talk_llm(prompt)
+
+        client = box.client(llm=broken_attention)
+        body = t.api(client, "chat（意識の確認に失敗しても返事は返す）", "post", "/chat", 200, True, ["messages"],
+                     json={"session_id": sid, "message": "大丈夫？"})
+        t.check("  返事だけの1行", len(body.get("messages", [])) == 1, body.get("messages"))
     client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
 
     # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）

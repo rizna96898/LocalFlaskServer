@@ -382,11 +382,15 @@ def build_messages(prompt_data: dict, user_parts: list | tuple = ()) -> list[dic
         {"role": "user", "content": user_content},
     ]
 
-def fill_template(prompt_data: dict, values: dict) -> dict:
-    """prompt_data の写しを作り、template の差し込み口 {キー} を values で埋めて返す"""
+def fill_template(prompt_data: dict, values: dict, fields: tuple = ("template",)) -> dict:
+    """prompt_data の写しを作り、差し込み口 {キー} を values で埋めて返す
+
+    fields: 埋める欄。既定は template だけ。system や tail_template にも差し込み口があるプロンプトは、欄を並べて渡す
+    """
     filled = dict(prompt_data)
-    template = filled.get("template") or ""
-    for key, value in values.items():
-        template = template.replace("{" + key + "}", value or "")
-    filled["template"] = template
+    for field in fields:
+        text = filled.get(field) or ""
+        for key, value in values.items():
+            text = text.replace("{" + key + "}", value or "")
+        filled[field] = text
     return filled
