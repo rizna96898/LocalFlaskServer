@@ -31,21 +31,25 @@ class ChatPromptBuilder:
         # 組み立て方は全プロンプト共通（string_utils.build_messages）
         return string_utils.build_messages(prompt_data, user_parts)
 
-    def create_discrimination_prompt(self, session_id, message: str = "") -> List[Dict]:
-        """誰向けの発言か特定するための プロンプト"""
+    def create_discrimination_prompt(self, candidates: List[Dict], previous_message: str = "", message: str = "") -> List[Dict]:
+        """誰向けの発言か特定するための プロンプト
+
+        candidates: 会話対象の候補（session_cast の人物）。ID と表示名を並べて渡す
+        previous_message: 直前の発言（キャラクターA）
+        message: 今回の発言（キャラクターB）。この発言が誰に向けたものかを判定する
+        """
         prompt_data = file_utils.load_yaml_file(config.MAIN / PromptsMain.CHARACTER_IDENTIFICATION)
 
         log.info("キャラデータ", prompt_data)
-        
-        prompt_message = prompt_data.get("template")
-        prompt_message = prompt_message.replace("{characters}", """shirai_yui
-        shirai_keita""")
-        prompt_message = prompt_message.replace("{player_message}", """（カッコウ医院の待合室で、隣に座る夫の手を握りながら、緊張と不安で心臓が高鳴っている。
-        クリニックの清潔な雰囲気と、先生にこんな悩みを打ち明ける事の不安や恐れ。
-        それでも、子供が欲しいという強い願いが胸を占めている。
-        先生はどんな人なんだろう…と、ポニーテールの先を無意識にいじりながら）""")
-        prompt_message = prompt_message.replace("{player_answer}", message)
-        prompt_data["system"] = prompt_message
+
+        # 登場人物は世界の登場人物から作る。答えは ID で返させる
+        characters = "\n".join(f"{c['id']}（{c['name']}）" for c in candidates)
+
+        prompt_data = string_utils.fill_template(prompt_data, {
+            "characters": characters,
+            "player_message": previous_message,
+            "player_answer": message,
+        })
 
         user_parts = []
 
