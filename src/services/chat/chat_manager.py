@@ -60,10 +60,12 @@ class ChatManager:
     # history: 今の返事まで入った会話ログ
     def attention(self, session_id, speaker, cast, history):
         people = [cast["player"]] + list(cast.get("characters") or [])
+        # 返事の相手と、意識の向きは同じとは限らない。直前までの記憶（意識・心情・行動）も渡して判断させる
         prompt_messages = self.prompt_builder.create_attention_prompt({
             "character_name": speaker["name"],
             "participants": "\n".join(session_cast.label(p) for p in people if p["id"] != speaker["id"]),
             "recent_log": self._recent_log(history),
+            "character_memory": self._context(session_id, speaker, history)["character_memory"],
         })
         result = self._send("judge", prompt_messages, PromptsMain.ATTENTION)
 

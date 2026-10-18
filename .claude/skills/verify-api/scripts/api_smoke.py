@@ -311,6 +311,10 @@ def main() -> int:
         t.check("  返事のプロンプトに、記憶・これまでの会話・プレイヤーの発言が入る",
                 "#今の記憶" in reply_prompt and "#これまでの会話" in reply_prompt and "いらっしゃいませ" in reply_prompt
                 and not any(k in reply_prompt for k in ("{character_name}", "{character_info}", "{partner_message}")), reply_prompt[-400:])
+        attention_prompt = next((q for q in sent_prompts if "意識を向けている相手" in q), "")
+        t.check("  意識の確認に、直前までの記憶（記憶の無いときは関係性）が入る",
+                "今の記憶（直前まで）" in attention_prompt and "関係性" in attention_prompt
+                and "{character_memory}" not in attention_prompt, attention_prompt[-500:])
         sub_prompt = next((q for q in sent_prompts if f"あなたは {names[sub]} として" in q), "")
         t.check("  サブの返事のプロンプトに、話しかけられた一言と関係性が入る", "ね、いこ？" in sub_prompt and "関係性" in sub_prompt, sub_prompt[-400:])
 
