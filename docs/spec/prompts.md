@@ -365,10 +365,13 @@ response_text = self.model_handling_service.send_message(parameters)
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-ローカルモデルへ送るたびに、`logs/` に2つのファイルを書く（`log.debug_dump_all`）。
+ローカルモデルへ送るたびに、`logs/` に3つのファイルを書く（`log.debug_dump_all` と `log.debug_dump_response`）。同じ時刻の名前で対になる。
 
 - `{時刻}_prompt.txt`: 送った文章の全文
 - `{時刻}_params.json`: 生成の設定
+- `{時刻}_response.txt`: モデルの返事（後始末のあと。後始末の前と違えば、両方書く）
+
+返事がおかしいとき・YAMLとして読めなかったときは、`_response.txt` で、モデルが実際に何を返したかを見る。
 
 プロンプトを直したときは、ここを見て、差し込み口が正しく置き換わっているかを確かめる。
 
