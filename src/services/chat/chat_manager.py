@@ -9,6 +9,10 @@ from helpers import string_utils
 from logger import log
 import yaml
 
+# プロンプトに入れる「これまでの会話」の行数（会話ログの最後から）
+RECENT_LOG_LINES = 10
+
+
 class ChatManager:
     def __init__(self):
         self.prompt_builder = ChatPromptBuilder()
@@ -40,9 +44,115 @@ class ChatManager:
         log.info("返事をする人", responder.get("id"))
         return result, responder
 
-    # 判定の答え（target_speakers: ID）から、候補の人物を探す。見つからなければ None
+    # 返事を作る。speaker が、partner の発言（partner_message）に返事をする
+    # history: これまでの会話ログ（partner_message はまだ入っていないもの）
+    def reply(self, session_id, speaker, partner, partner_message, history) -> str:
+        context = self._context(session_id, speaker, history)
+        prompt_messages = self.prompt_builder.create_reply_prompt({
+            **context,
+            "partner_name": partner["name"],
+            "partner_message": partner_message,
+        })
+        return self._send("chat", prompt_messages, PromptsMain.CHAT)
+
+    # 返事のあと、speaker の意識が今だれに向いているか。登場人物（プレイヤーを含む）から1人、見つからなければ None
+    # history: 今の返事まで入った会話ログ
+    def attention(self, session_id, speaker, cast, history):
+        people = [cast["player"]] + list(cast.get("characters") or [])
+        prompt_messages = self.prompt_builder.create_attention_prompt({
+            "character_name": speaker["name"],
+            "participants": "\n".join(f"{p['id']}（{p['name']}）" for p in people if p["id"] != speaker["id"]),
+            "recent_log": self._recent_log(history),
+        })
+        result = self._send("judge", prompt_messages, PromptsMain.ATTENTION)
+
+        try:
+            data = yaml.safe_load(string_utils.strip_code_block(result or "")) or {}
+        except Exception:
+            data = {}
+        answer = data.get("相手") if isinstance(data, dict) else None
+        target = self._find_person(answer, people)
+        log.info("意識の向き", speaker["id"], "→", target["id"] if target else None)
+        return target
+
+    # 掛け合いの話しかけ。speaker が target に一言話しかける
+    def cross_talk(self, session_id, speaker, target, history) -> str:
+        context = self._context(session_id, speaker, history)
+        prompt_messages = self.prompt_builder.create_cross_talk_prompt({
+            **context,
+            "target_name": target["name"],
+        })
+        return self._send("chat", prompt_messages, PromptsMain.CROSS_TALK)
+
+    # ---------------------------------------------------------------- 内部
+
+    def _send(self, task_type, prompt_messages, prompt_file) -> str:
+        parameters = generation_params.build_send_parameters(
+            task_type,
+            messages=prompt_messages,
+            prompt_data=file_utils.load_yaml_file(config.MAIN / prompt_file),
+        )
+        result = self.model_handling_service.send_message(parameters)
+        return string_utils.strip_code_block(result or "").strip()
+
+    # 返事を作るときの材料。キャラクター設定・今の記憶・これまでの会話
+    def _context(self, session_id, person, history) -> dict:
+        char_dir = config.SESSIONS_DIR / session_id / "character"
+
+        setting = file_utils.load_yaml_file(char_dir / f"{person['id']}_setting.yaml")
+        memory = file_utils.load_yaml_file(char_dir / f"{person['id']}_memory.yaml")
+
+        # 記憶の無い人（サブなど）は、世界の記憶の参加者（関係性）を記憶の代わりにする
+        if not memory:
+            world_memory = file_utils.load_yaml_file(config.SESSIONS_DIR / session_id / "world_memory.yaml")
+            memory = {
+                "関係性": {
+                    "その場の参加者": (world_memory.get("現在の状態") or {}).get("参加者"),
+                    "世界の参加者": (world_memory.get("世界の状態") or {}).get("参加者"),
+                }
+            }
+
+        return {
+            "character_name": person["name"],
+            "character_info": self._dump(setting) or person["name"],
+            "character_memory": self._dump(memory),
+            "recent_log": self._recent_log(history),
+        }
+
     @staticmethod
-    def _pick_target(result, candidates):
+    def _dump(data) -> str:
+        if not data:
+            return ""
+        return yaml.safe_dump(data, allow_unicode=True, sort_keys=False).strip()
+
+    @staticmethod
+    def _recent_log(history) -> str:
+        lines = []
+        for item in (history or [])[-RECENT_LOG_LINES:]:
+            name = (item.get("icon_data") or {}).get("character_name") or item.get("speaker") or ""
+            lines.append(f"{name}: {item.get('message', '')}")
+        return "\n".join(lines)
+
+    # 答え（ID か表示名）から人物を探す。表示名は空白（半角・全角）を無視して比べる
+    @staticmethod
+    def _find_person(answer, people):
+        if isinstance(answer, list):
+            answer = answer[0] if answer else None
+        if not answer or str(answer).strip() in ("null", "None", "unknown"):
+            return None
+
+        def norm(s):
+            return "".join(str(s).split()).replace("　", "")
+
+        answer = str(answer).strip()
+        for person in people:
+            if answer == person.get("id") or norm(answer) == norm(person.get("name", "")):
+                return person
+        return None
+
+    # 判定の答え（target_speakers: ID）から、候補の人物を探す。見つからなければ None
+    @classmethod
+    def _pick_target(cls, result, candidates):
         try:
             data = yaml.safe_load(string_utils.strip_code_block(result or "")) or {}
         except Exception:
@@ -50,14 +160,4 @@ class ChatManager:
         if not isinstance(data, dict):
             return None
 
-        target = data.get("target_speakers")
-        if isinstance(target, list):
-            target = target[0] if target else None
-        if not target:
-            return None
-
-        target = str(target).strip()
-        for person in candidates:
-            if target in (person.get("id"), person.get("name")):
-                return person
-        return None
+        return cls._find_person(data.get("target_speakers"), candidates)

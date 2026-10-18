@@ -31,6 +31,24 @@ class ChatPromptBuilder:
         # 組み立て方は全プロンプト共通（string_utils.build_messages）
         return string_utils.build_messages(prompt_data, user_parts)
 
+    # 差し込み口を system・template・tail_template のすべてで埋めて、共通の形に組み立てる
+    def _build_filled(self, prompt_file: str, values: Dict[str, str]) -> List[Dict]:
+        prompt_data = file_utils.load_yaml_file(config.MAIN / prompt_file)
+        prompt_data = string_utils.fill_template(prompt_data, values, fields=("system", "template", "tail_template"))
+        return self._build_messages(prompt_data, [])
+
+    def create_reply_prompt(self, values: Dict[str, str]) -> List[Dict]:
+        """返事を作るプロンプト（02_query_chat.yaml）"""
+        return self._build_filled(PromptsMain.CHAT, values)
+
+    def create_attention_prompt(self, values: Dict[str, str]) -> List[Dict]:
+        """返事のあと、意識が誰に向いているかを確かめるプロンプト（03_query_judge_attention.yaml）"""
+        return self._build_filled(PromptsMain.ATTENTION, values)
+
+    def create_cross_talk_prompt(self, values: Dict[str, str]) -> List[Dict]:
+        """掛け合いの話しかけのプロンプト（04_query_cross_talk.yaml）"""
+        return self._build_filled(PromptsMain.CROSS_TALK, values)
+
     def create_discrimination_prompt(self, candidates: List[Dict], previous_message: str = "", message: str = "") -> List[Dict]:
         """誰向けの発言か特定するための プロンプト
 

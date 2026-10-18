@@ -4,6 +4,7 @@ from uuid import uuid4
 from services.memory.memory_manager import MemoryManager
 from services.chat.chat_manager import ChatManager
 from services.status import status_manager
+from logger import log
 # Orchestratorの初期化
 
 class ChatUtils:
@@ -23,8 +24,9 @@ class ChatUtils:
         # 初期記憶の非同期作成
         return self.memory_manager.create_initial_memory(session_id)
 
-    # 戻り値は (返事の文, 返事をする人)。返事の文は、今はまだ判定の答えそのもの（仮）
-    def chat(self, session_id, body:Dict, message, cast, previous_message="") -> tuple:
+    # 発言1回分。戻り値は、履歴に足す発言の並び [(発言者, 本文), ...]（返事と、あれば掛け合いの2行）
+    # history: プレイヤーの発言まで入った会話ログ（書き換えない）
+    def chat(self, session_id, body:Dict, message, cast, previous_message="", history=None) -> list:
         #session_id = body.get("session_id")
 
         #実行中に更新
@@ -33,7 +35,26 @@ class ChatUtils:
             complete_stage="main_chat",
         )
 
-        message, responder = self.chat_manager.main_chat(body, session_id, message, cast, previous_message)
+        # 1. 返事をする人を決める（誰に向けた発言かの判定）
+        _, responder = self.chat_manager.main_chat(body, session_id, message, cast, previous_message)
+
+        # 2. 返事を作る（材料の会話ログは、プレイヤーの発言の手前まで）
+        log_before = list(history or [])[:-1]
+        reply = self.chat_manager.reply(session_id, responder, cast["player"], message, log_before)
+        lines = [(responder, reply)]
+
+        # 3・4. 意識を確かめ、プレイヤー以外に向いていれば、掛け合いを1往復。
+        # ここで失敗しても、返事までは返す（掛け合いは無しにする）
+        try:
+            log_now = list(history or []) + [self._as_log(responder, reply)]
+            target = self.chat_manager.attention(session_id, responder, cast, log_now)
+
+            if target and target["id"] not in (cast["player"]["id"], responder["id"]):
+                opener = self.chat_manager.cross_talk(session_id, responder, target, log_now)
+                answer = self.chat_manager.reply(session_id, target, responder, opener, log_now)
+                lines += [(responder, opener), (target, answer)]
+        except Exception as e:
+            log.info(f"[CHAT] 意識の確認・掛け合いを飛ばしました: {type(e).__name__}: {e}")
 
         #待機中に更新
         status_manager.update_prepare_status(
@@ -47,7 +68,12 @@ class ChatUtils:
             next_speakers=None,
         )
 
-        return message, responder
+        return lines
+
+    # 会話ログの1行の形（プロンプトの「これまでの会話」に使う）
+    @staticmethod
+    def _as_log(person, message):
+        return {"message": message, "icon_data": {"character_id": person["id"], "character_name": person["name"]}}
 
 
     # 前処理・後処理は事前且つ、個別に呼ぶことがあるのかがポイント

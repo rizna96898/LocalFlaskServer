@@ -486,11 +486,19 @@ class ChatExecute:
 
             player_line_id = string_utils.history_append(history, player["id"], "player", message, session_cast.icon_data(player))
 
-            message, responder = self.chat_utils.chat(session_id, payload, message, cast, previous_message)
+            lines = self.chat_utils.chat(session_id, payload, message, cast, previous_message, history)
 
-            icon_data = session_cast.icon_data(responder)
+            # 返事と掛け合いを、この順で履歴に足す。画面にはまとめて返す
+            messages = []
+            for speaker, text in lines:
+                speaker_icon = session_cast.icon_data(speaker)
+                speaker_line_id = string_utils.history_append(history, speaker["id"], "main", text, speaker_icon)
+                messages.append({"line_id": speaker_line_id, "message": text, "icon_data": speaker_icon, "role": "main"})
 
-            line_id = string_utils.history_append(history, responder["id"], "main", message, icon_data)
+            # 1件目（プレイヤーへの返事）は、今までどおり line_id・message・icon_data でも返す
+            line_id = messages[0]["line_id"]
+            message = messages[0]["message"]
+            icon_data = messages[0]["icon_data"]
 
             file_utils.save_history(session_dir, history)
 
@@ -502,6 +510,7 @@ class ChatExecute:
                 message=message,
                 icon_data=icon_data,
                 player_line_id=player_line_id,
+                messages=messages,
             ), 200
 
         except Exception as e:
