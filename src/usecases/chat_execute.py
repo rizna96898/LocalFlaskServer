@@ -54,6 +54,22 @@ class ChatExecute:
             if session.get("world_id") == world_id
         ]
 
+    # セッション一覧の更新日時を、今にする。書いた日時を返す（一覧に無ければ空文字）
+    def _touch_session(self, session_id: str) -> str:
+        sessions_list_path = config.SYSTEM_DIR / "sessions_list.yaml"
+        sessions_data = file_utils.load_yaml_file(sessions_list_path) or {}
+        sessions = sessions_data.get("sessions")
+        if not isinstance(sessions, list):
+            return ""
+
+        now_text = datetime.now().strftime("%Y年%m月%d日 %H:%M")
+        for session in sessions:
+            if isinstance(session, dict) and session.get("session_id") == session_id:
+                session["updated_at"] = now_text
+                file_utils.save_yaml_file(sessions_list_path, sessions_data)
+                return now_text
+        return ""
+
     # セッション一覧の読み込み（画面を開いたときなど）
     def load_session_list(self, payload):
 
@@ -502,6 +518,9 @@ class ChatExecute:
 
             file_utils.save_history(session_dir, history)
 
+            # セッション一覧の「更新」日時を、今にする
+            updated_at = self._touch_session(session_id)
+
             # 裏で、記憶の更新と画像作成を始める（今回の会話 = プレイヤーの発言から最後まで）
             self.chat_utils.after_chat(session_id, cast, history[int(player_line_id) - 1:])
 
@@ -514,6 +533,7 @@ class ChatExecute:
                 icon_data=icon_data,
                 player_line_id=player_line_id,
                 messages=messages,
+                updated_at=updated_at,
             ), 200
 
         except Exception as e:

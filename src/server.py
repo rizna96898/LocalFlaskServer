@@ -11,14 +11,15 @@ from logger import log
 app = Flask(__name__)
 
 
-# 読み込むモデルは system_settings.yaml の local_model_path / local_mode_name で決める
+# 読み込むモデルは system_settings.yaml の local_model_path / local_model_name で決める
+# （local_model_name の古い名前 local_mode_name も、しばらくは読む）
 def _model_path() -> Path:
-    model_dir = config.settings.get("local_model_path")
-    model_name = config.settings.get("local_mode_name")
+    model_dir = config.LOCALMODEL_PATH
+    model_name = config.LOCALMODEL_NAME
 
     if not model_dir or not model_name:
         raise RuntimeError(
-            "local_model_path / local_mode_name が未設定です。"
+            "local_model_path / local_model_name が未設定です。"
             "files/settings/system_settings.yaml を確認してください。"
         )
 
@@ -79,7 +80,7 @@ def health():
     })
 
 
-# モデルを読み直す。system_settings.yaml を読み直し、local_model_path / local_mode_name のモデルにする。
+# モデルを読み直す。system_settings.yaml を読み直し、local_model_path / local_model_name のモデルにする。
 # VRAM に2つ載せる余裕が無いので、今のモデルを先に捨ててから読み込む。
 # - ファイルが無いときは、捨てる前に断る（今のモデルのまま）
 # - 読み込みに失敗したときは、モデルが無い状態になる（もう一度モデルロードするか、モデルサーバーを再起動する）

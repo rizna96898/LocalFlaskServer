@@ -19,7 +19,7 @@ local_model_use_flag: True
 #local_model_path: "E:\\LocalFlaskServer\\models\\mythomax\\"
 local_model_path: "E:\\LocalFlaskServer\\models\\qween\\"
 #local_mode_name: "mythomax-l2-13b.Q5_K_M.gguf"
-local_mode_name: "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf"
+local_model_name: "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf"
 local_mode_max_tokens :
   chat : 2048
 
