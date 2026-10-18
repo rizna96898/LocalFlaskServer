@@ -275,7 +275,8 @@ class OpenRouterService:
             "messages": payload_messages,
             "temperature": temp,
             "max_tokens": tokens,
-            "logit_bias": {"248068": -100}, # <think> のトークンIDを抑制
+            # "logit_bias": {"248068": -100}, # <think> のトークンIDを抑制
+            # ↑ 外した。248068 はローカルの Qwen の <think> の番号で、OpenRouter のモデルでは別の語を禁止してしまうため（docs/spec の Q61）
             **kwargs
         }
 

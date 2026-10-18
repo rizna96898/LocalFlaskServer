@@ -43,9 +43,8 @@
 
 サーバーは LLM_CHAT_CONSOLE の場所を自分では知らない。画面がリクエストのたびに `base_chat_path` として送る。
 
-- **【要確認 Q62】** 古いメモのファイルをどうするか。
-  - LocalFlaskServer のルートの `構成.txt`（Git管理外）: 初期の構想で、今のフォルダ構成と一致しない
-  - LLM_CHAT_CONSOLE の `README.txt`: 設定画面を足したときのメモ。書かれている `flask_settings_api.py` は存在しない
+- LocalFlaskServer のルートの `構成.txt`（Git管理外）は、初期の構想のメモ。今のフォルダ構成とは一致しないが、本人のメモなので触らない。
+- LLM_CHAT_CONSOLE の `README.txt` は、資料（CLAUDE.md と docs）への案内と、短い使い方にしてある。
 
 <a id="s2"></a>
 
@@ -115,7 +114,8 @@ LLM_CHAT_CONSOLE/
 - `参照ID` は、`null` 以外の全員に必須（半角英数字と `_`）。新規チャット時にファイル名に使う
   （`character/{参照ID}_setting.yaml`）。`player` と `character` は、そのIDが実在するかも確かめる（世界画面の
   「隣のyaml内容を反映」）。`inline` は実在の確認はしない。保存（`/settings/save_world_setting`）でも、空や文字種違いは弾く。
-- **【要確認 Q23】** `役割` による動きの違い（`mob` はカードを作らない、など）は、今のコードには無い。`参照種別` だけで分岐している。
+- 動きの違いは、今は `参照種別` で分ける（`character` は記憶を作る、`inline` は記憶を作らず関係性で話す、`null` は一覧に入れない）。
+  `役割`（main / sub / mob）による違いは、mob の扱いなどが必要になったときに決める。
 - `player` は必ず1人。世界画面の「隣のyaml内容を反映」と、保存（`/settings/save_world_setting`）の両方で確かめ、
   0人や2人以上なら弾く。
 
@@ -291,7 +291,7 @@ sessions:
 | `port` | APサーバーのポート | 5000 |
 | `local_model_use_flag` | ローカルモデルを使うか | |
 | `local_model_path` | モデルファイルのあるフォルダ | モデルサーバーが起動時に止まる |
-| `local_mode_name` | モデルファイルの名前 | 同上 |
+| `local_model_name` | モデルファイルの名前（古い名前 `local_mode_name` も読む） | 同上 |
 | `local_model_server_port` | モデルサーバーのポート | 5001 |
 | `local_model_prompt_format` | ローカルモデルへ送る会話の形式。`chatml`／`alpaca`（→ [`prompts.md`](prompts.md)） | `chatml` |
 | `local_model_no_think` | `true` なら、返事の出だしに空の思考ブロックを置いて、思考を書かせない（`chatml` のときだけ効く） | `true` |
@@ -302,21 +302,21 @@ sessions:
 | `log_level`、`enable_image_generation` | | |
 
 - Git で管理する。リポジトリは公開なので、**秘密の値は書かない**（下の「秘密の値」）。
-- 読み込むのは起動時。`src/config.py` の `config` がまとめて持つ。
+- `src/config.py` の `config` がまとめて持つ。
 - 生成の設定（温度、最大トークン数）は、`files/settings/generation.yaml` で用途ごとに決める（下の「生成の設定」、→ [`prompts.md`](prompts.md)）。
   設定ファイルの `temperature`、`max_tokens`、`default_model` が効くのは、OpenRouter を使う場合だけ。
 - `log_level`、`enable_image_generation`、`characters_dir`、`openrouter_max_tokens`、`local_mode_max_tokens` は、
   設定にはあるが、コードのどこからも読まれていない。OpenRouter は使わない方向に寄せる予定だが、
   今はローカルモデルの作り込みを優先するので、これらはそのまま置いておく。
 
-- **【要確認 Q59】** `config.reload()` は `system_settings.yaml` を読み直すが、`config.LOCALMODEL_PATH` などの値は起動時のまま更新されない（不具合）。
-  読み直したら値も更新するように直してよいか。ポートのように、再起動しないと効かない値もある。
-- **【要確認 Q60】** 設定項目名 `local_mode_name` は `local_model_name` の綴り違いに見える。直してよいか。
-  直すと、サブPCの `system_settings.yaml` も書き換えが要る（しばらくは古い名前も読む形にもできる）。
-- **【要確認 Q61】** OpenRouter は「使わない方向に寄せるが、今はそのまま置く」と決めている（上の段落）。そのうえで、次をどうするか。
-  - `OpenRouterService`（どこからも使われていない）と、読まれていない設定項目（上の段落の5つ）を、消すか、置いておくか
-  - 置いておくなら、`OpenRouterService` の送信内容に直書きされた `logit_bias: {"248068": -100}` だけは外すか。
-    この番号はローカルの Qwen の `<think>` で、OpenRouter のモデルでは別の語を禁止してしまう
+- 読み込むのは起動時と、読み直し（`config.reload()`。設定画面の「モデルロード」など）のとき。読み直すと、`config` の各値も決め直す。
+  ただしポート（`port`、`local_model_server_port`）は、読み直しても待ち受け中のサーバーには効かない。変えたら両方のサーバーを再起動する。
+- モデルのファイル名の設定項目は `local_model_name`。以前の綴り違いの名前 `local_mode_name` も、しばらくは読む（`local_model_name` が優先）。
+- **【要確認 Q70】** `local_mode_max_tokens` も同じ綴り違い（mode）で、どこからも読まれていない（最大トークン数は `generation.yaml` で決めている）。
+  消すか、`local_model_max_tokens` に直して残すか。
+- OpenRouter の呼び出し（`OpenRouterService`）と、読まれていない設定項目は、使う予定に備えて残す。
+  `OpenRouterService` の送信内容に直書きされていた `logit_bias: {"248068": -100}` は外した（ローカルの Qwen の `<think>` の番号で、
+  OpenRouter のモデルでは別の語を禁止してしまうため。コメントとして残してある）。
 
 <a id="s3-4"></a>
 
@@ -375,8 +375,4 @@ APIキーなど、人に見せてはいけない値だけを書くファイル�
 
 | 番号 | 対象 | 確認したいこと | 回答・状況 |
 |---|---|---|---|
-| Q23 | 登場人物の `役割` | `役割`（main / sub / mob）で動きを変えるか | 回答: どう変えるかが決まっていないので、今は答えられない |
-| Q59 | `config.reload()` | 読み直しで値が更新されない不具合を直すか | 未回答（status.md から上げたもの） |
-| Q60 | 設定項目名 | `local_mode_name` を `local_model_name` に直すか | 未回答（status.md から上げたもの） |
-| Q61 | OpenRouter | 使っていない `OpenRouterService` と設定項目を消すか。直書きの `logit_bias` をどうするか | 未回答（status.md から上げたもの） |
-| Q62 | 古いメモ | `構成.txt` と `README.txt` を消すか、書き直すか | 未回答（status.md から上げたもの） |
+| Q70 | 設定項目名 | 読まれていない `local_mode_max_tokens`（綴り違い）を消すか、直して残すか | 未回答（Q60 を直すときに見つけたもの） |

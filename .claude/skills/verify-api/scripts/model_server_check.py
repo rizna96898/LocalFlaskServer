@@ -32,10 +32,10 @@ def main() -> int:
     for name in ("a.gguf", "b.gguf", "bad.gguf"):
         (models / name).write_bytes(b"fake")
 
-    def use_model(name):
+    def use_model(name, key="local_model_name"):
         lines = [sandbox.DEFAULT_SETTINGS.rstrip("\n"), f"local_model_path: {models.as_posix()}"]
         if name:
-            lines.append(f"local_mode_name: {name}")
+            lines.append(f"{key}: {name}")
         box.settings_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     use_model("a.gguf")
@@ -109,6 +109,13 @@ def main() -> int:
     r = client.post("/reload")
     t.check("もう一度モデルロードすれば戻る", r.status_code == 200 and health().get("model_name") == "a.gguf", health())
     t.check("  発言できる", generate() == 200)
+
+    # 設定項目名の古い名前（local_mode_name）でも読める
+    use_model("b.gguf", key="local_mode_name")
+    r = client.post("/reload")
+    t.check("古い設定項目名 local_mode_name でも読み直せる", r.status_code == 200 and health().get("model_name") == "b.gguf", health())
+    use_model("a.gguf")
+    client.post("/reload")
 
     print("\n# 発言との重なり")
     use_model("b.gguf")

@@ -36,6 +36,11 @@ class Config:
         # 秘密の値（APIキーなど）は、Git で管理しない secrets.yaml に分けて書く
         self.secrets = self._load_yaml_file(self.SETTINGS_DIR / "secrets.yaml", required=False)
 
+        self._apply_settings()
+
+    # 設定ファイルの中身から、各値（config.PORT など）を決める。起動時と、読み直し（reload）のときに呼ぶ。
+    # ポート（PORT、LOCALMODEL_SERVER_PORT / URL）は、読み直しても待ち受け中のサーバーには効かない（再起動が要る）
+    def _apply_settings(self):
         self.PORT = self.settings.get("port", 5000)
         self.DEFAULT_MODEL = self.settings.get("default_model", "grok-4")
         self.TEMPERATURE = self.settings.get("temperature", 0.85)
@@ -55,7 +60,8 @@ class Config:
 
         self.LOCALMODEL_USE_FLAG = self.settings.get("local_model_use_flag")
         self.LOCALMODEL_PATH = self.settings.get("local_model_path")
-        self.LOCALMODEL_NAME = self.settings.get("local_mode_name")
+        # 設定項目名は local_model_name。古い名前 local_mode_name（綴り違い）も、しばらくは読む
+        self.LOCALMODEL_NAME = self.settings.get("local_model_name") or self.settings.get("local_mode_name")
         self.LOCALMODEL_MAX_TOKENS = self.settings.get("local_mode_max_tokens")
 
         # モデルサーバー(src/server.py)。APサーバーと同じPCで動かす前提
@@ -108,6 +114,8 @@ class Config:
     def reload(self):
         self.settings = self._load_system_settings()
         self.secrets = self._load_yaml_file(self.SETTINGS_DIR / "secrets.yaml", required=False)
+        # 読み直した中身で、各値も決め直す（以前は settings だけ読み直し、値は起動時のままだった）
+        self._apply_settings()
 
 
 config = Config()

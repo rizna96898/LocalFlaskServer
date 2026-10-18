@@ -58,7 +58,7 @@
 - **発言のあとの、キャラクターの記憶以外の更新**: 会話の要約、世界の記憶、パラメーターの変動。
   プロンプトYAML（`files/prompts/chat/01_preprocess/`、`03_postprocess/`）はあるが、以前の作りで、呼び出す処理も無い。
   以前の作りかけは、コミット `eca2ea0` 以前の履歴にある。（→ Q67、Q68、Q69）
-- **OpenRouter 経由のモデル呼び出し**: `OpenRouterService` はあるが、呼び出し側はすべてローカルモデル（`"local"`）固定。（→ Q61）
+- **OpenRouter 経由のモデル呼び出し**: `OpenRouterService` はあるが、呼び出し側はすべてローカルモデル（`"local"`）固定。使う予定に備えて残している（[`spec/data.md`](spec/data.md)）。
 - **画像生成**: 画面に「返信生成結果画像」の欄があるが、処理は無い。（→ Q37）
 - **メイン画面右の「世界・モデル設定」**: `temperature`、`max_tokens`、「画像生成」、「OpenRouter補助」の入力欄は、見た目だけで、
   値はどこにも送られていない（サーバー側は設定ファイルと、コード内の値を使う）。（→ Q64）
@@ -71,8 +71,6 @@
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
-- **`config.reload()` が設定の値を更新しない**: `system_settings.yaml` を読み直すが、`config.LOCALMODEL_PATH` などの値は起動時のまま。
-  モデルサーバーの読み直し（`/reload`）は、読み直した設定の中身から直接モデルの場所を取るので、影響を受けない。（→ Q59）
 - **プレイヤー画面のアイコンに切り抜きが無い**: キャラクター画面は正方形に切り抜いてから保存するが、プレイヤー画面は選んだ画像をそのまま保存する。（→ Q66）
 
 <a id="s4"></a>
@@ -80,8 +78,3 @@
 ## 残っている半端なもの
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
-
-- 設定項目名 `local_mode_name`: `local_model_name` の綴り違いに見える。直すと設定ファイル側の書き換えも必要。（→ Q60）
-- `OpenRouterService`（未使用）: 送信内容に `logit_bias: {"248068": -100}` が直書きされている。この番号はローカルの Qwen の `<think>` で、OpenRouter のモデルでは別の語を指す。OpenRouter を使い始める前に外すこと。（→ Q61）
-- ルートの `構成.txt`: 初期の構想で、今のフォルダ構成とは一致しない（Git管理外）。（→ Q62）
-- LLM_CHAT_CONSOLE の `README.txt`: 設定画面を足したときのメモ。書かれている `flask_settings_api.py` は存在せず、該当のAPIはこのリポジトリにある。（→ Q62）

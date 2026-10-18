@@ -246,6 +246,10 @@ def main() -> int:
     body = t.api(client, "chat（送り直し）", "post", "/chat", 200, True, ["line_id", "message", "icon_data", "player_line_id"],
                  json={"session_id": sid, "message": "こんにちは"})
     t.check("  返事は 3 行目、プレイヤーの発言は 2 行目", (body.get("line_id"), body.get("player_line_id")) == ("3", "2"), body)
+    listed_now = (client.post("/load_session_list", json={"world_id": world_id}).get_json() or {}).get("sessions", [])
+    this_session = next((s for s in listed_now if s.get("session_id") == sid), {})
+    t.check("  発言すると、セッション一覧の更新日時が今になり、返事にも入る",
+            bool(body.get("updated_at")) and this_session.get("updated_at") == body.get("updated_at"), (body.get("updated_at"), this_session))
     t.check("  判定できなければ、返事をするのは最初のメイン", body.get("icon_data", {}).get("character_id") == mains[0], body.get("icon_data"))
     t.check("  履歴: 開始メッセージ（最初のメイン）、発言（実際のプレイヤー）、返事",
             [h[:2] for h in history()] == [("1", mains[0]), ("2", pid), ("3", mains[0])], history())
