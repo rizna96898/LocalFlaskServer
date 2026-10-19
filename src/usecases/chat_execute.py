@@ -155,6 +155,11 @@ class ChatExecute:
                 for temp_file in config.TEMP_DIR.glob(f"*_{session_id}_*"):
                     temp_file.unlink(missing_ok=True)
 
+                # モデルへの問い合わせの記録（logs/{セッションID}/）も消す
+                session_logs = log.session_log_dir(session_id)
+                if session_id and session_logs.is_dir():
+                    shutil.rmtree(session_logs)
+
             except Exception as error:
                 log.info(f"セッション削除失敗: {session_id}")
                 log.info(error)
@@ -490,6 +495,7 @@ class ChatExecute:
             # start_message = orchestrator.create_new_session(body)
 
             session_id = payload.get("session_id")
+            log.set_session(session_id)
             session_dir = config.SESSIONS_DIR / session_id
             history = file_utils.load_history(session_dir)
 

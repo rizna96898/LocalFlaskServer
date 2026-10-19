@@ -98,7 +98,7 @@ class LocalModelService:
         try:
             log.info(f"[LOCALMODEL] send_message start: model={model_name}, started_at={started_at}")
 
-            dump_ts = log.debug_dump_all(
+            dump_path = log.debug_dump_all(
                 prompt,
                 {
                     "temperature": temperature,
@@ -187,7 +187,7 @@ class LocalModelService:
 
             result = content.strip()
             result = string_utils.cleanup_model_output(result)
-            log.debug_dump_response(dump_ts, result, raw_text=content)
+            log.debug_dump_response(dump_path, result, raw_text=content)
             # log.info(f"[OPENROUTER] send_message success: elapsed={time.time() - started_at:.2f}s, length={len(result)}")
 
             log.info("[LOCALMODEL] 最終生成結果返答文字列：", result)

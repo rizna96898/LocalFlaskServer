@@ -1,5 +1,6 @@
 import json
 import sys
+import threading
 import time
 
 from datetime import datetime
@@ -27,46 +28,65 @@ def _print_safe(*values, sep=" ", end="\n"):
     )
 
 
-# 送る内容を logs/{ミリ秒}_prompt.txt と _params.json に書く。返事を同じ名前で残せるよう、ミリ秒（ts）を返す
+# ---------------------------------------------------------------- モデルへの問い合わせの記録
+# logs/{セッションID}/{通し番号}_{時分秒}_{段階}.txt に、1回の問い合わせを1つのファイルで書く。
+# 中身は「生成の設定」「送った内容」「返事」の順。セッションに属さないものは logs/_セッション外/ に書く。
+# セッションIDと段階は、送る前に set_session / set_step で決めておく（スレッドごとに持つ）。
+_log_context = threading.local()
+_log_lock = threading.Lock()
+
+
+def set_session(session_id):
+    """これから送る問い合わせが、どのセッションのものか（None ならセッション外）"""
+    _log_context.session_id = session_id
+
+
+def set_step(label):
+    """これから送る問い合わせの段階（判定、返事、世界の記憶、服装 など。ファイル名に入る）"""
+    _log_context.step = label
+
+
+def _safe_name(text) -> str:
+    # ファイル名に使えない文字を _ にする
+    return "".join("_" if c in '\\/:*?"<>|' or ord(c) < 32 else c for c in str(text)).strip() or "_"
+
+
+def session_log_dir(session_id) -> Path:
+    """そのセッションの記録の置き場所（logs/{セッションID}/）"""
+    return Path("logs") / _safe_name(session_id)
+
+
 def debug_dump_all(prompt, params):
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
+    """送る内容を書き、書いたファイルの場所を返す（返事は debug_dump_response で同じファイルに足す）"""
+    session_id = getattr(_log_context, "session_id", None) or "_セッション外"
+    step = getattr(_log_context, "step", None) or "問い合わせ"
 
-    ts = int(time.time() * 1000)
+    log_dir = session_log_dir(session_id)
+    with _log_lock:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        seq = len(list(log_dir.glob("*.txt"))) + 1
+        path = log_dir / f"{seq:04d}_{datetime.now().strftime('%H%M%S')}_{_safe_name(step)}.txt"
 
-    with open(
-        log_dir / f"{ts}_prompt.txt",
-        "w",
-        encoding="utf-8",
-    ) as f:
-        f.write(repr(prompt))
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("===== 生成の設定 =====\n")
+            f.write(json.dumps(params, ensure_ascii=False, indent=2))
+            f.write("\n\n===== 送った内容 =====\n")
+            f.write(str(prompt))
+            f.write("\n")
 
-    with open(
-        log_dir / f"{ts}_params.json",
-        "w",
-        encoding="utf-8",
-    ) as f:
-        json.dump(
-            params,
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
-
-    return ts
+    return path
 
 
-# モデルの返事を logs/{ミリ秒}_response.txt に書く（ts は debug_dump_all が返したもの）。
-# 読みやすいよう、そのままの文字列で書く。後始末の前と後で違えば、両方書く
-def debug_dump_response(ts, text, raw_text=None):
+def debug_dump_response(path, text, raw_text=None):
+    """返事を、debug_dump_all が書いたファイルの最後に足す。後始末の前と後で違えば、両方書く"""
     try:
-        log_dir = Path("logs")
-        log_dir.mkdir(exist_ok=True)
-        body = text or ""
-        if raw_text is not None and raw_text != text:
-            body = f"{body}\n\n----- 後始末の前（モデルの返事そのまま） -----\n{raw_text}"
-        with open(log_dir / f"{ts}_response.txt", "w", encoding="utf-8") as f:
-            f.write(body)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n===== 返事 =====\n")
+            f.write(text or "")
+            if raw_text is not None and raw_text != text:
+                f.write("\n\n===== 返事（後始末の前。モデルの返事そのまま） =====\n")
+                f.write(raw_text)
+            f.write("\n")
     except Exception as e:
         info(f"[LOG] 返事のログを書けませんでした: {e}")
 
