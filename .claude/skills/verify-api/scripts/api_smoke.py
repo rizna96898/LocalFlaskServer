@@ -467,6 +467,21 @@ def main() -> int:
                      json={"session_id": msid})
     else:
         t.check("記憶のあるセッションが作れている", False, "初期記憶の生成で記憶ができていない")
+    # 問い合わせの記録: logs/{セッションID}/{通し番号}_{時分秒}_{段階}.txt に、設定・送った内容・返事を1つのファイルで残す
+    log_dir = box.server / "logs" / msid
+    files = sorted(log_dir.glob("*.txt")) if log_dir.exists() else []
+    names = [x.name for x in files]
+    t.check("記録はセッションのフォルダに入る（logs/{セッションID}/）", bool(files), str(box.server / "logs"))
+    t.check("  名前は「通し番号_時分秒_段階」で、通し番号は 0001 から順に並ぶ",
+            bool(names) and [n[:4] for n in names] == [f"{i:04d}" for i in range(1, len(names) + 1)], names[:5])
+    t.check("  段階の名前が入る（世界の記憶、要約、服装、所持金 など）",
+            all(any(step in n for n in names) for step in ("世界の記憶", "要約_", "服装", "所持金")), names)
+    body = files[0].read_text(encoding="utf-8") if files else ""
+    t.check("  1つのファイルに、生成の設定・送った内容・返事が順に入る",
+            body.index("===== 生成の設定 =====") < body.index("===== 送った内容 =====") < body.index("===== 返事 =====")
+            if all(k in body for k in ("===== 生成の設定 =====", "===== 送った内容 =====", "===== 返事 =====")) else False, body[:200])
+    t.check("  送った内容は、改行が \\n の文字ではなく、本当の改行で書かれる", "<|im_start|>system\n" in body and "\\n" not in body.split("===== 返事 =====")[0][:300], body[:120])
+
     scripted.post("/delete_session", json={"session_ids": [msid]})
 
     # キャラクターの記憶の段階（服装など）は、YAMLとして読めなければ1回だけ聞き直す
@@ -492,21 +507,6 @@ def main() -> int:
         t.check(f"服装の段階: {label}", st.get("status") == expect and len(count) == 2
                 and (expect == "ready" or st.get("error_stage") == "character"), (st.get("status"), st.get("error_stage"), len(count)))
         c2.post("/delete_session", json={"session_ids": [rsid]})
-
-    # 問い合わせの記録: logs/{セッションID}/{通し番号}_{時分秒}_{段階}.txt に、設定・送った内容・返事を1つのファイルで残す
-    log_dir = box.server / "logs" / msid
-    files = sorted(log_dir.glob("*.txt")) if log_dir.exists() else []
-    names = [x.name for x in files]
-    t.check("記録はセッションのフォルダに入る（logs/{セッションID}/）", bool(files), str(box.server / "logs"))
-    t.check("  名前は「通し番号_時分秒_段階」で、通し番号は 0001 から順に並ぶ",
-            bool(names) and [n[:4] for n in names] == [f"{i:04d}" for i in range(1, len(names) + 1)], names[:5])
-    t.check("  段階の名前が入る（世界の記憶、要約、服装、所持金 など）",
-            all(any(step in n for n in names) for step in ("世界の記憶", "要約_", "服装", "所持金")), names)
-    body = files[0].read_text(encoding="utf-8") if files else ""
-    t.check("  1つのファイルに、生成の設定・送った内容・返事が順に入る",
-            body.index("===== 生成の設定 =====") < body.index("===== 送った内容 =====") < body.index("===== 返事 =====")
-            if all(k in body for k in ("===== 生成の設定 =====", "===== 送った内容 =====", "===== 返事 =====")) else False, body[:200])
-    t.check("  送った内容は、改行が \\n の文字ではなく、本当の改行で書かれる", "<|im_start|>system\n" in body and "\\n" not in body.split("===== 返事 =====")[0][:300], body[:120])
 
     # 世界の記憶で失敗したら、そこで止まり、失敗した場所(world)が残る
     broken = box.client(llm=lambda prompt: "壊れた返事" if "状態と記憶を構造化" in prompt else sandbox.scripted_llm(prompt))
@@ -543,9 +543,11 @@ def main() -> int:
 
     # ---------------------------------------------------------------- 後片付け系
     print("\n# 削除")
+    had_logs = (box.server / "logs" / sid).is_dir()
     body = t.api(client, "delete_session", "post", "/delete_session", 200, True,
                  ["deleted_session_ids", "failed_session_ids"], json={"session_ids": [sid, sid2]})
     t.check("  2件とも削除された", sorted(body.get("deleted_session_ids", [])) == sorted([sid, sid2]))
+    t.check("  そのセッションの記録（logs/{セッションID}/）も消える", had_logs and not (box.server / "logs" / sid).exists(), had_logs)
     body = t.api(client, "一覧（削除後）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
     t.check("  一覧が空に戻った", body.get("sessions") == [])
 

@@ -51,12 +51,17 @@ def _safe_name(text) -> str:
     return "".join("_" if c in '\\/:*?"<>|' or ord(c) < 32 else c for c in str(text)).strip() or "_"
 
 
+def session_log_dir(session_id) -> Path:
+    """そのセッションの記録の置き場所（logs/{セッションID}/）"""
+    return Path("logs") / _safe_name(session_id)
+
+
 def debug_dump_all(prompt, params):
     """送る内容を書き、書いたファイルの場所を返す（返事は debug_dump_response で同じファイルに足す）"""
     session_id = getattr(_log_context, "session_id", None) or "_セッション外"
     step = getattr(_log_context, "step", None) or "問い合わせ"
 
-    log_dir = Path("logs") / _safe_name(session_id)
+    log_dir = session_log_dir(session_id)
     with _log_lock:
         log_dir.mkdir(parents=True, exist_ok=True)
         seq = len(list(log_dir.glob("*.txt"))) + 1
