@@ -500,7 +500,8 @@ class ChatExecute:
             history = file_utils.load_history(session_dir)
 
             message = payload.get("message")
-            cast = session_cast.load_cast(session_id)
+            # 返事をする人・意識・掛け合いの候補は、その場にいる人だけ（プレイヤーは常にいる）
+            cast = session_cast.present_cast(session_id)
             player = cast["player"]
 
             # 直前の発言（判定の材料）。プレイヤーの発言を足す前に取る
