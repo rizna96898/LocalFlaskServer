@@ -36,6 +36,7 @@ class ChatManager:
 
         log.info("パラメーターエラーが無い事", parameters)
 
+        log.set_step("判定")
         result = self.model_handling_service.send_message(parameters)
 
         log.info("パラメーターエラーが無い事", result)
@@ -54,7 +55,7 @@ class ChatManager:
             "partner_name": partner["name"],
             "partner_message": partner_message,
         })
-        return self._send("chat", prompt_messages, PromptsMain.CHAT)
+        return self._send("chat", prompt_messages, PromptsMain.CHAT, f"返事_{speaker['id']}")
 
     # 返事のあと、speaker の意識が今だれに向いているか。登場人物（プレイヤーを含む）から1人、見つからなければ None
     # history: 今の返事まで入った会話ログ
@@ -67,7 +68,7 @@ class ChatManager:
             "recent_log": self._recent_log(history),
             "character_memory": self._context(session_id, speaker, history)["character_memory"],
         })
-        result = self._send("judge", prompt_messages, PromptsMain.ATTENTION)
+        result = self._send("judge", prompt_messages, PromptsMain.ATTENTION, f"意識_{speaker['id']}")
 
         try:
             data = yaml.safe_load(string_utils.strip_code_block(result or "")) or {}
@@ -86,11 +87,12 @@ class ChatManager:
             **context,
             "target_name": target["name"],
         })
-        return self._send("chat", prompt_messages, PromptsMain.CROSS_TALK)
+        return self._send("chat", prompt_messages, PromptsMain.CROSS_TALK, f"話しかけ_{speaker['id']}")
 
     # ---------------------------------------------------------------- 内部
 
-    def _send(self, task_type, prompt_messages, prompt_file) -> str:
+    def _send(self, task_type, prompt_messages, prompt_file, step="問い合わせ") -> str:
+        log.set_step(step)
         parameters = generation_params.build_send_parameters(
             task_type,
             messages=prompt_messages,

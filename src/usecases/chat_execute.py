@@ -490,6 +490,7 @@ class ChatExecute:
             # start_message = orchestrator.create_new_session(body)
 
             session_id = payload.get("session_id")
+            log.set_session(session_id)
             session_dir = config.SESSIONS_DIR / session_id
             history = file_utils.load_history(session_dir)
 

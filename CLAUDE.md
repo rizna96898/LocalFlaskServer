@@ -88,7 +88,7 @@ APIの返事は、必ず `helpers/response_checker.py` の `response_ok(...)` / 
 
 ### ログ
 
-`logger/log.py` の `log.info(...)` を使う（`print` は使わない。コンソールがcp932のため文字化け対策が入っている）。ローカルモデルへ送るたびに `log.debug_dump_all` が `logs/{ミリ秒}_prompt.txt` と `_params.json` を、返事が来たら `log.debug_dump_response` が同じ名前の `_response.txt` を書き出すので、プロンプトと返事の確認はここを見る。
+`logger/log.py` の `log.info(...)` を使う（`print` は使わない。コンソールがcp932のため文字化け対策が入っている）。ローカルモデルへ送るたびに、`logs/{セッションID}/{通し番号}_{時分秒}_{段階}.txt` に、生成の設定・送った内容・返事を1つのファイルで書き出すので、プロンプトと返事の確認はここを見る。セッションIDと段階は、モデルへ送る前に `log.set_session(...)` / `log.set_step(...)` で決める（新しく問い合わせを足すときは、段階の名前も付ける）。
 
 ## 作業の進め方
 

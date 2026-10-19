@@ -189,6 +189,12 @@ def new_chat():
         return "", 200
     return orchestrator.new_chat(request.get_json())
 
+# リクエストごとに、問い合わせの記録の文脈（セッションと段階）を空にする（スレッドが使い回されるため）
+@app.before_request
+def reset_log_context():
+    log.set_session(None)
+    log.set_step(None)
+
 # 発言
 @app.post("/chat")
 def chat():

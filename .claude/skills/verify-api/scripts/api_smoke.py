@@ -309,6 +309,9 @@ def main() -> int:
                 got == [(main, "（嬉しい）\nはーい"), (main, "（期待）\nね、いこ？"), (sub, "（うなずく）\nうん"),
                         (main, "（向き直って）\n先生、お願いします")], got)
         t.check("  1件目は今までどおり line_id・message でも返る", body.get("message") == "（嬉しい）\nはーい")
+        chat_logs = [x.name for x in sorted((box.server / "logs" / sid).glob("*.txt"))] if (box.server / "logs" / sid).exists() else []
+        t.check("  発言の記録（判定・返事・意識・話しかけ）も、そのセッションのフォルダに入る",
+                all(any(step in n for n in chat_logs) for step in ("判定", "返事_", "意識_", "話しかけ_")), chat_logs[-8:])
         t.check("  履歴に、発言 → 4行の順で入る", saved_history()[before:] == [pid, main, main, sub, main], saved_history()[before:])
         box.wait_background(20)
         reply_prompt = next((q for q in sent_prompts if f"あなたは {names[main]} として" in q and "今、あなたの意識は" not in q), "")
@@ -490,12 +493,20 @@ def main() -> int:
                 and (expect == "ready" or st.get("error_stage") == "character"), (st.get("status"), st.get("error_stage"), len(count)))
         c2.post("/delete_session", json={"session_ids": [rsid]})
 
-    # モデルの返事も logs/ に残す（送った内容と同じ名前の _response.txt）
-    log_dir = box.server / "logs"
-    prompts = sorted(log_dir.glob("*_prompt.txt")) if log_dir.exists() else []
-    responses = {x.name.replace("_response.txt", "") for x in log_dir.glob("*_response.txt")} if log_dir.exists() else set()
-    paired = [x for x in prompts if x.name.replace("_prompt.txt", "") in responses]
-    t.check("モデルの返事が logs/ に {時刻}_response.txt で残る（送った内容と同じ時刻）", bool(paired), f"prompt {len(prompts)} 件 / response {len(responses)} 件")
+    # 問い合わせの記録: logs/{セッションID}/{通し番号}_{時分秒}_{段階}.txt に、設定・送った内容・返事を1つのファイルで残す
+    log_dir = box.server / "logs" / msid
+    files = sorted(log_dir.glob("*.txt")) if log_dir.exists() else []
+    names = [x.name for x in files]
+    t.check("記録はセッションのフォルダに入る（logs/{セッションID}/）", bool(files), str(box.server / "logs"))
+    t.check("  名前は「通し番号_時分秒_段階」で、通し番号は 0001 から順に並ぶ",
+            bool(names) and [n[:4] for n in names] == [f"{i:04d}" for i in range(1, len(names) + 1)], names[:5])
+    t.check("  段階の名前が入る（世界の記憶、要約、服装、所持金 など）",
+            all(any(step in n for n in names) for step in ("世界の記憶", "要約_", "服装", "所持金")), names)
+    body = files[0].read_text(encoding="utf-8") if files else ""
+    t.check("  1つのファイルに、生成の設定・送った内容・返事が順に入る",
+            body.index("===== 生成の設定 =====") < body.index("===== 送った内容 =====") < body.index("===== 返事 =====")
+            if all(k in body for k in ("===== 生成の設定 =====", "===== 送った内容 =====", "===== 返事 =====")) else False, body[:200])
+    t.check("  送った内容は、改行が \\n の文字ではなく、本当の改行で書かれる", "<|im_start|>system\n" in body and "\\n" not in body.split("===== 返事 =====")[0][:300], body[:120])
 
     # 世界の記憶で失敗したら、そこで止まり、失敗した場所(world)が残る
     broken = box.client(llm=lambda prompt: "壊れた返事" if "状態と記憶を構造化" in prompt else sandbox.scripted_llm(prompt))

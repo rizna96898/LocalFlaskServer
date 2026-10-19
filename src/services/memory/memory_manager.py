@@ -108,6 +108,7 @@ class MemoryManager:
         )
 
         def task():
+            log.set_session(session_id)
             failed = []
             for no, person in enumerate(targets):
                 status_manager.mark_progress(session_id, no, len(targets), f"{person['name']}: 記憶の更新")
@@ -134,6 +135,7 @@ class MemoryManager:
     # モデルに送り、返事をYAMLとして読む。読めない・形が違う（check が False）ときは、1回だけ聞き直す。
     # 2回とも読めなければ ValueError。label はログと失敗の文に使う段階の名前
     def _ask_yaml(self, parameters, label: str, check=None):
+        log.set_step(label)
         for attempt in (1, 2):
             response_text = string_utils.strip_code_block(self.model_handling_service.send_message(parameters) or "")
             log.info(f"[{label}] 返事", response_text)
@@ -162,7 +164,7 @@ class MemoryManager:
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
 
         # 読めない・「現在の状態」が無いときは、1回だけ聞き直す
-        updated = self._ask_yaml(parameters, f"記憶の更新 {person['id']}", check=_is_valid_character_memory)
+        updated = self._ask_yaml(parameters, f"記憶の更新_{person['id']}", check=_is_valid_character_memory)
 
         # 関係性は、前からいる人を消さない。今回の会話で初めて出てきた人だけを足す
         old_state = current.get("現在の状態") if isinstance(current.get("現在の状態"), dict) else {}
@@ -208,6 +210,7 @@ class MemoryManager:
    # 上から呼ばれてる非同期処理
     def _run_memory_async(self, session_id: str, operation: str, world_file_data: Dict) -> str:
         def task():
+            log.set_session(session_id)
             current_stage = "world"
 
             # 世界情報の作成
@@ -240,6 +243,7 @@ class MemoryManager:
                     prompt_messages = self.prompt_builder.create_memory_prompt(characters_text, story, start_message)
 
                     parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=file_utils.load_yaml_file(config.BOOTSTRAP / Bootstrap.WORLD_MEMORY))
+                    log.set_step("世界の記憶")
 
                     response_text = self.model_handling_service.send_message(parameters)
 
@@ -532,6 +536,7 @@ class MemoryManager:
             "template": result["template_prompt"],
         })
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_data"])
+        log.set_step(f"要約_{char_id}")
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
         list_input = string_utils.extract_list_items(response_text)
@@ -561,6 +566,7 @@ class MemoryManager:
             prompt_messages = string_utils.build_messages(base_file_obj["prompt_categorize_yaml"], [temp_categorize_str])
 
             parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_categorize_yaml"])
+            log.set_step(f"分類_{char_id}")
 
             response_text = self.model_handling_service.send_message(parameters)
             response_text = string_utils.strip_code_block(response_text)
@@ -613,6 +619,7 @@ class MemoryManager:
         # # 後共通化できそう？
         prompt_messages = string_utils.build_messages(prompt_yaml)
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_location_yaml"])
+        log.set_step("場所")
 
         response_text = self.model_handling_service.send_message(parameters)
         response_text = string_utils.strip_code_block(response_text)
@@ -638,7 +645,7 @@ class MemoryManager:
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_clothing_yaml"])
 
         # 所持品の段階で「服装」を使うので、その欄があることまで確かめる。読めなければ1回だけ聞き直す
-        return self._ask_yaml(parameters, "服装", check=lambda d: isinstance(d, dict) and "服装" in d)
+        return self._ask_yaml(parameters, f"服装_{char_id}", check=lambda d: isinstance(d, dict) and "服装" in d)
 
     # 所持品の問い合わせ
     def proc_middle_items(self,
@@ -680,7 +687,7 @@ class MemoryManager:
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_items_yaml"])
 
         # 読めなければ1回だけ聞き直す
-        return self._ask_yaml(parameters, "キャラクターの記憶の段階", check=lambda d: isinstance(d, dict))
+        return self._ask_yaml(parameters, f"所持品_{char_id}", check=lambda d: isinstance(d, dict))
 
     # 意識を誰に向けているか問い合わせ
     def proc_middle_target(self,
@@ -705,7 +712,7 @@ class MemoryManager:
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_target_yaml"])
 
         # 読めなければ1回だけ聞き直す
-        return self._ask_yaml(parameters, "キャラクターの記憶の段階", check=lambda d: isinstance(d, dict))
+        return self._ask_yaml(parameters, f"初期の意識_{character_name}", check=lambda d: isinstance(d, dict))
 
     # 所持金の問い合わせ
     def proc_middle_currency(self,
@@ -733,7 +740,7 @@ class MemoryManager:
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=base_file_obj["prompt_currency_yaml"])
 
         # 読めなければ1回だけ聞き直す
-        return self._ask_yaml(parameters, "キャラクターの記憶の段階", check=lambda d: isinstance(d, dict))
+        return self._ask_yaml(parameters, f"所持金_{char_id}", check=lambda d: isinstance(d, dict))
 
     # TODO 変動パラメータの作成（未実装、予定）
     def convert_dynamic_params(self, data):
