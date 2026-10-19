@@ -32,10 +32,12 @@ def main() -> int:
     for name in ("a.gguf", "b.gguf", "bad.gguf"):
         (models / name).write_bytes(b"fake")
 
-    def use_model(name, key="local_model_name"):
+    def use_model(name, key="local_model_name", n_ctx=None):
         lines = [sandbox.DEFAULT_SETTINGS.rstrip("\n"), f"local_model_path: {models.as_posix()}"]
         if name:
             lines.append(f"{key}: {name}")
+        if n_ctx:
+            lines.append(f"local_model_n_ctx: {n_ctx}")
         box.settings_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     use_model("a.gguf")
@@ -49,6 +51,7 @@ def main() -> int:
 
     import llama_cpp
     events = []
+    n_ctx_seen = []
 
     class TestLlama(llama_cpp.Llama):
         def __init__(self, model_path=None, **kwargs):
@@ -58,6 +61,7 @@ def main() -> int:
                 raise RuntimeError("壊れたモデル")
             super().__init__(model_path=model_path, **kwargs)
             self.name = name
+            n_ctx_seen.append(kwargs.get("n_ctx"))
             events.append(f"読込 {name}")
 
         def close(self):
@@ -75,6 +79,7 @@ def main() -> int:
 
     print("# 起動")
     t.check("起動時に設定のモデルを読み込む", health() == {"status": "ok", "model_loaded": True, "model_name": "a.gguf"}, health())
+    t.check("  local_model_n_ctx が未設定なら、n_ctx は 4096", n_ctx_seen[-1:] == [4096], n_ctx_seen)
     t.check("発言できる", generate() == 200)
 
     print("\n# モデルロード")
@@ -109,6 +114,11 @@ def main() -> int:
     r = client.post("/reload")
     t.check("もう一度モデルロードすれば戻る", r.status_code == 200 and health().get("model_name") == "a.gguf", health())
     t.check("  発言できる", generate() == 200)
+
+    # 一度に扱える文章の長さ（local_model_n_ctx）を設定で変えられる
+    use_model("b.gguf", n_ctx=8192)
+    client.post("/reload")
+    t.check("local_model_n_ctx を 8192 にすると、モデルロードで n_ctx=8192 で読み込む", n_ctx_seen[-1:] == [8192], n_ctx_seen)
 
     # 設定項目名の古い名前（local_mode_name）でも読める
     use_model("b.gguf", key="local_mode_name")

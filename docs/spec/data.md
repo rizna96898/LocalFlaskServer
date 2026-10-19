@@ -292,10 +292,10 @@ sessions:
 | `local_model_use_flag` | ローカルモデルを使うか | |
 | `local_model_path` | モデルファイルのあるフォルダ | モデルサーバーが起動時に止まる |
 | `local_model_name` | モデルファイルの名前（古い名前 `local_mode_name` も読む） | 同上 |
+| `local_model_n_ctx` | 一度に扱える文章の長さ（送る内容と返事の合計。トークン数）。モデルを読み込むときに使う | 4096 |
 | `local_model_server_port` | モデルサーバーのポート | 5001 |
 | `local_model_prompt_format` | ローカルモデルへ送る会話の形式。`chatml`／`alpaca`（→ [`prompts.md`](prompts.md)） | `chatml` |
 | `local_model_no_think` | `true` なら、返事の出だしに空の思考ブロックを置いて、思考を書かせない（`chatml` のときだけ効く） | `true` |
-| `local_mode_max_tokens` | | |
 | `open_router_use_flag`、`openrouter_site_url`、`openrouter_site_name`、`openrouter_max_tokens` | OpenRouter を使う場合の設定（APIキーは `secrets.yaml`） | |
 | `default_model`、`temperature`、`max_tokens` | 既定のモデル名と生成の設定 | `grok-4`、0.85、2048 |
 | `characters_dir` | | |
@@ -305,15 +305,15 @@ sessions:
 - `src/config.py` の `config` がまとめて持つ。
 - 生成の設定（温度、最大トークン数）は、`files/settings/generation.yaml` で用途ごとに決める（下の「生成の設定」、→ [`prompts.md`](prompts.md)）。
   設定ファイルの `temperature`、`max_tokens`、`default_model` が効くのは、OpenRouter を使う場合だけ。
-- `log_level`、`enable_image_generation`、`characters_dir`、`openrouter_max_tokens`、`local_mode_max_tokens` は、
+- `log_level`、`enable_image_generation`、`characters_dir`、`openrouter_max_tokens` は、
   設定にはあるが、コードのどこからも読まれていない。OpenRouter は使わない方向に寄せる予定だが、
   今はローカルモデルの作り込みを優先するので、これらはそのまま置いておく。
 
 - 読み込むのは起動時と、読み直し（`config.reload()`。設定画面の「モデルロード」など）のとき。読み直すと、`config` の各値も決め直す。
   ただしポート（`port`、`local_model_server_port`）は、読み直しても待ち受け中のサーバーには効かない。変えたら両方のサーバーを再起動する。
 - モデルのファイル名の設定項目は `local_model_name`。以前の綴り違いの名前 `local_mode_name` も、しばらくは読む（`local_model_name` が優先）。
-- **【要確認 Q70】** `local_mode_max_tokens` も同じ綴り違い（mode）で、どこからも読まれていない（最大トークン数は `generation.yaml` で決めている）。
-  消すか、`local_model_max_tokens` に直して残すか。
+- `local_model_n_ctx` を大きくすると、長い会話や記憶を送れるが、VRAM を多く使う。変えたら「モデルロード」か、モデルサーバーの再起動で反映する。
+  送る内容と返事の上限（`generation.yaml` の `max_tokens`）の合計が、これを超えないようにする。
 - OpenRouter の呼び出し（`OpenRouterService`）と、読まれていない設定項目は、使う予定に備えて残す。
   `OpenRouterService` の送信内容に直書きされていた `logit_bias: {"248068": -100}` は外した（ローカルの Qwen の `<think>` の番号で、
   OpenRouter のモデルでは別の語を禁止してしまうため。コメントとして残してある）。
@@ -381,4 +381,3 @@ APIキーなど、人に見せてはいけない値だけを書くファイル�
 
 | 番号 | 対象 | 確認したいこと | 回答・状況 |
 |---|---|---|---|
-| Q70 | 設定項目名 | 読まれていない `local_mode_max_tokens`（綴り違い）を消すか、直して残すか | 未回答（Q60 を直すときに見つけたもの） |
