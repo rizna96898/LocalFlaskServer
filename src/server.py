@@ -35,11 +35,11 @@ _llm_lock = threading.Lock()
 def _load(model_path: Path):
     global llm, llm_name
 
-    log.info(f"[MODEL_SERVER] モデル読み込み開始: {model_path}")
+    log.info(f"[MODEL_SERVER] モデル読み込み開始: {model_path}（n_ctx={config.LOCALMODEL_N_CTX}）")
 
     llm = Llama(
         model_path=str(model_path),
-        n_ctx=4096,
+        n_ctx=config.LOCALMODEL_N_CTX,
         n_gpu_layers=-1,
         verbose=False,
         reasoning=False,

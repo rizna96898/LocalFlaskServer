@@ -62,7 +62,8 @@ class Config:
         self.LOCALMODEL_PATH = self.settings.get("local_model_path")
         # 設定項目名は local_model_name。古い名前 local_mode_name（綴り違い）も、しばらくは読む
         self.LOCALMODEL_NAME = self.settings.get("local_model_name") or self.settings.get("local_mode_name")
-        self.LOCALMODEL_MAX_TOKENS = self.settings.get("local_mode_max_tokens")
+        # 一度に扱える文章の長さ（送る内容と返事の合計）。モデルを読み込むときに使う
+        self.LOCALMODEL_N_CTX = int(self.settings.get("local_model_n_ctx") or 4096)
 
         # モデルサーバー(src/server.py)。APサーバーと同じPCで動かす前提
         self.LOCALMODEL_SERVER_PORT = self.settings.get("local_model_server_port", 5001)
