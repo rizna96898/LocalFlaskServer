@@ -226,6 +226,7 @@ LocalFlaskServer/
 | `prepare_status.yaml` | 進行状態（→ [`chat-flow.md`](chat-flow.md)） | `/new_chat` |
 | `history.json` | 発言の履歴（→ [`api.md`](api.md) の「履歴のファイル」） | `/new_chat` 以降、発言のたびに追記 |
 | `world_memory.yaml` | 世界の記憶 | `/new_chat` の裏の処理 |
+| `summary.yaml` | 会話のあらすじ（`あらすじ:` の箇条書き。15項目まで） | 発言のあとの裏の処理 |
 | `character/{ID}_memory.yaml` | キャラクターの記憶 | `/new_chat` の裏の処理 |
 
 元データと違い、セッション側の画像はIDごとのフォルダに分けず、`picture/icon/` の直下に並べる。

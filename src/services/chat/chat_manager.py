@@ -118,11 +118,15 @@ class ChatManager:
                 }
             }
 
+        # これまでのあらすじ（発言のあとに更新している。最後の10行より前の話の要点）
+        summary = (file_utils.load_yaml_file(config.SESSIONS_DIR / session_id / "summary.yaml") or {}).get("あらすじ") or []
+
         return {
             "character_name": person["name"],
             "character_info": self._dump(setting) or person["name"],
             "character_memory": self._dump(memory),
             "recent_log": self._recent_log(history),
+            "story_summary": "\n".join(f"- {line}" for line in summary) or "（まだ無い）",
         }
 
     # その場の登場人物（自分以外。その場にいる人だけ）。「ID（表示名・職業）」を1行ずつ

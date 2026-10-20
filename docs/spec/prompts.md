@@ -152,12 +152,13 @@ files/prompts/
 | `02_main/04_query_cross_talk.yaml` | 掛け合いの話しかけ（意識が向いている相手に一言） | **使用中** |
 | `03_postprocess/01_query_parameter_fluctuation.yaml` | パラメーターの変動 | 未使用 |
 | `03_postprocess/01_query_update_edit_summary.yaml` | 要約の更新 | 未使用 |
+| `03_postprocess/01_query_update_story_summary.yaml` | 発言のあとの会話のあらすじの更新（`summary.yaml`） | **使用中**（2026-10-20 に新しく作った） |
 | `03_postprocess/01_query_update_world_memory.yaml` | 発言のあとの「その場の参加者」の更新（来た人・出て行った人、新しく現れた人） | **使用中**（2026-10-19 に書き直した） |
 | `03_postprocess/02_query_update_character_items.yaml` | キャラクターの所持品の更新 | 未使用 |
 | `03_postprocess/02_query_update_character_memory.yaml` | 発言のあとのキャラクターの記憶の更新（今の記憶＋今回の会話 → 更新した記憶） | **使用中**（2026-10-18 に今の記憶の形で書き直した） |
 
-`chat/` のプロンプトのうち、`02_main/` の返事・判定・意識・掛け合いと、`03_postprocess/` のその場の参加者・キャラクターの記憶の更新は使っている。
-`03_postprocess/` のほかのYAMLは以前の作り（英語のキーなど）で、使うときに書き直しが要る（Q67〜Q69）。それ以外は文面だけ用意されていて、呼び出す処理がまだ無い（[`../status.md`](../status.md)）。
+`chat/` のプロンプトのうち、`02_main/` の返事・判定・意識・掛け合いと、`03_postprocess/` のその場の参加者・あらすじ・キャラクターの記憶の更新は使っている。
+`03_postprocess/` のほかのYAMLは以前の作り（英語のキーなど）で、使うときに書き直しが要る（Q69）。`01_query_update_edit_summary.yaml` は、キャラクターの記憶を文章にまとめ直す別の用途のもので、あらすじの更新には使っていない。それ以外は文面だけ用意されていて、呼び出す処理がまだ無い（[`../status.md`](../status.md)）。
 
 `02_main/` の返事・意識・掛け合いのプロンプトは、`system`・`template`・`tail_template` のどこにでも差し込み口を置ける
 （`string_utils.fill_template(..., fields=("system", "template", "tail_template"))` で埋める）。差し込み口の意味は、各YAMLの先頭のコメントにある。

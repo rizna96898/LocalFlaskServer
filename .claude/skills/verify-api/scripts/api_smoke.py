@@ -420,9 +420,14 @@ def main() -> int:
 
         newcomer_answer = {"yaml": "呼ばれた人: null"}
 
+        summary_prompts = []
+
         def update_llm(prompt):
             if "呼ばれた人・話しかけられた人" in prompt:     # 返事の前の「呼ばれた人」の確認
                 return newcomer_answer["yaml"]
+            if "会話の流れを記録する係" in prompt:            # あらすじの更新
+                summary_prompts.append(prompt)
+                return "あらすじ:\n  - 結と圭太は診察室に通された。\n  - 究也は来週の検査を約束した。\n"
             if "その場にいる人を管理するAI" in prompt:
                 present_prompts.append(prompt)
                 return present_yaml
@@ -438,8 +443,15 @@ def main() -> int:
                      json={"session_id": msid, "message": "診察室へどうぞ"})
         t.check("  裏の記憶の更新が終わる", box.wait_background(30))
         st = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
-        t.check("  進行状態は after / ready、進み具合は「その場の参加者 ＋ 全員分」", (st.get("complete_stage"), st.get("status")) == ("after", "ready")
-                and st.get("progress_done") == st.get("progress_total") == 1 + len(mem_files), st)
+        t.check("  進行状態は after / ready、進み具合は「その場の参加者 ＋ あらすじ ＋ 全員分」", (st.get("complete_stage"), st.get("status")) == ("after", "ready")
+                and st.get("progress_done") == st.get("progress_total") == 2 + len(mem_files), st)
+
+        # 会話のあらすじ（→ docs/spec/chat-flow.md「発言1回分の流れ」8）
+        summary = yaml.safe_load((box.sessions / msid / "summary.yaml").read_text(encoding="utf-8")) if (box.sessions / msid / "summary.yaml").exists() else {}
+        t.check("あらすじ: 発言のあと、summary.yaml に箇条書きで保存される",
+                (summary or {}).get("あらすじ") == ["結と圭太は診察室に通された。", "究也は来週の検査を約束した。"], summary)
+        t.check("  更新のプロンプトに、今回の会話が入り、初回は「まだ無い」", bool(summary_prompts) and "診察室へどうぞ" in summary_prompts[0]
+                and "（まだ無い）" in summary_prompts[0] and "{current_summary}" not in summary_prompts[0], summary_prompts[:1])
 
         # その場の参加者（→ docs/spec/chat-flow.md「発言1回分の流れ」7）
         wm = yaml.safe_load((box.sessions / msid / "world_memory.yaml").read_text(encoding="utf-8")) or {}
@@ -473,12 +485,14 @@ def main() -> int:
         # 返事の前: 世界設定にいない人に声をかけたら、その発言で登場人物に足され、返事をする
         newcomer_answer["yaml"] = "呼ばれた人:\n  - キャラクターID: null\n    名前: 鈴木\n    役割: 看護師\n"
         judge_prompts.clear()
+        reply_prompts = []
 
         def call_suzuki(prompt):
             if "誰に向けた物かを判別" in prompt:
                 judge_prompts.append(prompt)
                 return "target_speakers: guest_2"
             if "あなたは 鈴木 として" in prompt:
+                reply_prompts.append(prompt)
                 return "（カルテを差し出して）\nはい、先生。こちらです"
             return update_llm(prompt)
 
@@ -489,6 +503,8 @@ def main() -> int:
         t.check("  声をかけたその発言で、鈴木（guest_2）が返事をする",
                 (first.get("icon_data", {}).get("character_id"), first.get("icon_data", {}).get("character_name")) == ("guest_2", "鈴木"), first)
         t.check("  判定の候補に、足された鈴木が入っている", bool(judge_prompts) and "guest_2（鈴木・看護師）" in judge_prompts[0], judge_prompts[:1])
+        t.check("  返事のプロンプトに、これまでのあらすじが入る",
+                bool(reply_prompts) and "#これまでのあらすじ" in reply_prompts[0] and "究也は来週の検査を約束した。" in reply_prompts[0], reply_prompts[:1])
         before_now = present_prompts[-1].split("今のその場の参加者:")[1].split("今回の会話:")[0] if present_prompts else ""
         t.check("  鈴木は返事の前に、その場の参加者にも足されている（発言のあとの更新に渡す一覧に入る）", "guest_2" in before_now, before_now)
         newcomer_answer["yaml"] = "呼ばれた人: null"

@@ -111,19 +111,28 @@ class MemoryManager:
                 log.info(f"[PRESENT UPDATE ERROR] {type(e).__name__}: {e}")
                 failed.append(str(e))
 
-            # 2. その場にいるメインキャラクターの記憶を更新する（新しく来た人も、登場人物として材料に入る）
             present = session_cast.present_cast(session_id)
+            participants = "\n".join(
+                session_cast.label(p) for p in [present["player"]] + list(present.get("characters") or [])
+            )
+
+            # 2. 会話のあらすじを更新する（返事の材料は最後の10行だけなので、それより前の話の要点を残す）
+            status_manager.mark_progress(session_id, 1, 2, "あらすじ")
+            try:
+                self._update_story_summary(session_id, conversation, participants)
+            except Exception as e:
+                log.info(f"[SUMMARY UPDATE ERROR] {type(e).__name__}: {e}")
+                failed.append(str(e))
+
+            # 3. その場にいるメインキャラクターの記憶を更新する（新しく来た人も、登場人物として材料に入る）
             targets = [
                 c for c in (present.get("characters") or [])
                 if c.get("kind") == "character" and (char_dir / f"{c['id']}_memory.yaml").exists()
             ]
-            participants = "\n".join(
-                session_cast.label(p) for p in [present["player"]] + list(present.get("characters") or [])
-            )
-            total = 1 + len(targets)
+            total = 2 + len(targets)
 
             for no, person in enumerate(targets):
-                status_manager.mark_progress(session_id, 1 + no, total, f"{person['name']}: 記憶の更新")
+                status_manager.mark_progress(session_id, 2 + no, total, f"{person['name']}: 記憶の更新")
                 try:
                     self._update_character_memory(char_dir, person, conversation, participants)
                 except Exception as e:
@@ -134,7 +143,8 @@ class MemoryManager:
                 status_manager.mark_prepare_error(
                     session_id,
                     complete_stage="after",
-                    error_stage="world" if all(f.startswith("その場の参加者") for f in failed) else "character",
+                    # キャラクターの記憶で失敗していれば character、その場の参加者・あらすじだけなら world
+                    error_stage="world" if all(f.startswith(("その場の参加者", "あらすじ")) for f in failed) else "character",
                     error_message=" / ".join(failed),
                 )
                 return
@@ -181,6 +191,28 @@ class MemoryManager:
         current_state["参加者"] = present
         file_utils.save_yaml_file(world_memory_path, world_memory)
         log.info("[PRESENT UPDATE] その場の参加者", [p["キャラクターID"] for p in present])
+
+    # 会話のあらすじ（summary.yaml の あらすじ:）を、今回の会話に合わせて更新する
+    def _update_story_summary(self, session_id: str, conversation: str, participants: str) -> None:
+        summary_path = config.SESSIONS_DIR / session_id / "summary.yaml"
+        current = (file_utils.load_yaml_file(summary_path) or {}).get("あらすじ") or []
+
+        prompt_data = file_utils.load_yaml_file(config.POSTPROCESS / PromptsPostprocess.STORY_SUMMARY)
+        prompt_data = string_utils.fill_template(prompt_data, {
+            "participants": participants,
+            "current_summary": "\n".join(f"- {line}" for line in current) or "（まだ無い）",
+            "conversation": conversation,
+        })
+        prompt_messages = string_utils.build_messages(prompt_data)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
+
+        answer = self._ask_yaml(
+            parameters, "あらすじ",
+            check=lambda d: isinstance(d, dict) and isinstance(d.get("あらすじ"), list),
+        )
+        lines = [str(x).strip() for x in answer["あらすじ"] if x is not None and str(x).strip()]
+        file_utils.save_yaml_file(summary_path, {"あらすじ": lines})
+        log.info(f"[SUMMARY UPDATE] あらすじ {len(lines)} 項目")
 
     # 返事の前に、プレイヤーの発言で呼ばれた人・話しかけられた人のうち、まだその場にいない人を、その場の参加者に足す。
     # 世界設定にいない人なら、登場人物にも足す（session_cast.add_guest）。こうすると、その発言で返事ができる
