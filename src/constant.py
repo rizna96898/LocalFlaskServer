@@ -26,6 +26,7 @@ class PromptsMain:
     CHARACTER_IDENTIFICATION = "02_query_judge_character_identification.yaml"
     ATTENTION                = "03_query_judge_attention.yaml"
     CROSS_TALK               = "04_query_cross_talk.yaml"
+    NEWCOMER                 = "00_query_judge_newcomer.yaml"
 
 class PromptsPostprocess:
     EDIT_SUMMARY          = "01_query_update_edit_summary.yaml"

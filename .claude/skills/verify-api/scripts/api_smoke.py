@@ -410,8 +410,22 @@ def main() -> int:
         updated_yaml = ("現在の状態:\n  場所: 診察室\n  状態:\n  - 診察を受けている\n  心情:\n  - 安心\n"
                         "  関係性:\n  - キャラクターID: kyuya\n    名前: 究也\n    役割: 先生\n  意識:\n  - 究也\n")
         update_prompts = []
+        cast_people = [x for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") not in (None, "null")]
+        main_ids = [x["参照ID"] for x in cast_people if x.get("参照種別") == "character"]
+        other_ids = [x["参照ID"] for x in cast_people if x.get("参照種別") not in ("player", "character")]
+        present_prompts = []
+        # その場の参加者: メインが残り、圭太（others[0]）は出て行き、世界設定にいない「田中」が現れた
+        present_yaml = (f"その場の参加者:\n  - キャラクターID: {main_ids[0]}\n    名前: x\n    役割: ヒロイン\n"
+                        "  - キャラクターID: null\n    名前: 田中\n    役割: プレイヤーの友人\n")
+
+        newcomer_answer = {"yaml": "呼ばれた人: null"}
 
         def update_llm(prompt):
+            if "呼ばれた人・話しかけられた人" in prompt:     # 返事の前の「呼ばれた人」の確認
+                return newcomer_answer["yaml"]
+            if "その場にいる人を管理するAI" in prompt:
+                present_prompts.append(prompt)
+                return present_yaml
             if "キャラクターの状態と記憶を更新するAI" in prompt:
                 update_prompts.append(prompt)
                 return updated_yaml
@@ -424,8 +438,60 @@ def main() -> int:
                      json={"session_id": msid, "message": "診察室へどうぞ"})
         t.check("  裏の記憶の更新が終わる", box.wait_background(30))
         st = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
-        t.check("  進行状態は after / ready、進み具合は全員分", (st.get("complete_stage"), st.get("status")) == ("after", "ready")
-                and st.get("progress_done") == st.get("progress_total") == len(mem_files), st)
+        t.check("  進行状態は after / ready、進み具合は「その場の参加者 ＋ 全員分」", (st.get("complete_stage"), st.get("status")) == ("after", "ready")
+                and st.get("progress_done") == st.get("progress_total") == 1 + len(mem_files), st)
+
+        # その場の参加者（→ docs/spec/chat-flow.md「発言1回分の流れ」7）
+        wm = yaml.safe_load((box.sessions / msid / "world_memory.yaml").read_text(encoding="utf-8")) or {}
+        now_ids = [x.get("キャラクターID") for x in (wm.get("現在の状態") or {}).get("参加者") or []]
+        t.check("その場の参加者: 発言のあと、来た人・出て行った人に合わせて更新される（プレイヤーも先頭に入る）",
+                now_ids == [pid, main_ids[0], "guest_1"], now_ids)
+        session_world = yaml.safe_load(next((box.sessions / msid).glob("*_world.yaml")).read_text(encoding="utf-8")) or {}
+        guest = next((x for x in session_world["登場人物"]["世界の登場人物"] if x.get("参照ID") == "guest_1"), {})
+        t.check("  新しく現れた人は、セッションの登場人物に guest_1（inline・sub、職業に立場）で足される",
+                (guest.get("参照種別"), guest.get("表示名"), guest.get("役割"), guest.get("職業")) == ("inline", "田中", "sub", "プレイヤーの友人"), guest)
+        t.check("  その人の設定YAMLができる", (box.sessions / msid / "character" / "guest_1_setting.yaml").exists())
+        t.check("  世界の参加者にも入る", any(x.get("キャラクターID") == "guest_1" for x in (wm.get("世界の状態") or {}).get("参加者") or []))
+        t.check("  Web側の世界設定（元のファイル）は変えない",
+                "guest_1" not in (box.web / "worlds" / "settings" / f"{world_id}_world.yaml").read_text(encoding="utf-8"))
+        t.check("  更新のプロンプトに、世界の登場人物・今の参加者・今回の会話が入る",
+                bool(present_prompts) and "診察室へどうぞ" in present_prompts[0] and "{current_present}" not in present_prompts[0])
+
+        judge_prompts = []
+
+        def judge_watch(prompt):
+            if "誰に向けた物かを判別" in prompt:
+                judge_prompts.append(prompt)
+            return update_llm(prompt)
+
+        box.client(llm=judge_watch).post("/chat", json={"session_id": msid, "message": "田中くん、来てたのか"})
+        box.wait_background(30)
+        jp = judge_prompts[0] if judge_prompts else ""
+        t.check("  次の発言の候補は、その場にいる人だけ（田中は入り、出て行った人は入らない）",
+                "guest_1（田中・プレイヤーの友人）" in jp and all(f"{o}（" not in jp for o in other_ids), jp[-400:])
+
+        # 返事の前: 世界設定にいない人に声をかけたら、その発言で登場人物に足され、返事をする
+        newcomer_answer["yaml"] = "呼ばれた人:\n  - キャラクターID: null\n    名前: 鈴木\n    役割: 看護師\n"
+        judge_prompts.clear()
+
+        def call_suzuki(prompt):
+            if "誰に向けた物かを判別" in prompt:
+                judge_prompts.append(prompt)
+                return "target_speakers: guest_2"
+            if "あなたは 鈴木 として" in prompt:
+                return "（カルテを差し出して）\nはい、先生。こちらです"
+            return update_llm(prompt)
+
+        body = t.api(box.client(llm=call_suzuki), "chat（世界設定にいない人に声をかける）", "post", "/chat", 200, True, ["messages"],
+                     json={"session_id": msid, "message": "鈴木さん、カルテください"})
+        box.wait_background(30)
+        first = (body.get("messages") or [{}])[0]
+        t.check("  声をかけたその発言で、鈴木（guest_2）が返事をする",
+                (first.get("icon_data", {}).get("character_id"), first.get("icon_data", {}).get("character_name")) == ("guest_2", "鈴木"), first)
+        t.check("  判定の候補に、足された鈴木が入っている", bool(judge_prompts) and "guest_2（鈴木・看護師）" in judge_prompts[0], judge_prompts[:1])
+        before_now = present_prompts[-1].split("今のその場の参加者:")[1].split("今回の会話:")[0] if present_prompts else ""
+        t.check("  鈴木は返事の前に、その場の参加者にも足されている（発言のあとの更新に渡す一覧に入る）", "guest_2" in before_now, before_now)
+        newcomer_answer["yaml"] = "呼ばれた人: null"
         new_mem = yaml.safe_load(mem_path.read_text(encoding="utf-8")) or {}
         t.check("  記憶が今回の会話で更新される", (new_mem.get("現在の状態") or {}).get("場所") == "診察室", new_mem)
         old_rel = (old_mem.get("現在の状態") or {}).get("関係性") or []
@@ -436,9 +502,12 @@ def main() -> int:
         t.check("  更新のプロンプトに、今の記憶と今回の会話が入る",
                 bool(update_prompts) and "診察室へどうぞ" in update_prompts[0] and "よろしくお願いします" in update_prompts[0]
                 and "{current_memory}" not in update_prompts[0], update_prompts[:1])
-        jobs = [x.get("職業") for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") not in (None, "null") and x.get("職業")]
-        t.check("  更新のプロンプトに、登場人物が職業付きで入る（会話の「先生」と結び付けるため）",
-                bool(update_prompts) and all(j in update_prompts[0] for j in jobs) and "{participants}" not in update_prompts[0], jobs)
+        # 記憶の更新に渡す登場人物は、その場にいる人（プレイヤー・メイン・新しく来た田中）。出て行った人は入らない
+        jobs = [x.get("職業") for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") in ("player", "character") and x.get("職業")] + ["プレイヤーの友人"]
+        gone_jobs = [x.get("職業") for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") not in (None, "null", "player", "character") and x.get("職業")]
+        t.check("  更新のプロンプトに、その場の登場人物が職業付きで入る（会話の「先生」と結び付けるため）",
+                bool(update_prompts) and all(j in update_prompts[0] for j in jobs) and not any(j in update_prompts[0].split("今の記憶:")[0] for j in gone_jobs)
+                and "{participants}" not in update_prompts[0], (jobs, gone_jobs))
 
         # 返事を記憶として読めなければ、error になり、記憶は前のまま
         update_calls = []

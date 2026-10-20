@@ -125,10 +125,10 @@ class ChatManager:
             "recent_log": self._recent_log(history),
         }
 
-    # その場の登場人物（自分以外）。「ID（表示名・職業）」を1行ずつ
+    # その場の登場人物（自分以外。その場にいる人だけ）。「ID（表示名・職業）」を1行ずつ
     @staticmethod
     def _participants(session_id, speaker) -> str:
-        cast = session_cast.load_cast(session_id)
+        cast = session_cast.present_cast(session_id)
         people = [cast["player"]] + list(cast.get("characters") or [])
         return "\n".join(session_cast.label(p) for p in people if p["id"] != speaker["id"])
 

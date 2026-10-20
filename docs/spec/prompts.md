@@ -145,17 +145,18 @@ files/prompts/
 | `01_preprocess/01_query_update_world_memory.yaml` | 世界の記憶の更新 | 未使用（中身も空） |
 | `01_preprocess/99_query_judge_player_identification.yaml` | 誰の発言かの判定 | 未使用 |
 | `02_main/01_query_validation_chat.yaml` | 返答に矛盾がないかの検証 | 未使用（中身も空） |
+| `02_main/00_query_judge_newcomer.yaml` | 返事の前に、プレイヤーの発言で呼ばれた人のうち、まだその場にいない人の確認 | **使用中** |
 | `02_main/02_query_chat.yaml` | 返事の生成（プレイヤーへの返事と、掛け合いで話しかけられた側の返事） | **使用中** |
 | `02_main/02_query_judge_character_identification.yaml` | 誰に向けた発言かの判定（返事をする人を決める） | **使用中** |
 | `02_main/03_query_judge_attention.yaml` | 返事のあと、意識が誰に向いているかの確認 | **使用中** |
 | `02_main/04_query_cross_talk.yaml` | 掛け合いの話しかけ（意識が向いている相手に一言） | **使用中** |
 | `03_postprocess/01_query_parameter_fluctuation.yaml` | パラメーターの変動 | 未使用 |
 | `03_postprocess/01_query_update_edit_summary.yaml` | 要約の更新 | 未使用 |
-| `03_postprocess/01_query_update_world_memory.yaml` | 世界の記憶の更新 | 未使用 |
+| `03_postprocess/01_query_update_world_memory.yaml` | 発言のあとの「その場の参加者」の更新（来た人・出て行った人、新しく現れた人） | **使用中**（2026-10-19 に書き直した） |
 | `03_postprocess/02_query_update_character_items.yaml` | キャラクターの所持品の更新 | 未使用 |
 | `03_postprocess/02_query_update_character_memory.yaml` | 発言のあとのキャラクターの記憶の更新（今の記憶＋今回の会話 → 更新した記憶） | **使用中**（2026-10-18 に今の記憶の形で書き直した） |
 
-`chat/` のプロンプトのうち、`02_main/` の返事・判定・意識・掛け合いと、`03_postprocess/` のキャラクターの記憶の更新は使っている。
+`chat/` のプロンプトのうち、`02_main/` の返事・判定・意識・掛け合いと、`03_postprocess/` のその場の参加者・キャラクターの記憶の更新は使っている。
 `03_postprocess/` のほかのYAMLは以前の作り（英語のキーなど）で、使うときに書き直しが要る（Q67〜Q69）。それ以外は文面だけ用意されていて、呼び出す処理がまだ無い（[`../status.md`](../status.md)）。
 
 `02_main/` の返事・意識・掛け合いのプロンプトは、`system`・`template`・`tail_template` のどこにでも差し込み口を置ける
