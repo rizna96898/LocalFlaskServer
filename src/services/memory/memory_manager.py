@@ -28,7 +28,7 @@ from helpers import response_checker
 from services.llm import generation_params
 from memory_builders import load_init_files
 from services.status import status_manager
-from constant import PromptsPostprocess
+from constant import PromptsPostprocess, PromptsMain
 from logger import log
 
 # 初期記憶の進み具合。段階を始めるたびに step() を呼ぶと、状態ファイルに「何段目か」を書く。
@@ -172,14 +172,76 @@ class MemoryManager:
             check=lambda d: isinstance(d, dict) and isinstance(d.get("その場の参加者", []), (list, type(None))),
         )
 
+        people = self._resolve_people(session_id, world_memory, cast, answer.get("その場の参加者"))
+
+        # プレイヤーは常にいる扱いで、一覧の先頭に入れる
+        present = [self._present_entry(cast["player"], cast["player"].get("job"))]
+        present += [self._present_entry(person, role) for person, role in people if person["id"] != cast["player"]["id"]]
+
+        current_state["参加者"] = present
+        file_utils.save_yaml_file(world_memory_path, world_memory)
+        log.info("[PRESENT UPDATE] その場の参加者", [p["キャラクターID"] for p in present])
+
+    # 返事の前に、プレイヤーの発言で呼ばれた人・話しかけられた人のうち、まだその場にいない人を、その場の参加者に足す。
+    # 世界設定にいない人なら、登場人物にも足す（session_cast.add_guest）。こうすると、その発言で返事ができる
+    def add_called_people(self, session_id: str, previous_message: str, player_message: str) -> list:
+        world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
+        world_memory = file_utils.load_yaml_file(world_memory_path)
+        if not world_memory:
+            return []
+
+        cast = session_cast.load_cast(session_id)
+        everyone = [cast["player"]] + list(cast.get("characters") or [])
+        current_state = world_memory.setdefault("現在の状態", {})
+        current_present = current_state.get("参加者") or []
+
+        prompt_data = file_utils.load_yaml_file(config.MAIN / PromptsMain.NEWCOMER)
+        prompt_data = string_utils.fill_template(prompt_data, {
+            "participants": "\n".join(session_cast.label(p) for p in everyone),
+            "current_present": yaml.safe_dump(current_present, allow_unicode=True, sort_keys=False).strip() or "（いない）",
+            "previous_message": previous_message,
+            "player_name": cast["player"]["name"],
+            "player_message": player_message,
+        })
+        prompt_messages = string_utils.build_messages(prompt_data)
+        parameters = generation_params.build_send_parameters("judge", messages=prompt_messages, prompt_data=prompt_data)
+
+        answer = self._ask_yaml(
+            parameters, "新しい人",
+            check=lambda d: isinstance(d, dict) and isinstance(d.get("呼ばれた人", []), (list, type(None))),
+        )
+        people = self._resolve_people(session_id, world_memory, cast, answer.get("呼ばれた人"))
+
+        present_ids = {str(p.get("キャラクターID")) for p in current_present if isinstance(p, dict)}
+        added = []
+        for person, role in people:
+            if person["id"] == cast["player"]["id"] or person["id"] in present_ids:
+                continue
+            current_present.append(self._present_entry(person, role))
+            present_ids.add(person["id"])
+            added.append(person)
+
+        if added:
+            # プレイヤーも一覧に入れておく（常にいる扱い）
+            if cast["player"]["id"] not in present_ids:
+                current_present.insert(0, self._present_entry(cast["player"], cast["player"].get("job")))
+            current_state["参加者"] = current_present
+            file_utils.save_yaml_file(world_memory_path, world_memory)
+            log.info("[NEWCOMER] その場に足した人", [p["id"] for p in added])
+        return added
+
+    # 答え（キャラクターID・名前・役割の並び）の人物を、登場人物から探す。世界設定にいない人は登場人物に足す。
+    # 戻り値は [(人物, 役割), ...]。world_memory の「世界の状態 → 参加者」にも、足した人を入れる（保存は呼ぶ側）
+    def _resolve_people(self, session_id: str, world_memory: dict, cast: dict, items) -> list:
         def norm(s):
             return "".join(str(s or "").split())
 
+        everyone = [cast["player"]] + list(cast.get("characters") or [])
         by_id = {p["id"]: p for p in everyone}
         by_name = {norm(p["name"]): p for p in everyone}
-        present = []
+        result = []
         seen = set()
-        for item in answer.get("その場の参加者") or []:
+        for item in items or []:
             if not isinstance(item, dict):
                 continue
             person_id = str(item.get("キャラクターID") or "")
@@ -196,15 +258,16 @@ class MemoryManager:
                 world_members = world_memory.setdefault("世界の状態", {}).setdefault("参加者", []) or []
                 world_members.append({"キャラクターID": person["id"], "名前": person["name"], "役割": role})
                 world_memory["世界の状態"]["参加者"] = world_members
-                log.info(f"[PRESENT UPDATE] 新しく現れた人を登場人物に足しました: {person['id']} {person['name']}")
-            if person["id"] == cast["player"]["id"] or person["id"] in seen:
+                log.info(f"[PRESENT] 新しく現れた人を登場人物に足しました: {person['id']} {person['name']}")
+            if person["id"] in seen:
                 continue
             seen.add(person["id"])
-            present.append({"キャラクターID": person["id"], "名前": person["name"], "役割": role or person.get("job") or None})
+            result.append((person, role))
+        return result
 
-        current_state["参加者"] = present
-        file_utils.save_yaml_file(world_memory_path, world_memory)
-        log.info("[PRESENT UPDATE] その場の参加者", [p["キャラクターID"] for p in present])
+    @staticmethod
+    def _present_entry(person: dict, role) -> dict:
+        return {"キャラクターID": person["id"], "名前": person["name"], "役割": role or person.get("job") or None}
 
     # モデルに送り、返事をYAMLとして読む。読めない・形が違う（check が False）ときは、1回だけ聞き直す。
     # 2回とも読めなければ ValueError。label はログと失敗の文に使う段階の名前

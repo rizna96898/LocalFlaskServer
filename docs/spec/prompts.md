@@ -145,6 +145,7 @@ files/prompts/
 | `01_preprocess/01_query_update_world_memory.yaml` | 世界の記憶の更新 | 未使用（中身も空） |
 | `01_preprocess/99_query_judge_player_identification.yaml` | 誰の発言かの判定 | 未使用 |
 | `02_main/01_query_validation_chat.yaml` | 返答に矛盾がないかの検証 | 未使用（中身も空） |
+| `02_main/00_query_judge_newcomer.yaml` | 返事の前に、プレイヤーの発言で呼ばれた人のうち、まだその場にいない人の確認 | **使用中** |
 | `02_main/02_query_chat.yaml` | 返事の生成（プレイヤーへの返事と、掛け合いで話しかけられた側の返事） | **使用中** |
 | `02_main/02_query_judge_character_identification.yaml` | 誰に向けた発言かの判定（返事をする人を決める） | **使用中** |
 | `02_main/03_query_judge_attention.yaml` | 返事のあと、意識が誰に向いているかの確認 | **使用中** |

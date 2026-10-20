@@ -418,7 +418,11 @@ def main() -> int:
         present_yaml = (f"その場の参加者:\n  - キャラクターID: {main_ids[0]}\n    名前: x\n    役割: ヒロイン\n"
                         "  - キャラクターID: null\n    名前: 田中\n    役割: プレイヤーの友人\n")
 
+        newcomer_answer = {"yaml": "呼ばれた人: null"}
+
         def update_llm(prompt):
+            if "呼ばれた人・話しかけられた人" in prompt:     # 返事の前の「呼ばれた人」の確認
+                return newcomer_answer["yaml"]
             if "その場にいる人を管理するAI" in prompt:
                 present_prompts.append(prompt)
                 return present_yaml
@@ -440,7 +444,8 @@ def main() -> int:
         # その場の参加者（→ docs/spec/chat-flow.md「発言1回分の流れ」7）
         wm = yaml.safe_load((box.sessions / msid / "world_memory.yaml").read_text(encoding="utf-8")) or {}
         now_ids = [x.get("キャラクターID") for x in (wm.get("現在の状態") or {}).get("参加者") or []]
-        t.check("その場の参加者: 発言のあと、来た人・出て行った人に合わせて更新される", now_ids == [main_ids[0], "guest_1"], now_ids)
+        t.check("その場の参加者: 発言のあと、来た人・出て行った人に合わせて更新される（プレイヤーも先頭に入る）",
+                now_ids == [pid, main_ids[0], "guest_1"], now_ids)
         session_world = yaml.safe_load(next((box.sessions / msid).glob("*_world.yaml")).read_text(encoding="utf-8")) or {}
         guest = next((x for x in session_world["登場人物"]["世界の登場人物"] if x.get("参照ID") == "guest_1"), {})
         t.check("  新しく現れた人は、セッションの登場人物に guest_1（inline・sub、職業に立場）で足される",
@@ -464,6 +469,29 @@ def main() -> int:
         jp = judge_prompts[0] if judge_prompts else ""
         t.check("  次の発言の候補は、その場にいる人だけ（田中は入り、出て行った人は入らない）",
                 "guest_1（田中・プレイヤーの友人）" in jp and all(f"{o}（" not in jp for o in other_ids), jp[-400:])
+
+        # 返事の前: 世界設定にいない人に声をかけたら、その発言で登場人物に足され、返事をする
+        newcomer_answer["yaml"] = "呼ばれた人:\n  - キャラクターID: null\n    名前: 鈴木\n    役割: 看護師\n"
+        judge_prompts.clear()
+
+        def call_suzuki(prompt):
+            if "誰に向けた物かを判別" in prompt:
+                judge_prompts.append(prompt)
+                return "target_speakers: guest_2"
+            if "あなたは 鈴木 として" in prompt:
+                return "（カルテを差し出して）\nはい、先生。こちらです"
+            return update_llm(prompt)
+
+        body = t.api(box.client(llm=call_suzuki), "chat（世界設定にいない人に声をかける）", "post", "/chat", 200, True, ["messages"],
+                     json={"session_id": msid, "message": "鈴木さん、カルテください"})
+        box.wait_background(30)
+        first = (body.get("messages") or [{}])[0]
+        t.check("  声をかけたその発言で、鈴木（guest_2）が返事をする",
+                (first.get("icon_data", {}).get("character_id"), first.get("icon_data", {}).get("character_name")) == ("guest_2", "鈴木"), first)
+        t.check("  判定の候補に、足された鈴木が入っている", bool(judge_prompts) and "guest_2（鈴木・看護師）" in judge_prompts[0], judge_prompts[:1])
+        before_now = present_prompts[-1].split("今のその場の参加者:")[1].split("今回の会話:")[0] if present_prompts else ""
+        t.check("  鈴木は返事の前に、その場の参加者にも足されている（発言のあとの更新に渡す一覧に入る）", "guest_2" in before_now, before_now)
+        newcomer_answer["yaml"] = "呼ばれた人: null"
         new_mem = yaml.safe_load(mem_path.read_text(encoding="utf-8")) or {}
         t.check("  記憶が今回の会話で更新される", (new_mem.get("現在の状態") or {}).get("場所") == "診察室", new_mem)
         old_rel = (old_mem.get("現在の状態") or {}).get("関係性") or []

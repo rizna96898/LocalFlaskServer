@@ -500,12 +500,20 @@ class ChatExecute:
             history = file_utils.load_history(session_dir)
 
             message = payload.get("message")
-            # 返事をする人・意識・掛け合いの候補は、その場にいる人だけ（プレイヤーは常にいる）
-            cast = session_cast.present_cast(session_id)
-            player = cast["player"]
 
             # 直前の発言（判定の材料）。プレイヤーの発言を足す前に取る
             previous_message = history[-1].get("message", "") if history else ""
+
+            # 返事の前に、プレイヤーの発言で呼ばれた人・話しかけられた人のうち、まだその場にいない人を足す。
+            # 世界設定にいない人（突然声をかけた友人 など）も、ここで登場人物に足し、この発言で返事ができるようにする
+            try:
+                self.memory_manager.add_called_people(session_id, previous_message, message)
+            except Exception as e:
+                log.info(f"[NEWCOMER] 呼ばれた人の確認を飛ばしました: {type(e).__name__}: {e}")
+
+            # 返事をする人・意識・掛け合いの候補は、その場にいる人だけ（プレイヤーは常にいる）
+            cast = session_cast.present_cast(session_id)
+            player = cast["player"]
 
             player_line_id = string_utils.history_append(history, player["id"], "player", message, session_cast.icon_data(player))
 
