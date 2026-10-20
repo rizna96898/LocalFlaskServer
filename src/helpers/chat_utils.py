@@ -51,13 +51,13 @@ class ChatUtils:
             target = self.chat_manager.attention(session_id, responder, cast, log_now)
 
             if target and target["id"] not in (cast["player"]["id"], responder["id"]):
-                opener = self.chat_manager.cross_talk(session_id, responder, target, log_now)
+                opener = self.chat_manager.cross_talk(session_id, responder, target, log_now, reply)
                 answer = self.chat_manager.reply(session_id, target, responder, opener, log_now)
                 lines += [(responder, opener), (target, answer)]
 
                 # 掛け合いのあとは、メインがプレイヤーに向き直って一言かける（意識をプレイヤーに戻す）
                 log_after = log_now + [self._as_log(responder, opener), self._as_log(target, answer)]
-                closing = self.chat_manager.cross_talk(session_id, responder, cast["player"], log_after)
+                closing = self.chat_manager.cross_talk(session_id, responder, cast["player"], log_after, opener)
                 lines.append((responder, closing))
         except Exception as e:
             log.info(f"[CHAT] 意識の確認・掛け合いを飛ばしました: {type(e).__name__}: {e}")
