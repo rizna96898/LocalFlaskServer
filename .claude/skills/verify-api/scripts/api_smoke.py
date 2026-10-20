@@ -493,8 +493,12 @@ def main() -> int:
         newcomer_answer["yaml"] = "呼ばれた人:\n  - キャラクターID: null\n    名前: 鈴木\n    役割: 看護師\n"
         judge_prompts.clear()
         reply_prompts = []
+        suzuki_attention = []
 
         def call_suzuki(prompt):
+            if "「意識を向けている相手」を特定する担当" in prompt:
+                suzuki_attention.append(prompt)
+                return "相手: guest_1"
             if "誰に向けた物かを判別" in prompt:
                 judge_prompts.append(prompt)
                 return "target_speakers: guest_2"
@@ -509,6 +513,8 @@ def main() -> int:
         first = (body.get("messages") or [{}])[0]
         t.check("  声をかけたその発言で、鈴木（guest_2）が返事をする",
                 (first.get("icon_data", {}).get("character_id"), first.get("icon_data", {}).get("character_name")) == ("guest_2", "鈴木"), first)
+        t.check("  メイン以外（鈴木）の返事は1行だけで、意識の確認も掛け合いもしない",
+                len(body.get("messages") or []) == 1 and not suzuki_attention, [len(body.get("messages") or []), len(suzuki_attention)])
         t.check("  判定の候補に、足された鈴木が入っている", bool(judge_prompts) and "guest_2（鈴木・看護師）" in judge_prompts[0], judge_prompts[:1])
         t.check("  返事のプロンプトに、これまでのあらすじが入る",
                 bool(reply_prompts) and "#これまでのあらすじ" in reply_prompts[0] and "究也は来週の検査を約束した。" in reply_prompts[0], reply_prompts[:1])

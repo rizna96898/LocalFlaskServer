@@ -45,10 +45,16 @@ class ChatUtils:
         lines = [(responder, reply)]
 
         # 3・4. 意識を確かめ、プレイヤー以外に向いていれば、掛け合いを1往復。
+        # 意識の確認と掛け合いは、メインキャラクター（参照種別 character）が返事をしたときだけ。
+        # サブや途中から来た人が返事をしたときは、返事の1行で終わる。
         # ここで失敗しても、返事までは返す（掛け合いは無しにする）
         try:
             log_now = list(history or []) + [self._as_log(responder, reply)]
-            target = self.chat_manager.attention(session_id, responder, cast, log_now)
+            target = None
+            if responder.get("kind") == "character":
+                target = self.chat_manager.attention(session_id, responder, cast, log_now)
+            else:
+                log.info(f"[CHAT] メイン以外の返事なので、意識の確認・掛け合いはしません: {responder['id']}")
 
             if target and target["id"] not in (cast["player"]["id"], responder["id"]):
                 opener = self.chat_manager.cross_talk(session_id, responder, target, log_now, reply)
