@@ -67,6 +67,7 @@ class ChatManager:
             "participants": "\n".join(session_cast.label(p) for p in people if p["id"] != speaker["id"]),
             "recent_log": self._recent_log(history),
             "character_memory": self._context(session_id, speaker, history)["character_memory"],
+            "parties": session_cast.parties_text(session_id),
         })
         result = self._send("judge", prompt_messages, PromptsMain.ATTENTION, f"意識_{speaker['id']}")
 
@@ -90,6 +91,41 @@ class ChatManager:
             "previous_line": previous or "（なし）",
         })
         return self._send("chat", prompt_messages, PromptsMain.CROSS_TALK, f"話しかけ_{speaker['id']}")
+
+    # 返事の前に、speaker が mates（同じパーティーでその場にいる人）のだれかに相談するか。相談する相手、しなければ None
+    # history: これまでの会話ログ（プレイヤーの発言はまだ入っていないもの）
+    def consult_check(self, session_id, speaker, mates, player, player_message, history):
+        prompt_messages = self.prompt_builder.create_consult_check_prompt({
+            "character_name": speaker["name"],
+            "mates": "\n".join(session_cast.label(p) for p in mates),
+            "parties": session_cast.parties_text(session_id),
+            "character_memory": self._context(session_id, speaker, history)["character_memory"],
+            "recent_log": self._recent_log(history),
+            "player_name": player["name"],
+            "player_message": player_message,
+        })
+        result = self._send("judge", prompt_messages, PromptsMain.CONSULT_CHECK, f"相談の確認_{speaker['id']}")
+
+        try:
+            data = yaml.safe_load(string_utils.strip_code_block(result or "")) or {}
+        except Exception:
+            data = {}
+        answer = data.get("相談") if isinstance(data, dict) else None
+        mate = self._find_person(answer, mates)
+        log.info("相談の相手", speaker["id"], "→", mate["id"] if mate else None)
+        return mate
+
+    # 相談の話しかけ。speaker が、プレイヤーの発言に答える前に mate へ相談する一言
+    def consult(self, session_id, speaker, mate, player, player_message, history) -> str:
+        context = self._context(session_id, speaker, history)
+        context["participants"] = self._participants(session_id, speaker)
+        prompt_messages = self.prompt_builder.create_consult_prompt({
+            **context,
+            "target_name": mate["name"],
+            "player_name": player["name"],
+            "player_message": player_message,
+        })
+        return self._send("chat", prompt_messages, PromptsMain.CONSULT, f"相談_{speaker['id']}")
 
     # ---------------------------------------------------------------- 内部
 

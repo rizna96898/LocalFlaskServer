@@ -149,6 +149,47 @@ def add_guest(session_id: str, name: str, role: str) -> Dict[str, Any]:
     return {"id": guest_id, "name": name, "kind": "inline", "role": "sub", "job": role or ""}
 
 
+# ---------------------------------------------------------------- パーティー
+# 世界の記憶の「現在の状態 → パーティー一覧」が、一緒に行動している人のまとまり（白井夫妻 など）。
+# 掛け合いと相談は、同じパーティーの人どうしで行う。
+
+def load_parties(session_id: str) -> List[Dict[str, Any]]:
+    """パーティー一覧。[{"name": 名前, "ids": [キャラクターID, ...]}, ...]。無ければ空"""
+    current = (load_world_memory(session_id).get("現在の状態") or {})
+    parties = []
+    for party in current.get("パーティー一覧") or []:
+        if not isinstance(party, dict):
+            continue
+        ids = [str(m.get("キャラクターID")) for m in (party.get("メンバー一覧") or [])
+               if isinstance(m, dict) and m.get("キャラクターID") not in (None, "null")]
+        if ids:
+            parties.append({"name": str(party.get("名前") or ""), "ids": ids})
+    return parties
+
+
+def in_party(session_id: str, person_id: str) -> bool:
+    """その人が、どこかのパーティーに入っているか"""
+    return any(person_id in p["ids"] for p in load_parties(session_id))
+
+
+def party_mates(session_id: str, person_id: str) -> List[Dict[str, Any]]:
+    """その人と同じパーティーで、今その場にいる人（自分とプレイヤーは除く）。present_cast の人物の形で返す"""
+    mate_ids = set()
+    for party in load_parties(session_id):
+        if person_id in party["ids"]:
+            mate_ids.update(party["ids"])
+    cast = present_cast(session_id)
+    return [c for c in (cast.get("characters") or []) if c["id"] in mate_ids and c["id"] != person_id]
+
+
+def parties_text(session_id: str) -> str:
+    """プロンプトに入れるパーティーの書き方。「- 名前: ID（表示名）、ID（表示名）」を1行ずつ。無ければ「（なし）」"""
+    cast = load_cast(session_id)
+    names = {c["id"]: c["name"] for c in [cast["player"]] + list(cast.get("characters") or [])}
+    lines = [f"- {p['name']}: " + "、".join(f"{i}（{names.get(i, i)}）" for i in p["ids"]) for p in load_parties(session_id)]
+    return "\n".join(lines) or "（なし）"
+
+
 def first_main(cast: Dict[str, Any]) -> Dict[str, Any]:
     """最初のメインキャラクター（参照種別が character の最初の人）。いなければ、プレイヤー以外の最初の人。"""
     characters = cast.get("characters") or []
