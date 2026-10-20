@@ -79,13 +79,15 @@ class ChatManager:
         log.info("意識の向き", speaker["id"], "→", target["id"] if target else None)
         return target
 
-    # 掛け合いの話しかけ。speaker が target に一言話しかける
-    def cross_talk(self, session_id, speaker, target, history) -> str:
+    # 掛け合いの話しかけ。speaker が target に一言話しかける。
+    # previous は speaker の直前の発言（同じ言葉を繰り返させないために渡す）
+    def cross_talk(self, session_id, speaker, target, history, previous="") -> str:
         context = self._context(session_id, speaker, history)
         context["participants"] = self._participants(session_id, speaker)
         prompt_messages = self.prompt_builder.create_cross_talk_prompt({
             **context,
             "target_name": target["name"],
+            "previous_line": previous or "（なし）",
         })
         return self._send("chat", prompt_messages, PromptsMain.CROSS_TALK, f"話しかけ_{speaker['id']}")
 

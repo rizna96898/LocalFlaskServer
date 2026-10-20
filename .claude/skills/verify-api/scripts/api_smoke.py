@@ -324,6 +324,13 @@ def main() -> int:
                 and "{character_memory}" not in attention_prompt, attention_prompt[-500:])
         sub_prompt = next((q for q in sent_prompts if f"あなたは {names[sub]} として" in q), "")
         t.check("  サブの返事のプロンプトに、話しかけられた一言と関係性が入る", "ね、いこ？" in sub_prompt and "関係性" in sub_prompt, sub_prompt[-400:])
+        # 同じ言葉を繰り返させないため、話しかけには返事を、向き直りには話しかけを「直前のあなたの発言」として渡す
+        opener_prompt = next((q for q in sent_prompts if "今、あなたの意識は" in q and f"意識は {names_player} に" not in q), "")
+        closing_prompt = next((q for q in sent_prompts if f"今、あなたの意識は {names_player} に" in q), "")
+        t.check("  話しかけ・向き直りのプロンプトに、自分の直前の発言が入る",
+                "#直前のあなたの発言" in opener_prompt and opener_prompt.split("#直前のあなたの発言")[1].count("はーい") == 1
+                and closing_prompt.split("#直前のあなたの発言")[-1].count("ね、いこ？") == 1
+                and "{previous_line}" not in opener_prompt + closing_prompt, closing_prompt[-300:])
 
         client = box.client(llm=lambda prompt: talk_llm(prompt, attention_to=pid))
         body = t.api(client, "chat（意識がプレイヤーなら掛け合いなし）", "post", "/chat", 200, True, ["messages"],
