@@ -7,6 +7,7 @@
 #   {recent_log}        これまでの会話（今の返事まで）
 #   {target_name}       話しかける相手の表示名
 #   {participants}      その場の登場人物（自分以外）。「ID（表示名・職業）」の形
+#   {story_summary}     これまでのあらすじ（summary.yaml。発言のあとに更新する）
 system: |
   あなたは {character_name} として会話します。
   今、あなたの意識は {target_name} に向いています。
@@ -34,6 +35,9 @@ template: |
 
   #今の記憶
   {character_memory}
+
+  #これまでのあらすじ（最近の会話より前の話の要点）
+  {story_summary}
 
   #これまでの会話
   {recent_log}
