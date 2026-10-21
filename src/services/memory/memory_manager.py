@@ -103,20 +103,22 @@ class MemoryManager:
             log.set_session(session_id)
             failed = []
 
-            # 1. その場の参加者を更新する（来た人・出て行った人。新しく現れた人は登場人物に足す）
-            status_manager.mark_progress(session_id, 0, 1, "その場の参加者")
-            try:
-                self._update_present_participants(session_id, conversation)
-            except Exception as e:
-                log.info(f"[PRESENT UPDATE ERROR] {type(e).__name__}: {e}")
-                failed.append(str(e))
-
-            # 2. パーティー一覧を更新する（一緒に行動すると決まった人、別行動になった人）
-            status_manager.mark_progress(session_id, 1, 3, "パーティー")
+            # 1. パーティー一覧を更新する（一緒に行動すると決まった人、別行動になった人。プレイヤーの連れも）。
+            # その場の参加者より先に行い、一緒に出入りさせるときは、更新したパーティーを使う
+            status_manager.mark_progress(session_id, 0, 3, "パーティー")
             try:
                 self._update_parties(session_id, conversation)
             except Exception as e:
                 log.info(f"[PARTY UPDATE ERROR] {type(e).__name__}: {e}")
+                failed.append(str(e))
+
+            # 2. その場の参加者を更新する（来た人・出て行った人。パーティーの人は一緒に出入りする。
+            # プレイヤーが場所を移ったら、連れだけがついて来る。新しく現れた人は登場人物に足す）
+            status_manager.mark_progress(session_id, 1, 3, "その場の参加者")
+            try:
+                self._update_present_participants(session_id, conversation)
+            except Exception as e:
+                log.info(f"[PRESENT UPDATE ERROR] {type(e).__name__}: {e}")
                 failed.append(str(e))
 
             present = session_cast.present_cast(session_id)
@@ -193,32 +195,57 @@ class MemoryManager:
             and all(isinstance(d.get(k), (list, type(None))) for k in ("来た人", "出て行った人")),
         )
 
-        # 出て行った人は、登場人物にいる人だけを探す（新しい人として足さない）
-        left_ids = {p["id"] for p in self._match_people(everyone, answer.get("出て行った人"))}
-        came = self._resolve_people(session_id, world_memory, cast, answer.get("来た人"))
-
-        # プレイヤーは常にいる扱いで、一覧の先頭に入れる
         player_id = cast["player"]["id"]
-        present = [self._present_entry(cast["player"], cast["player"].get("job"))]
-        # 今の参加者は、登場人物とIDか名前で照らし合わせて残す（初期記憶ではIDが空のことがある。見つからない人は外す）
+        by_id = {p["id"]: p for p in everyone}
+        parties = [p["ids"] for p in session_cast.load_parties(session_id)]
+
+        def with_mates(ids):
+            # パーティーの人は一緒に出入りする（プレイヤーは動かさない）
+            result = set(ids)
+            for party in parties:
+                if result & set(party):
+                    result |= {i for i in party if i != player_id and i in by_id}
+            return result
+
+        # 出て行った人は、登場人物にいる人だけを探す（新しい人として足さない）
+        left_ids = with_mates(p["id"] for p in self._match_people(everyone, answer.get("出て行った人"))) - {player_id}
+        came = self._resolve_people(session_id, world_memory, cast, answer.get("来た人"))
+        came_ids = with_mates(person["id"] for person, _ in came) - {player_id}
+        came_roles = {person["id"]: role for person, role in came}
+        everyone = [cast["player"]] + list(session_cast.load_cast(session_id).get("characters") or [])  # 足された人も入れる
+        by_id = {p["id"]: p for p in everyone}
+
+        # 今の参加者は、登場人物とIDか名前で照らし合わせる（初期記憶ではIDが空のことがある。見つからない人は外す）
         roles = {}
         for item in current_present:
             if isinstance(item, dict):
                 for person in self._match_people(everyone, [item]):
                     roles.setdefault(person["id"], item.get("役割"))
-        present += [self._present_entry(person, roles.get(person["id"]))
-                    for person in self._match_people(everyone, current_present)
-                    if person["id"] not in (player_id, *left_ids)]
+        staying = [p["id"] for p in self._match_people(everyone, current_present)]
+
+        # プレイヤーが別の場所へ移ったら、ついて来るのはプレイヤーと同じパーティーの人（連れ）だけ。来た人は移った先にいた人
+        if answer.get("プレイヤーの移動") is True:
+            companions = with_mates([player_id]) - {player_id}
+            staying = [i for i in staying if i in companions] + sorted(i for i in companions if i not in staying)
+            log.info("[PRESENT UPDATE] プレイヤーが場所を移った。連れ", sorted(companions))
+
+        # プレイヤーは常にいる扱いで、一覧の先頭に入れる
+        present = [self._present_entry(cast["player"], cast["player"].get("job"))]
+        present += [self._present_entry(by_id[i], roles.get(i)) for i in staying
+                    if i in by_id and i not in (player_id, *left_ids)]
         kept = {p["キャラクターID"] for p in present}
-        present += [self._present_entry(person, role) for person, role in came
-                    if person["id"] not in kept and person["id"] not in left_ids]
+        # 来た人（答えの順）と、一緒に来たパーティーの人を足す
+        for i in [person["id"] for person, _ in came] + sorted(came_ids):
+            if i in by_id and i not in kept and i not in left_ids:
+                present.append(self._present_entry(by_id[i], came_roles.get(i)))
+                kept.add(i)
 
         current_state["参加者"] = present
         file_utils.save_yaml_file(world_memory_path, world_memory)
         log.info("[PRESENT UPDATE] その場の参加者", [p["キャラクターID"] for p in present])
 
     # 世界の記憶の「パーティー一覧」（現在の状態 → パーティー一覧）を、今回の会話に合わせて更新する。
-    # メンバーは登場人物にいる人だけ（プレイヤーと、見つからない人は外す）。2人に満たないパーティーは消す
+    # メンバーは登場人物にいる人だけ（見つからない人は外す）。プレイヤーも入る（連れ）。2人に満たないパーティーは消す
     def _update_parties(self, session_id: str, conversation: str) -> None:
         world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
         world_memory = file_utils.load_yaml_file(world_memory_path)
@@ -227,7 +254,7 @@ class MemoryManager:
             return
 
         cast = session_cast.load_cast(session_id)
-        characters = list(cast.get("characters") or [])
+        characters = [cast["player"]] + list(cast.get("characters") or [])   # プレイヤーも入れる（連れ）
         current_state = world_memory.setdefault("現在の状態", {})
         current_parties = current_state.get("パーティー一覧") or []
 

@@ -489,7 +489,8 @@ def main() -> int:
 
         summary_prompts = []
         party_prompts = []
-        # パーティー: メインと田中（名前だけで答える）が組む。プレイヤーと、登場人物にいない人は外れ、1人だけの組は消える
+        # パーティー: メイン・田中（名前だけで答える）・プレイヤーが組む。パーティーの更新はその場の参加者より先なので、
+        # 1回目は田中がまだ登場人物にいなくて外れる。登場人物にいない人も外れ、1人だけの組は消える
         party_yaml = (f"パーティー一覧:\n  - 名前: 付き添い\n    メンバー一覧:\n      - キャラクターID: {main_ids[0]}\n"
                       f"      - キャラクターID: null\n        名前: 田中\n      - キャラクターID: {pid}\n      - キャラクターID: nobody\n"
                       f"  - 名前: ひとり\n    メンバー一覧:\n      - キャラクターID: {main_ids[0]}\n")
@@ -524,13 +525,13 @@ def main() -> int:
         # パーティー一覧の更新（→ docs/spec/chat-flow.md「発言1回分の流れ」7）
         parties_now = ((yaml.safe_load((box.sessions / msid / "world_memory.yaml").read_text(encoding="utf-8")) or {})
                        .get("現在の状態") or {}).get("パーティー一覧")
-        t.check("パーティー: 発言のあと、パーティー一覧が更新される（プレイヤー・いない人・1人だけの組は外れる）",
-                parties_now == [{"名前": "付き添い", "メンバー一覧": [{"キャラクターID": main_ids[0], "名前": next(
-                    (x.get("表示名") for x in cast_people if x["参照ID"] == main_ids[0]), main_ids[0])},
-                    {"キャラクターID": "guest_1", "名前": "田中"}]}], parties_now)
-        t.check("  更新のプロンプトに、今回の会話と今のパーティーが入り、プレイヤーは登場人物に入らない",
+        display = {x["参照ID"]: x.get("表示名") for x in cast_people}
+        t.check("パーティー: 発言のあと、パーティー一覧が更新される（プレイヤーも入る。いない人・1人だけの組は外れる）",
+                parties_now == [{"名前": "付き添い", "メンバー一覧": [{"キャラクターID": main_ids[0], "名前": display[main_ids[0]]},
+                                                                {"キャラクターID": pid, "名前": display[pid]}]}], parties_now)
+        t.check("  更新のプロンプトに、今回の会話と今のパーティーが入り、プレイヤーも登場人物に入る",
                 bool(party_prompts) and "診察室へどうぞ" in party_prompts[0] and "{current_parties}" not in party_prompts[0]
-                and f"{pid}（" not in party_prompts[0].split("今のパーティー一覧")[0], party_prompts[:1])
+                and f"{pid}（" in party_prompts[0].split("今のパーティー一覧:")[0], party_prompts[:1])
 
         # 会話のあらすじ（→ docs/spec/chat-flow.md「発言1回分の流れ」8）
         summary = yaml.safe_load((box.sessions / msid / "summary.yaml").read_text(encoding="utf-8")) if (box.sessions / msid / "summary.yaml").exists() else {}
@@ -619,6 +620,45 @@ def main() -> int:
         t.check("  更新のプロンプトに、その場の登場人物が職業付きで入る（会話の「先生」と結び付けるため）",
                 bool(update_prompts) and all(j in update_prompts[0] for j in jobs) and not any(j in update_prompts[0].split("今の記憶:")[0] for j in gone_jobs)
                 and "{participants}" not in update_prompts[0], (jobs, gone_jobs))
+
+        # パーティーの人は一緒に出入りし、プレイヤーが場所を移ったら連れだけがついて来る（→ docs/spec/chat-flow.md「発言1回分の流れ」7）
+        saved_answers = (present_yaml, party_yaml)
+
+        def set_scene(present_ids, party_ids):
+            data = yaml.safe_load(wm_file.read_text(encoding="utf-8")) or {}
+            state = data.setdefault("現在の状態", {})
+            state["参加者"] = [{"キャラクターID": i, "名前": display.get(i, i), "役割": None} for i in present_ids]
+            state["パーティー一覧"] = [{"名前": "組", "メンバー一覧": [{"キャラクターID": i, "名前": display.get(i, i)} for i in party_ids]}]
+            wm_file.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            return "パーティー一覧:\n  - 名前: 組\n    メンバー一覧:\n" + "".join(f"      - キャラクターID: {i}\n" for i in party_ids)
+
+        def present_after(message):
+            box.client(llm=update_llm).post("/chat", json={"session_id": msid, "message": message})
+            box.wait_background(30)
+            data = yaml.safe_load(wm_file.read_text(encoding="utf-8")) or {}
+            return [x.get("キャラクターID") for x in (data.get("現在の状態") or {}).get("参加者") or []]
+
+        main_id, other_id = main_ids[0], other_ids[0]
+        party_yaml = set_scene([main_id, other_id], [main_id, other_id])
+        present_yaml = f"来た人: []\n出て行った人:\n  - キャラクターID: {main_id}\n    名前: x\nプレイヤーの移動: false\n"
+        now = present_after("お大事に")
+        t.check("出入り: 出て行った人と同じパーティーの人も、一緒に出て行く", now == [pid], now)
+
+        party_yaml = set_scene([], [main_id, other_id])
+        present_yaml = f"来た人:\n  - キャラクターID: {main_id}\n    名前: x\n    役割: 患者\n出て行った人: []\nプレイヤーの移動: false\n"
+        now = present_after("次の方どうぞ")
+        t.check("  来た人と同じパーティーの人も、一緒に来る", now == [pid, main_id, other_id], now)
+
+        party_yaml = set_scene([main_id, other_id], [pid, main_id])
+        present_yaml = "来た人: []\n出て行った人: []\nプレイヤーの移動: true\n"
+        now = present_after("では、往診に出かけましょう")
+        t.check("  プレイヤーが場所を移ったら、ついて来るのは同じパーティーの人（連れ）だけ", now == [pid, main_id], now)
+
+        party_yaml = set_scene([main_id, other_id], [pid, main_id])
+        present_yaml = "来た人: []\n出て行った人: []\nプレイヤーの移動: false\n"
+        now = present_after("少し待ってください")
+        t.check("  場所を移らなければ、連れでない人も残る", now == [pid, main_id, other_id], now)
+        present_yaml, party_yaml = saved_answers
 
         # 返事を記憶として読めなければ、error になり、記憶は前のまま
         update_calls = []
