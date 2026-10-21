@@ -19,7 +19,7 @@ prepare() がやること:
 - llama_cpp を偽物に差し替える（モデルは読み込まない）
 
 client() がやること:
-- モデルサーバーへの送信(requests.post)を差し替える。既定では「接続できない」扱い。
+- モデルサーバーへの送信(requests.post)と問い合わせ(requests.get)を差し替える。既定では「接続できない」扱い。
   llm= に文字列か関数を渡すと、その内容をモデルの返事として返す。
   本物のモデルサーバーが同じPCで動いていても、検証からは絶対に呼ばない。
 """
@@ -168,7 +168,14 @@ class Sandbox:
                 raise requests.exceptions.ConnectionError("検証中のためモデルサーバーには接続しません")
             return _Response(llm(prompt) if callable(llm) else llm)
 
+        def fake_get(url, *args, **kwargs):
+            # モデルサーバーの様子（/health）。llm が None なら接続できない扱い、それ以外は fake.gguf を読み込み済みの扱い
+            if str(url).endswith("/health") and llm is not None:
+                return _JsonResponse(200, {"status": "ok", "model_loaded": True, "model_name": "fake.gguf"})
+            raise requests.exceptions.ConnectionError("検証中のためモデルサーバーには接続しません")
+
         requests.post = fake_post
+        requests.get = fake_get
         return self._app.test_client()
 
     def wait_background(self, timeout: float = 20.0) -> bool:

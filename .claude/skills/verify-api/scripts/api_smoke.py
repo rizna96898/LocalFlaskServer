@@ -48,7 +48,12 @@ def main() -> int:
 
     # ---------------------------------------------------------------- 基本
     print("# 基本・設定")
-    t.api(client, "health", "get", "/health", 200, True)
+    body = t.api(client, "health", "get", "/health", 200, True, ["model_server", "model_name"])
+    t.check("  モデルサーバーが止まっていても、APサーバーは正常で、model_server が ng・モデル名は空",
+            (body.get("status"), body.get("model_server"), body.get("model_name")) == ("ok", "ng", ""), body)
+    body = t.api(box.client(llm="返事"), "health（モデルサーバーが動いている）", "get", "/health", 200, True, ["model_name"])
+    t.check("  読み込み中のモデル名が返る", (body.get("model_server"), body.get("model_loaded"), body.get("model_name")) == ("ok", True, "fake.gguf"), body)
+    client = box.client()
     for name in ("world_include_player", "world_goal_setting", "world_parameter_setting", "player", "character"):
         t.api(client, f"テンプレート取得 {name}", "post", f"/settings/get_template_{name}_yaml", 200, True,
               ["content"], json={"base_chat_path": web})

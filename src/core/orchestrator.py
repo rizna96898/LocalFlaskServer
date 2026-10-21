@@ -29,9 +29,10 @@ class ChatOrchestrator:
         self.chat_settings = WorldSettings()
 
     # サーバーの起動確認。動くのに最低限必要なものが揃っているかを確かめる。
-    # 正常: {"ok": true, "status": "ok"}
+    # 正常: {"ok": true, "status": "ok", "model_server": "ok" | "ng", "model_loaded": bool, "model_name": 読み込み中のモデル}
     # 異常: {"ok": false, "status": "ng", "message": 理由}（HTTP 503）
     # 応答が無い場合（サーバーが止まっている）は、画面側で「未接続」と判断する
+    # モデルサーバーが止まっていても、APサーバーは正常として返す（model_server が ng になる）
     def health(self):
         try:
             problems = []
@@ -47,7 +48,7 @@ class ChatOrchestrator:
             if problems:
                 return self._health_ng(" / ".join(problems))
 
-            return response_checker.response_ok(status="ok")
+            return response_checker.response_ok(status="ok", **llm_service.model_server_status())
 
         except Exception as e:
             log.info(f"[ERROR] health: {type(e).__name__}: {e}")

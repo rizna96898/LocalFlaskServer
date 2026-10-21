@@ -475,6 +475,22 @@ def load_model(payload):
     model_name = data.get("model_name") or ""
     return response_checker.response_ok(message=f"ロード完了: {model_name}", model_name=model_name, full_path=str(full_path))
 
+# モデルサーバーの様子（読み込み中のモデル名）。/health で画面に渡す。
+# 応答が無いときも例外にせず、model_server: ng で返す（APサーバー自体の起動確認は別に行う）
+def model_server_status() -> Dict[str, Any]:
+    health_url = config.LOCALMODEL_SERVER_URL.rsplit("/", 1)[0] + "/health"
+    try:
+        data = requests.get(health_url, timeout=(2, 5)).json()
+    except Exception as exc:
+        log.info(f"[MODEL_SERVER] 様子を確かめられませんでした: {type(exc).__name__}: {exc}")
+        return {"model_server": "ng", "model_loaded": False, "model_name": ""}
+
+    return {
+        "model_server": "ok",
+        "model_loaded": bool(data.get("model_loaded")),
+        "model_name": data.get("model_name") or "",
+    }
+
 # stability matrix起動確認。入り口
 def check_stability(payload):
     """Stability Matrixの起動確認（Silly Tavern改造対応）"""
