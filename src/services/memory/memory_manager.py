@@ -111,28 +111,36 @@ class MemoryManager:
                 log.info(f"[PRESENT UPDATE ERROR] {type(e).__name__}: {e}")
                 failed.append(str(e))
 
+            # 2. パーティー一覧を更新する（一緒に行動すると決まった人、別行動になった人）
+            status_manager.mark_progress(session_id, 1, 3, "パーティー")
+            try:
+                self._update_parties(session_id, conversation)
+            except Exception as e:
+                log.info(f"[PARTY UPDATE ERROR] {type(e).__name__}: {e}")
+                failed.append(str(e))
+
             present = session_cast.present_cast(session_id)
             participants = "\n".join(
                 session_cast.label(p) for p in [present["player"]] + list(present.get("characters") or [])
             )
 
-            # 2. 会話のあらすじを更新する（返事の材料は最後の10行だけなので、それより前の話の要点を残す）
-            status_manager.mark_progress(session_id, 1, 2, "あらすじ")
+            # 3. 会話のあらすじを更新する（返事の材料は最後の10行だけなので、それより前の話の要点を残す）
+            status_manager.mark_progress(session_id, 2, 3, "あらすじ")
             try:
                 self._update_story_summary(session_id, conversation, participants)
             except Exception as e:
                 log.info(f"[SUMMARY UPDATE ERROR] {type(e).__name__}: {e}")
                 failed.append(str(e))
 
-            # 3. その場にいるメインキャラクターの記憶を更新する（新しく来た人も、登場人物として材料に入る）
+            # 4. その場にいるメインキャラクターの記憶を更新する（新しく来た人も、登場人物として材料に入る）
             targets = [
                 c for c in (present.get("characters") or [])
                 if c.get("kind") == "character" and (char_dir / f"{c['id']}_memory.yaml").exists()
             ]
-            total = 2 + len(targets)
+            total = 3 + len(targets)
 
             for no, person in enumerate(targets):
-                status_manager.mark_progress(session_id, 2 + no, total, f"{person['name']}: 記憶の更新")
+                status_manager.mark_progress(session_id, 3 + no, total, f"{person['name']}: 記憶の更新")
                 try:
                     self._update_character_memory(char_dir, person, conversation, participants)
                 except Exception as e:
@@ -143,8 +151,8 @@ class MemoryManager:
                 status_manager.mark_prepare_error(
                     session_id,
                     complete_stage="after",
-                    # キャラクターの記憶で失敗していれば character、その場の参加者・あらすじだけなら world
-                    error_stage="world" if all(f.startswith(("その場の参加者", "あらすじ")) for f in failed) else "character",
+                    # キャラクターの記憶で失敗していれば character、その場の参加者・パーティー・あらすじだけなら world
+                    error_stage="world" if all(f.startswith(("その場の参加者", "パーティー", "あらすじ")) for f in failed) else "character",
                     error_message=" / ".join(failed),
                 )
                 return
@@ -191,6 +199,58 @@ class MemoryManager:
         current_state["参加者"] = present
         file_utils.save_yaml_file(world_memory_path, world_memory)
         log.info("[PRESENT UPDATE] その場の参加者", [p["キャラクターID"] for p in present])
+
+    # 世界の記憶の「パーティー一覧」（現在の状態 → パーティー一覧）を、今回の会話に合わせて更新する。
+    # メンバーは登場人物にいる人だけ（プレイヤーと、見つからない人は外す）。2人に満たないパーティーは消す
+    def _update_parties(self, session_id: str, conversation: str) -> None:
+        world_memory_path = config.SESSIONS_DIR / session_id / "world_memory.yaml"
+        world_memory = file_utils.load_yaml_file(world_memory_path)
+        if not world_memory:
+            log.info("[PARTY UPDATE] 世界の記憶が無いので飛ばします")
+            return
+
+        cast = session_cast.load_cast(session_id)
+        characters = list(cast.get("characters") or [])
+        current_state = world_memory.setdefault("現在の状態", {})
+        current_parties = current_state.get("パーティー一覧") or []
+
+        prompt_data = file_utils.load_yaml_file(config.POSTPROCESS / PromptsPostprocess.PARTY)
+        prompt_data = string_utils.fill_template(prompt_data, {
+            "participants": "\n".join(session_cast.label(p) for p in characters),
+            "current_parties": yaml.safe_dump(current_parties, allow_unicode=True, sort_keys=False).strip() if current_parties else "（なし）",
+            "conversation": conversation,
+        })
+        prompt_messages = string_utils.build_messages(prompt_data)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
+
+        answer = self._ask_yaml(
+            parameters, "パーティー",
+            # キーが無い返事でパーティーを全部消さないように、キーがあることも確かめる
+            check=lambda d: isinstance(d, dict) and "パーティー一覧" in d and isinstance(d["パーティー一覧"], (list, type(None))),
+        )
+
+        def norm(s):
+            return "".join(str(s or "").split())
+
+        by_id = {p["id"]: p for p in characters}
+        by_name = {norm(p["name"]): p for p in characters}
+        parties = []
+        for party in answer.get("パーティー一覧") or []:
+            if not isinstance(party, dict):
+                continue
+            members = []
+            for item in party.get("メンバー一覧") or []:
+                if not isinstance(item, dict):
+                    continue
+                person = by_id.get(str(item.get("キャラクターID") or "")) or by_name.get(norm(item.get("名前")))
+                if person and person["id"] not in {m["キャラクターID"] for m in members}:
+                    members.append({"キャラクターID": person["id"], "名前": person["name"]})
+            if len(members) >= 2:
+                parties.append({"名前": str(party.get("名前") or "、".join(m["名前"] for m in members)), "メンバー一覧": members})
+
+        current_state["パーティー一覧"] = parties
+        file_utils.save_yaml_file(world_memory_path, world_memory)
+        log.info("[PARTY UPDATE] パーティー一覧", [[m["キャラクターID"] for m in p["メンバー一覧"]] for p in parties])
 
     # 会話のあらすじ（summary.yaml の あらすじ:）を、今回の会話に合わせて更新する
     def _update_story_summary(self, session_id: str, conversation: str, participants: str) -> None:

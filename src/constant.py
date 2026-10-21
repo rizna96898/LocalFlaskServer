@@ -35,5 +35,6 @@ class PromptsPostprocess:
     PARAMETER_FLUCTUATION = "01_query_parameter_fluctuation.yaml"
     WORLD_MEMORY          = "01_query_update_world_memory.yaml"
     STORY_SUMMARY         = "01_query_update_story_summary.yaml"
+    PARTY                 = "01_query_update_party.yaml"
     CHARACTER_ITEMS       = "02_query_update_character_items.yaml"
     CHARACTER_MEMORY      = "02_query_update_character_memory.yaml"
