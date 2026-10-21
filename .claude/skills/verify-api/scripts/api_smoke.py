@@ -472,13 +472,27 @@ def main() -> int:
         main_ids = [x["参照ID"] for x in cast_people if x.get("参照種別") == "character"]
         other_ids = [x["参照ID"] for x in cast_people if x.get("参照種別") not in ("player", "character")]
         present_prompts = []
-        # その場の参加者: メインが残り、圭太（others[0]）は出て行き、世界設定にいない「田中」が現れた
-        present_yaml = (f"その場の参加者:\n  - キャラクターID: {main_ids[0]}\n    名前: x\n    役割: ヒロイン\n"
-                        "  - キャラクターID: null\n    名前: 田中\n    役割: プレイヤーの友人\n")
+        # その場の参加者: 来た人・出て行った人だけを答える。圭太（other_ids[0]）は出て行き、世界設定にいない「田中」が現れた。
+        # 書かれなかった人（メインなど）は、会話で話していなくても残る
+        present_yaml = (f"来た人:\n  - キャラクターID: null\n    名前: 田中\n    役割: プレイヤーの友人\n"
+                        f"出て行った人:\n  - キャラクターID: {other_ids[0]}\n    名前: x\n")
+        # 初期記憶（模擬）の参加者は登場人物にいない名前なので、本番に近い形（メインと圭太がその場にいる）にしてから発言する
+        wm_file = box.sessions / msid / "world_memory.yaml"
+        wm_init = yaml.safe_load(wm_file.read_text(encoding="utf-8")) or {}
+        wm_init.setdefault("現在の状態", {})["参加者"] = [
+            {"キャラクターID": i, "名前": next((x.get("表示名") for x in cast_people if x["参照ID"] == i), i), "役割": None}
+            for i in (main_ids[0], other_ids[0])]
+        wm_file.write_text(yaml.safe_dump(wm_init, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        present_before = [main_ids[0], other_ids[0]]
 
         newcomer_answer = {"yaml": "呼ばれた人: null"}
 
         summary_prompts = []
+        party_prompts = []
+        # パーティー: メインと田中（名前だけで答える）が組む。プレイヤーと、登場人物にいない人は外れ、1人だけの組は消える
+        party_yaml = (f"パーティー一覧:\n  - 名前: 付き添い\n    メンバー一覧:\n      - キャラクターID: {main_ids[0]}\n"
+                      f"      - キャラクターID: null\n        名前: 田中\n      - キャラクターID: {pid}\n      - キャラクターID: nobody\n"
+                      f"  - 名前: ひとり\n    メンバー一覧:\n      - キャラクターID: {main_ids[0]}\n")
 
         def update_llm(prompt):
             if "呼ばれた人・話しかけられた人" in prompt:     # 返事の前の「呼ばれた人」の確認
@@ -489,6 +503,9 @@ def main() -> int:
             if "その場にいる人を管理するAI" in prompt:
                 present_prompts.append(prompt)
                 return present_yaml
+            if "一緒に行動している人のまとまりを管理するAI" in prompt:   # パーティー一覧の更新
+                party_prompts.append(prompt)
+                return party_yaml
             if "キャラクターの状態と記憶を更新するAI" in prompt:
                 update_prompts.append(prompt)
                 return updated_yaml
@@ -501,8 +518,19 @@ def main() -> int:
                      json={"session_id": msid, "message": "診察室へどうぞ"})
         t.check("  裏の記憶の更新が終わる", box.wait_background(30))
         st = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
-        t.check("  進行状態は after / ready、進み具合は「その場の参加者 ＋ あらすじ ＋ 全員分」", (st.get("complete_stage"), st.get("status")) == ("after", "ready")
-                and st.get("progress_done") == st.get("progress_total") == 2 + len(mem_files), st)
+        t.check("  進行状態は after / ready、進み具合は「その場の参加者 ＋ パーティー ＋ あらすじ ＋ 全員分」", (st.get("complete_stage"), st.get("status")) == ("after", "ready")
+                and st.get("progress_done") == st.get("progress_total") == 3 + len(mem_files), st)
+
+        # パーティー一覧の更新（→ docs/spec/chat-flow.md「発言1回分の流れ」7）
+        parties_now = ((yaml.safe_load((box.sessions / msid / "world_memory.yaml").read_text(encoding="utf-8")) or {})
+                       .get("現在の状態") or {}).get("パーティー一覧")
+        t.check("パーティー: 発言のあと、パーティー一覧が更新される（プレイヤー・いない人・1人だけの組は外れる）",
+                parties_now == [{"名前": "付き添い", "メンバー一覧": [{"キャラクターID": main_ids[0], "名前": next(
+                    (x.get("表示名") for x in cast_people if x["参照ID"] == main_ids[0]), main_ids[0])},
+                    {"キャラクターID": "guest_1", "名前": "田中"}]}], parties_now)
+        t.check("  更新のプロンプトに、今回の会話と今のパーティーが入り、プレイヤーは登場人物に入らない",
+                bool(party_prompts) and "診察室へどうぞ" in party_prompts[0] and "{current_parties}" not in party_prompts[0]
+                and f"{pid}（" not in party_prompts[0].split("今のパーティー一覧")[0], party_prompts[:1])
 
         # 会話のあらすじ（→ docs/spec/chat-flow.md「発言1回分の流れ」8）
         summary = yaml.safe_load((box.sessions / msid / "summary.yaml").read_text(encoding="utf-8")) if (box.sessions / msid / "summary.yaml").exists() else {}
@@ -515,7 +543,8 @@ def main() -> int:
         wm = yaml.safe_load((box.sessions / msid / "world_memory.yaml").read_text(encoding="utf-8")) or {}
         now_ids = [x.get("キャラクターID") for x in (wm.get("現在の状態") or {}).get("参加者") or []]
         t.check("その場の参加者: 発言のあと、来た人・出て行った人に合わせて更新される（プレイヤーも先頭に入る）",
-                now_ids == [pid, main_ids[0], "guest_1"], now_ids)
+                now_ids == [pid] + [i for i in present_before if i not in (pid, other_ids[0])] + ["guest_1"]
+                and main_ids[0] in now_ids, (present_before, now_ids))
         session_world = yaml.safe_load(next((box.sessions / msid).glob("*_world.yaml")).read_text(encoding="utf-8")) or {}
         guest = next((x for x in session_world["登場人物"]["世界の登場人物"] if x.get("参照ID") == "guest_1"), {})
         t.check("  新しく現れた人は、セッションの登場人物に guest_1（inline・sub、職業に立場）で足される",
@@ -539,6 +568,8 @@ def main() -> int:
         jp = judge_prompts[0] if judge_prompts else ""
         t.check("  次の発言の候補は、その場にいる人だけ（田中は入り、出て行った人は入らない）",
                 "guest_1（田中・プレイヤーの友人）" in jp and all(f"{o}（" not in jp for o in other_ids), jp[-400:])
+        t.check("  出入りの答えに書かれなかった人（会話で話していないメイン）は、その場に残っている",
+                f"{main_ids[0]}（" in jp, jp[-400:])
 
         # 返事の前: 世界設定にいない人に声をかけたら、その発言で登場人物に足され、返事をする
         newcomer_answer["yaml"] = "呼ばれた人:\n  - キャラクターID: null\n    名前: 鈴木\n    役割: 看護師\n"
