@@ -185,16 +185,33 @@ class MemoryManager:
         prompt_messages = string_utils.build_messages(prompt_data)
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
 
+        # 全員の一覧を書かせると、会話で話した人だけを書いて、ほかの人を落とすことがある（出入りが無いのに白井夫妻が消えた）。
+        # そのため「来た人」と「出て行った人」だけを答えさせ、書かれなかった人はそのまま残す
         answer = self._ask_yaml(
             parameters, "その場の参加者",
-            check=lambda d: isinstance(d, dict) and isinstance(d.get("その場の参加者", []), (list, type(None))),
+            check=lambda d: isinstance(d, dict) and ("来た人" in d or "出て行った人" in d)
+            and all(isinstance(d.get(k), (list, type(None))) for k in ("来た人", "出て行った人")),
         )
 
-        people = self._resolve_people(session_id, world_memory, cast, answer.get("その場の参加者"))
+        # 出て行った人は、登場人物にいる人だけを探す（新しい人として足さない）
+        left_ids = {p["id"] for p in self._match_people(everyone, answer.get("出て行った人"))}
+        came = self._resolve_people(session_id, world_memory, cast, answer.get("来た人"))
 
         # プレイヤーは常にいる扱いで、一覧の先頭に入れる
+        player_id = cast["player"]["id"]
         present = [self._present_entry(cast["player"], cast["player"].get("job"))]
-        present += [self._present_entry(person, role) for person, role in people if person["id"] != cast["player"]["id"]]
+        # 今の参加者は、登場人物とIDか名前で照らし合わせて残す（初期記憶ではIDが空のことがある。見つからない人は外す）
+        roles = {}
+        for item in current_present:
+            if isinstance(item, dict):
+                for person in self._match_people(everyone, [item]):
+                    roles.setdefault(person["id"], item.get("役割"))
+        present += [self._present_entry(person, roles.get(person["id"]))
+                    for person in self._match_people(everyone, current_present)
+                    if person["id"] not in (player_id, *left_ids)]
+        kept = {p["キャラクターID"] for p in present}
+        present += [self._present_entry(person, role) for person, role in came
+                    if person["id"] not in kept and person["id"] not in left_ids]
 
         current_state["参加者"] = present
         file_utils.save_yaml_file(world_memory_path, world_memory)
@@ -356,6 +373,23 @@ class MemoryManager:
             seen.add(person["id"])
             result.append((person, role))
         return result
+
+    @staticmethod
+    def _match_people(people: list, items) -> list:
+        """答え（キャラクターID・名前の一覧）から、people の中の人を探す。見つからない人は無視する"""
+        def norm(s):
+            return "".join(str(s or "").split())
+
+        by_id = {p["id"]: p for p in people}
+        by_name = {norm(p["name"]): p for p in people}
+        found = []
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            person = by_id.get(str(item.get("キャラクターID") or "")) or by_name.get(norm(item.get("名前")))
+            if person and person not in found:
+                found.append(person)
+        return found
 
     @staticmethod
     def _present_entry(person: dict, role) -> dict:
