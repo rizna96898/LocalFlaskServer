@@ -150,6 +150,8 @@ files/prompts/
 | `02_main/02_query_judge_character_identification.yaml` | 誰に向けた発言かの判定（返事をする人を決める） | **使用中** |
 | `02_main/03_query_judge_attention.yaml` | 返事のあと、意識が誰に向いているかの確認 | **使用中** |
 | `02_main/04_query_cross_talk.yaml` | 掛け合いの話しかけ（意識が向いている相手に一言） | **使用中** |
+| `02_main/05_query_judge_consult.yaml` | 返事の前に、同じパーティーの人に相談するかの確認 | **使用中**（2026-10-20 に新しく作った） |
+| `02_main/06_query_consult.yaml` | 相談の話しかけ（プレイヤーに答える前に、同じパーティーの人へ） | **使用中**（2026-10-20 に新しく作った） |
 | `03_postprocess/01_query_parameter_fluctuation.yaml` | パラメーターの変動 | 未使用 |
 | `03_postprocess/01_query_update_edit_summary.yaml` | 要約の更新 | 未使用 |
 | `03_postprocess/01_query_update_story_summary.yaml` | 発言のあとの会話のあらすじの更新（`summary.yaml`） | **使用中**（2026-10-20 に新しく作った） |

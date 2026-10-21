@@ -346,6 +346,57 @@ def main() -> int:
         body = t.api(client, "chat（意識の確認に失敗しても返事は返す）", "post", "/chat", 200, True, ["messages"],
                      json={"session_id": sid, "message": "大丈夫？"})
         t.check("  返事だけの1行", len(body.get("messages", [])) == 1, body.get("messages"))
+
+        # パーティー: 相談と、掛け合いの相手（→ docs/spec/chat-flow.md「発言1回分の流れ」2a・4）
+        wm_path = box.sessions / sid / "world_memory.yaml"
+        wm_saved = wm_path.read_bytes() if wm_path.exists() else None
+
+        def set_party(member_ids):
+            wm_path.write_text(yaml.safe_dump({"現在の状態": {"パーティー一覧": [
+                {"名前": "テストの組", "メンバー一覧": [{"キャラクターID": i, "名前": names.get(i, i)} for i in member_ids]}]}},
+                allow_unicode=True), encoding="utf-8")
+
+        party_prompts = []
+
+        def party_llm(prompt, consult_to="null"):
+            party_prompts.append(prompt)
+            if "だれかに相談するか" in prompt:
+                return f"相談: {consult_to}"
+            if "に相談します。" in prompt:
+                return "（迷って）\nどうしよう？"
+            return talk_llm(prompt, attention_to=sub)
+
+        set_party([main, sub])
+        body = t.api(box.client(llm=lambda q: party_llm(q, consult_to=sub)), "chat（同じパーティーの人に相談してから答える）",
+                     "post", "/chat", 200, True, ["messages"], json={"session_id": sid, "message": "二つの方法がありますが、どうされますか？"})
+        got = [(m.get("icon_data", {}).get("character_id"), m.get("message")) for m in body.get("messages", [])]
+        t.check("  相談 → 相手の返事 → プレイヤーへの返事 の3行",
+                got == [(main, "（迷って）\nどうしよう？"), (sub, "（うなずく）\nうん"), (main, "（嬉しい）\nはーい")], got)
+        t.check("  相談したときは、意識の確認をしない", not any("意識を向けている相手」を特定" in q for q in party_prompts))
+        check_prompt = next((q for q in party_prompts if "だれかに相談するか" in q), "")
+        final_prompt = [q for q in party_prompts if f"あなたは {names[main]} として" in q and "に相談します。" not in q][-1:]
+        t.check("  相談の確認に、相談できる相手とパーティーが入る",
+                f"{sub}（" in check_prompt.split("相談できる相手:")[-1] and "テストの組" in check_prompt and "{mates}" not in check_prompt, check_prompt[-500:])
+        t.check("  プレイヤーへの返事のプロンプトに、相談のやり取りが入る", bool(final_prompt) and "どうしよう？" in final_prompt[0], final_prompt)
+
+        party_prompts.clear()
+        body = t.api(box.client(llm=party_llm), "chat（相談しない → 返事のあと、同じパーティーの人と掛け合い）",
+                     "post", "/chat", 200, True, ["messages"], json={"session_id": sid, "message": "こんにちは"})
+        t.check("  返事 → 話しかけ → 相手の返事 → 向き直り の4行", len(body.get("messages", [])) == 4, body.get("messages"))
+        attention = next((q for q in party_prompts if "意識を向けている相手」を特定" in q), "")
+        t.check("  意識の確認に、パーティー一覧が入る", "テストの組" in attention and "{parties}" not in attention, attention[-400:])
+
+        set_party([main, "nobody"])
+        party_prompts.clear()
+        body = t.api(box.client(llm=party_llm), "chat（意識の相手が同じパーティーでなければ掛け合わない）",
+                     "post", "/chat", 200, True, ["messages"], json={"session_id": sid, "message": "こんにちは"})
+        t.check("  返事だけの1行", len(body.get("messages", [])) == 1, body.get("messages"))
+        t.check("  その場に同じパーティーの人がいなければ、相談の確認もしない", not any("だれかに相談するか" in q for q in party_prompts))
+
+        if wm_saved is None:
+            wm_path.unlink()
+        else:
+            wm_path.write_bytes(wm_saved)
     client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
 
     # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）

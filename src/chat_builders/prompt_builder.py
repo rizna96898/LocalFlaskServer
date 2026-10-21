@@ -50,6 +50,14 @@ class ChatPromptBuilder:
         """掛け合いの話しかけのプロンプト（04_query_cross_talk.yaml）"""
         return self._build_filled(PromptsMain.CROSS_TALK, values)
 
+    def create_consult_check_prompt(self, values: Dict[str, str]) -> List[Dict]:
+        """返事の前に、同じパーティーの人に相談するかを決めるプロンプト（05_query_judge_consult.yaml）"""
+        return self._build_filled(PromptsMain.CONSULT_CHECK, values)
+
+    def create_consult_prompt(self, values: Dict[str, str]) -> List[Dict]:
+        """相談の話しかけのプロンプト（06_query_consult.yaml）"""
+        return self._build_filled(PromptsMain.CONSULT, values)
+
     def create_discrimination_prompt(self, candidates: List[Dict], previous_message: str = "", message: str = "") -> List[Dict]:
         """誰向けの発言か特定するための プロンプト
 

@@ -5,6 +5,7 @@ from services.memory.memory_manager import MemoryManager
 from services.chat.chat_manager import ChatManager
 from services.status import status_manager
 from services.image import image_generation
+from helpers import session_cast
 from logger import log
 # Orchestratorの初期化
 
@@ -25,7 +26,7 @@ class ChatUtils:
         # 初期記憶の非同期作成
         return self.memory_manager.create_initial_memory(session_id)
 
-    # 発言1回分。戻り値は、履歴に足す発言の並び [(発言者, 本文), ...]（返事と、あれば掛け合いの2行）
+    # 発言1回分。戻り値は、履歴に足す発言の並び [(発言者, 本文), ...]（返事と、あれば相談か掛け合いの行）
     # history: プレイヤーの発言まで入った会話ログ（書き換えない）
     def chat(self, session_id, body:Dict, message, cast, previous_message="", history=None) -> list:
         #session_id = body.get("session_id")
@@ -39,22 +40,52 @@ class ChatUtils:
         # 1. 返事をする人を決める（誰に向けた発言かの判定）
         _, responder = self.chat_manager.main_chat(body, session_id, message, cast, previous_message)
 
-        # 2. 返事を作る（材料の会話ログは、プレイヤーの発言の手前まで）
+        # 相談・意識の確認・掛け合いは、メインキャラクター（参照種別 character）が返事をするときだけ。
+        # サブや途中から来た人が返事をするときは、返事の1行で終わる。
+        is_main = responder.get("kind") == "character"
+        if not is_main:
+            log.info(f"[CHAT] メイン以外の返事なので、相談・意識の確認・掛け合いはしません: {responder['id']}")
+
+        # 相談できる相手（同じパーティーで、その場にいる人）。パーティーに入っていなければ None（相手を絞らない）
+        mates = session_cast.party_mates(session_id, responder["id"]) if session_cast.in_party(session_id, responder["id"]) else None
+
+        # 2a. 相談の確認: 同じパーティーの人がいれば、返事の前に相談するかを決める。
+        # 相談するなら「相談 → 相手の返事 → プレイヤーへの返事」の順。ここで失敗したら、相談せずに返事をする
         log_before = list(history or [])[:-1]
+        consult_lines = []
+        if is_main and mates:
+            try:
+                mate = self.chat_manager.consult_check(session_id, responder, mates, cast["player"], message, log_before)
+                if mate:
+                    ask = self.chat_manager.consult(session_id, responder, mate, cast["player"], message, log_before)
+                    answer = self.chat_manager.reply(session_id, mate, responder, ask, list(history or []))
+                    consult_lines = [(responder, ask), (mate, answer)]
+            except Exception as e:
+                log.info(f"[CHAT] 相談を飛ばしました: {type(e).__name__}: {e}")
+                consult_lines = []
+
+        # 2. 返事を作る（材料の会話ログは、プレイヤーの発言の手前まで。相談したときは、発言と相談まで）
+        if consult_lines:
+            log_consult = list(history or []) + [self._as_log(p, m) for p, m in consult_lines]
+            reply = self.chat_manager.reply(session_id, responder, cast["player"], message, log_consult)
+            # 相手と話したあとなので、意識の確認と掛け合いはしない
+            return self._finish(session_id, consult_lines + [(responder, reply)])
+
         reply = self.chat_manager.reply(session_id, responder, cast["player"], message, log_before)
         lines = [(responder, reply)]
 
         # 3・4. 意識を確かめ、プレイヤー以外に向いていれば、掛け合いを1往復。
-        # 意識の確認と掛け合いは、メインキャラクター（参照種別 character）が返事をしたときだけ。
-        # サブや途中から来た人が返事をしたときは、返事の1行で終わる。
+        # 掛け合いの相手は、同じパーティーの人だけ（パーティーに入っていない人は、相手を絞らない）。
         # ここで失敗しても、返事までは返す（掛け合いは無しにする）
         try:
             log_now = list(history or []) + [self._as_log(responder, reply)]
             target = None
-            if responder.get("kind") == "character":
+            if is_main:
                 target = self.chat_manager.attention(session_id, responder, cast, log_now)
-            else:
-                log.info(f"[CHAT] メイン以外の返事なので、意識の確認・掛け合いはしません: {responder['id']}")
+
+            if target and mates is not None and target["id"] not in {m["id"] for m in mates}:
+                log.info(f"[CHAT] 意識の相手が同じパーティーではないので、掛け合いはしません: {target['id']}")
+                target = None
 
             if target and target["id"] not in (cast["player"]["id"], responder["id"]):
                 opener = self.chat_manager.cross_talk(session_id, responder, target, log_now, reply)
@@ -68,6 +99,11 @@ class ChatUtils:
         except Exception as e:
             log.info(f"[CHAT] 意識の確認・掛け合いを飛ばしました: {type(e).__name__}: {e}")
 
+        return self._finish(session_id, lines)
+
+    # 発言1回分の終わり。進行状態を ready に戻し、履歴に足す発言の並びを返す
+    @staticmethod
+    def _finish(session_id, lines) -> list:
         #待機中に更新
         status_manager.update_prepare_status(
             session_id,
