@@ -449,6 +449,20 @@ def main() -> int:
             (wm.get("プレイヤーID"), wm.get("プレイヤー名")))
     memories = sorted(p.name for p in (box.sessions / msid / "character").glob("*_memory.yaml"))
     t.check("キャラクターの記憶ができる", len(memories) >= 1, memories)
+
+    # 持ち物（→ docs/spec/api.md「/session_items」）。メインキャラクターだけ、記憶の所持品と所持金を返す
+    body = t.api(scripted, "session_items", "post", "/session_items", 200, True, ["characters"], json={"session_id": msid})
+    got_items = body.get("characters") or []
+    cast_all = [x for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") not in (None, "null")]
+    want_ids = [x["参照ID"] for x in cast_all if x.get("参照種別") == "character"]
+    t.check("  メインキャラクターだけが並ぶ（サブ・プレイヤーは出ない）", [c.get("character_id") for c in got_items] == want_ids, got_items)
+    first_mem = yaml.safe_load((box.sessions / msid / "character" / f"{want_ids[0]}_memory.yaml").read_text(encoding="utf-8")) or {}
+    first_state = first_mem.get("現在の状態") or {}
+    t.check("  所持品は記憶のとおり、所持金は通貨単位と金額", got_items and got_items[0].get("items") == [str(i) for i in first_state.get("所持品") or []]
+            and got_items[0].get("money") == [{"unit": "円", "amount": 5000}], (got_items[:1], first_state.get("所持品"), first_state.get("金額")))
+    t.api(scripted, "session_items session_id 不正 → 400", "post", "/session_items", 400, False, json={"session_id": "../x"})
+    t.api(scripted, "session_items 無いセッション → 404", "post", "/session_items", 404, False, json={"session_id": "no_such_session"})
+
     sent = box.llm_requests[before:]
     stages = ["状態と記憶を構造化", "情報抽出担当", "「居場所」を特定", "分類機", "「現在の服装」を特定",
               "「現在の所持品」を特定", "「意識を向けている相手」を特定", "「所持金」を確定"]
