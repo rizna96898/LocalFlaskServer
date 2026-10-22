@@ -36,7 +36,7 @@ JSを触ったら、まずこれを通す。
 ### 2. スクリーンショットで見た目を確かめる
 
 ```
-py -3 .claude/skills/verify-ui/scripts/screenshot.py --page character.html --out <保存先>.png
+py -3 .claude/skills/verify-ui/scripts/screenshot.py --page "person_card.html?kind=character" --out <保存先>.png
 ```
 
 撮れたPNGは **Read ツールで開いて、自分の目で見る**。撮っただけで「確認した」ことにしない。
@@ -48,7 +48,7 @@ py -3 .claude/skills/verify-ui/scripts/screenshot.py --page character.html --out
 
 | 指定 | 用途 |
 |---|---|
-| `--page FILE` | 開くHTML。既定は `index_3column_session.html` |
+| `--page FILE` | 開くHTML。既定は `index_3column_session.html`。`?` 以降はURLに付く（`person_card.html?kind=player` でプレイヤー設定） |
 | `--inject FILE.js` | ページのJSの後に読み込ませるJS。画面を「見たい状態」にする |
 | `--storage KEY=VALUE` | ページのJSより前に `localStorage` へ入れる値。何度でも指定できる |
 | `--hash TEXT` | URLの `#` 以降。`--inject` のJSから `location.hash` で読める |
@@ -63,7 +63,7 @@ py -3 .claude/skills/verify-ui/scripts/screenshot.py --page character.html --out
 `examples/open_icon_cropper.js` が実例。キャラクター画面でアイコン切り抜きウィンドウを開き、OKを押した後まで撮れる。
 
 ```
-py -3 .claude/skills/verify-ui/scripts/screenshot.py --page character.html ^
+py -3 .claude/skills/verify-ui/scripts/screenshot.py --page "person_card.html?kind=character" ^
     --inject .claude/skills/verify-ui/examples/open_icon_cropper.js --title --out cropper.png
 ```
 

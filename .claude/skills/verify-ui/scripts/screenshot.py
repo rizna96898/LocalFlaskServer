@@ -1,12 +1,13 @@
 """LLM_CHAT_CONSOLE の画面を、画面なしのブラウザ(Edge)で描画してスクリーンショットを撮る。
 
-    py -3 .claude/skills/verify-ui/scripts/screenshot.py --page character.html --out shot.png
+    py -3 .claude/skills/verify-ui/scripts/screenshot.py --page "person_card.html?kind=player" --out shot.png
 
 リポジトリのコピーに対して実行するので、元のファイルは書き換えない。
 撮れたPNGは Read ツールで開いて目で確かめる。
 
 よく使う指定:
-  --page FILE          開くHTML（既定: index_3column_session.html）
+  --page FILE          開くHTML（既定: index_3column_session.html）。? 以降はURLに付く
+                       （例: person_card.html?kind=player でプレイヤー設定の画面）
   --inject FILE.js     ページのJSの後に読み込ませるJS。ボタンを押す、ウィンドウを開く、など
                        画面を「見たい状態」にするために使う
   --storage KEY=VALUE  ページのJSより前に localStorage へ入れておく値（何度でも指定可）
@@ -115,9 +116,12 @@ def main() -> int:
     parser.add_argument("--title", action="store_true", help="撮影後の document.title を表示する")
     args = parser.parse_args()
 
+    # --page person_card.html?kind=player のように、? 以降はURLに付ける
+    page_file, _, page_query = args.page.partition("?")
+
     repo = Path(args.repo)
-    if not (repo / args.page).exists():
-        raise SystemExit(f"{repo} に {args.page} がありません。")
+    if not (repo / page_file).exists():
+        raise SystemExit(f"{repo} に {page_file} がありません。")
 
     sandbox = _env.default_sandbox()
     site = sandbox / "ui" / "site"
@@ -132,9 +136,9 @@ def main() -> int:
         storage[key] = value
 
     copy_site(repo, site)
-    page = prepare_page(site, args.page, Path(args.inject).resolve() if args.inject else None, storage)
+    page = prepare_page(site, page_file, Path(args.inject).resolve() if args.inject else None, storage)
 
-    url = page.resolve().as_uri() + (f"#{args.hash}" if args.hash else "")
+    url = page.resolve().as_uri() + (f"?{page_query}" if page_query else "") + (f"#{args.hash}" if args.hash else "")
     out = Path(args.out).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists():

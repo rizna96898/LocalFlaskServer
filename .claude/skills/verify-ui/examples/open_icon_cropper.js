@@ -1,7 +1,7 @@
 // screenshot.py の --inject に渡す例。
-// キャラクター画面(character.html)で、アイコン切り抜きウィンドウを開いた状態にする。
+// キャラクター画面・プレイヤー設定(person_card.html)で、アイコン切り抜きウィンドウを開いた状態にする。
 //
-//   py -3 .claude/skills/verify-ui/scripts/screenshot.py --page character.html \
+//   py -3 .claude/skills/verify-ui/scripts/screenshot.py --page "person_card.html?kind=character" \
 //       --inject .claude/skills/verify-ui/examples/open_icon_cropper.js --title --out cropper.png
 //
 //   --hash apply を付けると、OKを押した後（切り抜き結果がアイコンに入った状態）を撮る。
@@ -28,7 +28,7 @@ window.addEventListener("load", () => {
   ctx.fillText("TEST 900x600", 250, 320);
 
   canvas.toBlob((blob) => {
-    // character.js の関数をそのまま呼ぶ
+    // person_card.js の関数をそのまま呼ぶ
     openIconCropper(new File([blob], "test.png", { type: "image/png" }));
 
     setTimeout(() => {
