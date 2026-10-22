@@ -210,6 +210,10 @@ class ChatOrchestrator:
     # セッションリストから選択した際に、会話履歴を読み込んで返却する
     def selected_session(self, payload):
         return self.chat_execute.selected_session(payload)
+
+    # セッションのメインキャラクターの持ち物（所持品と所持金）を返却する
+    def session_items(self, payload):
+        return self.chat_execute.session_items(payload)
     
     # メッセージをクリックした時のページネーション部分を展開して返却
     def selected_message(self, payload):

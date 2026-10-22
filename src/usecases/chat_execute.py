@@ -28,6 +28,19 @@ import os
 import sys
 from logger import log
 
+# キャラクターの記憶の「金額」を、[{"unit": 通貨単位, "amount": 金額}] にする。
+# 形は 金額: {通貨: {通貨単位: 円, 金額: 10000}}（通貨が複数あれば、キーが増える）。読めない所は飛ばす
+def _money_list(money) -> list:
+    if not isinstance(money, dict):
+        return []
+    entries = [money] if "金額" in money else list(money.values())
+    result = []
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("金額") not in (None, ""):
+            result.append({"unit": str(entry.get("通貨単位") or ""), "amount": entry.get("金額")})
+    return result
+
+
 class ChatExecute:
     def __init__(self):
         self.model_handling_service = None
@@ -197,6 +210,33 @@ class ChatExecute:
                 "label": data.get("progress_label") or "",
             },
         )
+
+    # セッションのメインキャラクター（参照種別 character）全員の持ち物。キャラクターの記憶の「現在の状態」から読む。
+    # サブ・モブ・プレイヤーは記憶が無く、持ち物も持たない扱いなので返さない
+    def session_items(self, payload):
+        session_id = (payload or {}).get("session_id") or ""
+
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
+            return response_checker.response_error("session_id が不正です", 400)
+
+        if not (config.SESSIONS_DIR / session_id).is_dir():
+            return response_checker.response_error("セッションがありません", 404)
+
+        char_dir = config.SESSIONS_DIR / session_id / "character"
+        characters = []
+        for person in session_cast.load_cast(session_id).get("characters") or []:
+            if person.get("kind") != "character":
+                continue
+            memory = file_utils.load_yaml_file(char_dir / f"{person['id']}_memory.yaml") or {}
+            state = memory.get("現在の状態") if isinstance(memory.get("現在の状態"), dict) else {}
+            characters.append({
+                "character_id": person["id"],
+                "character_name": person["name"],
+                "items": [str(item) for item in (state.get("所持品") or []) if item not in (None, "")],
+                "money": _money_list(state.get("金額")),
+            })
+
+        return response_checker.response_ok(session_id=session_id, characters=characters)
 
     def selected_session(self, payload):
 

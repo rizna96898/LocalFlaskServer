@@ -163,6 +163,12 @@ def session_status():
     return orchestrator.session_status(request.get_json(silent=True))
 
 # セッションリストから選択した際に、会話履歴を読み込んで返却する
+# セッションのメインキャラクターの持ち物（所持品と所持金）を返却
+@app.post("/session_items")
+def session_items():
+    return orchestrator.session_items(request.get_json(silent=True))
+
+
 @app.post("/selected_session")
 def selected_session():
     return orchestrator.selected_session(request.get_json())

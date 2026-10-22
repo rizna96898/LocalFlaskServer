@@ -39,9 +39,10 @@
   - [`POST /chat`](#s8-5)
   - [`POST /selected_session`](#s8-6)
   - [`POST /session_status`](#s8-7)
-  - [`POST /selected_message`](#s8-8)
-  - [`POST /delete_session`](#s8-9)
-  - [履歴のファイル](#s8-10)
+  - [`POST /session_items`](#s8-8)
+  - [`POST /selected_message`](#s8-9)
+  - [`POST /delete_session`](#s8-10)
+  - [履歴のファイル](#s8-11)
 - [その他](#s9)
   - [`/v1/chat/check_stability`（GET / POST）](#s9-1)
 - [要確認の一覧](#s10)
@@ -140,6 +141,7 @@
 | `POST /chat` | 発言する | メイン |
 | `POST /selected_session` | セッションを開く（履歴を返す） | メイン |
 | `POST /session_status` | セッションの進行状態（初期記憶の進み具合）を返す | メイン |
+| `POST /session_items` | セッションのメインキャラクターの持ち物（所持品と所持金）を返す | メイン |
 | `POST /selected_message` | 畳まれた過去の履歴を展開する | メイン |
 | `POST /delete_session` | セッションを削除する | メイン |
 | `GET /session_image/{セッションID}/{種別}/{キャラクターID}` | チャット画面用のアイコン・立ち絵を返す | メイン |
@@ -689,6 +691,24 @@
 
 <a id="s8-8"></a>
 
+### `POST /session_items`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+セッションのメインキャラクター（`参照種別` が `character`）全員の持ち物を返す。画面の「持ち物」で使う。
+キャラクターの記憶（`character/{ID}_memory.yaml`）の「現在の状態」の `所持品` と `金額` から読むので、発言のあとに記憶が更新されると変わる。
+
+| 項目 | 必須 | 内容 |
+|---|---|---|
+| `session_id` | 必須 | |
+
+- 返却: `{"ok": true, "session_id": ..., "characters": [{"character_id": ..., "character_name": ..., "items": ["スマホ", ...], "money": [{"unit": "円", "amount": 10000}]}]}`
+  - 並びは、セッションの登場人物の順。記憶がまだ無い人は、`items` と `money` が空。
+  - サブ・モブ・プレイヤーは入らない（持ち物を持たない扱い）。
+- 失敗: `session_id` が無い・文字種が違う（400）、セッションのフォルダが無い（404）
+
+<a id="s8-9"></a>
+
 ### `POST /selected_message`
 
 <div align="right"><a href="#top">▲ 目次へ</a></div>
@@ -703,7 +723,7 @@
 - 返却: `{"ok": true, "session_id": ..., "message_list": [10件]}`
 - 画面は、クリックされた印を、返ってきた10件で置き換える。
 
-<a id="s8-9"></a>
+<a id="s8-10"></a>
 
 ### `POST /delete_session`
 
@@ -717,7 +737,7 @@
 - 1件ずつ、一覧から外し、セッションフォルダ・記憶生成の途中結果（`temp/`）・問い合わせの記録（`logs/{セッションID}/`）を消す。途中で失敗したものは `failed_session_ids` に入り、残りは続ける。
 - 一部が失敗しても全体は `ok: true`。画面は2つの配列を見て結果を表示する。
 
-<a id="s8-10"></a>
+<a id="s8-11"></a>
 
 ### 履歴のファイル
 
