@@ -673,6 +673,9 @@ def main() -> int:
         t.check("  更新のプロンプトに、今の記憶と今回の会話が入る",
                 bool(update_prompts) and "診察室へどうぞ" in update_prompts[0] and "よろしくお願いします" in update_prompts[0]
                 and "{current_memory}" not in update_prompts[0], update_prompts[:1])
+        t.check("  更新のプロンプトに、プレイヤーの名前が入る（プレイヤーの（ ）の行動を確定した出来事として扱わせる）",
+                bool(update_prompts) and f"{display[pid]}（プレイヤー）の（ ）の中の行動" in update_prompts[0]
+                and "{player_name}" not in update_prompts[0], update_prompts[:1])
         # 記憶の更新に渡す登場人物は、その場にいる人（プレイヤー・メイン・新しく来た田中）。出て行った人は入らない
         jobs = [x.get("職業") for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") in ("player", "character") and x.get("職業")] + ["プレイヤーの友人"]
         gone_jobs = [x.get("職業") for x in world["登場人物"]["世界の登場人物"] if x.get("参照種別") not in (None, "null", "player", "character") and x.get("職業")]
