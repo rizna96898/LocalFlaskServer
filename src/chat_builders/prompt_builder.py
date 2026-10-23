@@ -54,6 +54,10 @@ class ChatPromptBuilder:
         """返事の前に、同じパーティーの人に相談するかを決めるプロンプト（05_query_judge_consult.yaml）"""
         return self._build_filled(PromptsMain.CONSULT_CHECK, values)
 
+    def create_called_names_prompt(self, values: Dict[str, str]) -> List[Dict]:
+        """プレイヤーの発言で、名前で呼ばれた相手を抜き出すプロンプト（07_query_judge_called_names.yaml）"""
+        return self._build_filled(PromptsMain.CALLED_NAMES, values)
+
     def create_consult_prompt(self, values: Dict[str, str]) -> List[Dict]:
         """相談の話しかけのプロンプト（06_query_consult.yaml）"""
         return self._build_filled(PromptsMain.CONSULT, values)

@@ -37,8 +37,29 @@ class ChatUtils:
             complete_stage="main_chat",
         )
 
-        # 1. 返事をする人を決める（誰に向けた発言かの判定）
-        _, responder = self.chat_manager.main_chat(body, session_id, message, cast, previous_message)
+        # 1. 返事をする人を決める。まず、名前で呼ばれた人を探す（モデルが名前を抜き出し、だれに当たるかはプログラムで照らし合わせる）。
+        # ここで失敗したら、名前で呼ばれた人はいない扱いにする
+        log_before = list(history or [])[:-1]
+        try:
+            called = self.chat_manager.called_responders(session_id, cast, message)
+        except Exception as e:
+            log.info(f"[CHAT] 呼ばれた名前の確認を飛ばしました: {type(e).__name__}: {e}")
+            called = []
+
+        # 2人以上が名前で呼ばれたら、呼ばれた順にそれぞれが返事をする（相談・意識の確認・掛け合いはしない）。
+        # あとの人の材料には、プレイヤーの発言と、先の人の返事まで入れる
+        if len(called) >= 2:
+            lines = []
+            for no, person in enumerate(called):
+                log_for = log_before if no == 0 else list(history or []) + [self._as_log(p, m) for p, m in lines]
+                lines.append((person, self.chat_manager.reply(session_id, person, cast["player"], message, log_for)))
+            return self._finish(session_id, lines)
+
+        # 1人だけ呼ばれたらその人。呼ばれていなければ、誰に向けた発言かを判定する
+        if called:
+            responder = called[0]
+        else:
+            _, responder = self.chat_manager.main_chat(body, session_id, message, cast, previous_message)
 
         # 相談・意識の確認・掛け合いは、メインキャラクター（参照種別 character）が返事をするときだけ。
         # サブや途中から来た人が返事をするときは、返事の1行で終わる。
@@ -51,7 +72,6 @@ class ChatUtils:
 
         # 2a. 相談の確認: 同じパーティーの人がいれば、返事の前に相談するかを決める。
         # 相談するなら「相談 → 相手の返事 → プレイヤーへの返事」の順。ここで失敗したら、相談せずに返事をする
-        log_before = list(history or [])[:-1]
         consult_lines = []
         if is_main and mates:
             try:

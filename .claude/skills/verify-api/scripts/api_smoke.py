@@ -258,7 +258,12 @@ def main() -> int:
     t.check("  判定できなければ、返事をするのは最初のメイン", body.get("icon_data", {}).get("character_id") == mains[0], body.get("icon_data"))
     t.check("  履歴: 開始メッセージ（最初のメイン）、発言（実際のプレイヤー）、返事",
             [h[:2] for h in history()] == [("1", mains[0]), ("2", pid), ("3", mains[0])], history())
-    judge = box.llm_requests[before].get("prompt", "") if len(box.llm_requests) > before else ""
+    # 判定の前に「呼ばれた名前」の問い合わせが入るので、判定のプロンプトは中身で探す
+    judge = next((q.get("prompt", "") for q in box.llm_requests[before:] if "誰に向けた物かを判別" in q.get("prompt", "")), "")
+    called_prompt = next((q for q in box.llm_requests[before:] if "名前を呼ばれた相手を抜き出す担当" in q.get("prompt", "")), {})
+    t.check("  返事の人を決める前に、呼ばれた名前を聞き、今回の発言が入る（判定より先）",
+            "こんにちは" in called_prompt.get("prompt", "") and box.llm_requests[before:].index(called_prompt) == 0
+            and called_prompt.get("temperature") == 0.1, called_prompt.get("prompt", "")[-200:])
     t.check("  判定プロンプトの候補に、職業が付く",
             all(f"・{x['職業']}）" in judge for x in people if x.get("参照種別") != "player" and x.get("職業")), judge[:400])
     t.check("  判定プロンプトに、世界の登場人物が入る（直書きでない）",
@@ -406,6 +411,37 @@ def main() -> int:
             wm_path.unlink()
         else:
             wm_path.write_bytes(wm_saved)
+
+        # 名前で呼ばれた人（→ docs/spec/chat-flow.md「発言1回分の流れ」1）。モデルは名前を抜き出すだけで、だれに当たるかはプログラムが決める
+        main_family = names[main].replace("　", " ").split()[0]
+        sub_name = names[sub]
+        called_answer = {"yaml": "呼ばれた名前: []"}
+        called_prompts = []
+
+        def called_llm(prompt):
+            called_prompts.append(prompt)
+            if "名前を呼ばれた相手を抜き出す担当" in prompt:
+                return called_answer["yaml"]
+            if f"あなたは {names[main]} として" in prompt and "今、あなたの意識は" not in prompt:
+                return "（会釈して）\nよろしくお願いします"
+            return talk_llm(prompt, attention_to=pid)
+
+        called_answer["yaml"] = f"呼ばれた名前:\n  - {main_family}\n  - {sub_name}\n"
+        body = t.api(box.client(llm=called_llm), "chat（2人を名前で呼ぶ → 呼ばれた順にそれぞれが返事）", "post", "/chat", 200, True, ["messages"],
+                     json={"session_id": sid, "message": f"{main_family}さん、宜しく。{sub_name}さん、お願いします"})
+        got = [(m.get("icon_data", {}).get("character_id"), m.get("message")) for m in body.get("messages", [])]
+        t.check("  名字だけでも当たり、呼ばれた順に2人が返事をする（判定はしない）",
+                got == [(main, "（会釈して）\nよろしくお願いします"), (sub, "（うなずく）\nうん")]
+                and not any("誰に向けた物かを判別" in q for q in called_prompts), got)
+        second = next((q for q in called_prompts if f"あなたは {names[sub]} として" in q), "")
+        t.check("  あとの人の返事の材料に、先の人の返事が入る", "よろしくお願いします" in second.split("#これまでの会話")[-1], second[-300:])
+
+        called_prompts.clear()
+        called_answer["yaml"] = f"呼ばれた名前:\n  - {sub_name}\n  - 山田\n"
+        body = t.api(box.client(llm=called_llm), "chat（1人だけ名前で呼ぶ → その人が返事。登場人物にいない名前は使わない）", "post", "/chat", 200, True,
+                     ["messages"], json={"session_id": sid, "message": f"{sub_name}さん、どう？"})
+        t.check("  呼ばれた人が返事をし、判定はしない", (body.get("messages") or [{}])[0].get("icon_data", {}).get("character_id") == sub
+                and not any("誰に向けた物かを判別" in q for q in called_prompts), body.get("messages"))
     client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
 
     # ---------------------------------------------------------------- 初期記憶の生成（偽モデルで完走させる）
