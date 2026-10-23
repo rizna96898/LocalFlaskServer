@@ -148,6 +148,58 @@ class ChatManager:
         })
         return self._send("chat", prompt_messages, PromptsMain.CONSULT, f"相談_{speaker['id']}")
 
+    # プレイヤーの発言で、名前で呼ばれた人を、呼ばれた順に返す（返事をする人の候補）。
+    # モデルには名前を書いてあるとおりに抜き出させるだけで、登場人物の誰に当たるかはここで照らし合わせる。
+    # 1つの名前が何人にも当たる（白井 → 結と圭太）ときは、メインキャラクターを優先し、それでも決まらなければ使わない
+    def called_responders(self, session_id, cast, message) -> list:
+        prompt_messages = self.prompt_builder.create_called_names_prompt({
+            "player_name": cast["player"]["name"],
+            "player_message": message,
+        })
+        result = self._send("judge", prompt_messages, PromptsMain.CALLED_NAMES, "呼ばれた名前")
+
+        try:
+            data = yaml.safe_load(string_utils.strip_code_block(result or "")) or {}
+        except Exception:
+            data = {}
+        names = data.get("呼ばれた名前") if isinstance(data, dict) else None
+        if not isinstance(names, list):
+            return []
+
+        candidates = list(cast.get("characters") or [])
+        responders = []
+        for name in names:
+            person = self._match_called_name(name, candidates)
+            if person and person not in responders:
+                responders.append(person)
+
+        log.info("呼ばれた名前", names, "→", [p["id"] for p in responders])
+        return responders
+
+    # 呼ばれた名前（白井、結、白井結 など）が、候補のだれに当たるか。表示名・名字・下の名前・IDで比べる
+    @staticmethod
+    def _match_called_name(name, candidates):
+        def norm(s):
+            return "".join(str(s or "").split())
+
+        called = norm(name)
+        for honorific in ("さん", "くん", "君", "ちゃん", "様", "さま", "先生"):
+            if called.endswith(honorific) and len(called) > len(honorific):
+                called = called[: -len(honorific)]
+        if not called:
+            return None
+
+        hits = []
+        for person in candidates:
+            parts = str(person.get("name") or "").replace("　", " ").split()
+            if called in (person.get("id"), norm(person.get("name"))) or called in parts:
+                hits.append(person)
+
+        if len(hits) == 1:
+            return hits[0]
+        mains = [p for p in hits if p.get("kind") == "character"]
+        return mains[0] if len(mains) == 1 else None
+
     # ---------------------------------------------------------------- 内部
 
     def _send(self, task_type, prompt_messages, prompt_file, step="問い合わせ") -> str:

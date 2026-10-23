@@ -29,6 +29,7 @@ class PromptsMain:
     NEWCOMER                 = "00_query_judge_newcomer.yaml"
     CONSULT_CHECK            = "05_query_judge_consult.yaml"
     CONSULT                  = "06_query_consult.yaml"
+    CALLED_NAMES             = "07_query_judge_called_names.yaml"
 
 class PromptsPostprocess:
     EDIT_SUMMARY          = "01_query_update_edit_summary.yaml"

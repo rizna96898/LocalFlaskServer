@@ -31,6 +31,7 @@ memory:
 # 判定（誰の発言か、誰に向けた発言か）
 judge:
   max_tokens: 200
+  temperature: 0.1   # 答えを1つに決めるだけなので、ぶれを小さくする
 
 # キャラクターの返答
 chat:
