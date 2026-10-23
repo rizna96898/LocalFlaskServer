@@ -7,10 +7,31 @@ from helpers import file_utils
 from helpers import session_cast
 from helpers import string_utils
 from logger import log
+import re
 import yaml
 
 # プロンプトに入れる「これまでの会話」の行数（会話ログの最後から）
 RECENT_LOG_LINES = 10
+
+
+# 設定YAMLから、空の項目を取り除く。null、空文字、0、「0cm」のような0だけの値、中身が空になった配列や辞書は消す
+# （テンプレートから作ったサブの設定は、名前以外がほぼこれで、送っても雑音にしかならない）
+def _drop_empty(data):
+    if isinstance(data, dict):
+        cleaned = {key: _drop_empty(value) for key, value in data.items()}
+        return {key: value for key, value in cleaned.items() if value is not None} or None
+    if isinstance(data, list):
+        cleaned = [_drop_empty(value) for value in data]
+        cleaned = [value for value in cleaned if value is not None]
+        return cleaned or None
+    if data is None or data is False:
+        return None
+    if isinstance(data, (int, float)):
+        return data or None
+    text = str(data).strip()
+    if text in ("", "null", "None") or re.fullmatch(r"0+\D{0,3}", text):
+        return None
+    return data
 
 
 class ChatManager:
@@ -159,9 +180,15 @@ class ChatManager:
         # これまでのあらすじ（発言のあとに更新している。最後の10行より前の話の要点）
         summary = (file_utils.load_yaml_file(config.SESSIONS_DIR / session_id / "summary.yaml") or {}).get("あらすじ") or []
 
+        # 話す人が誰か。「名前（職業）」。サブは設定がほぼ空なので、立場をはっきり書かないと、ほかの人の立場で話すことがある
+        role = person.get("job") or ""
+        character_self = f"{person['name']}（{role}）" if role else person["name"]
+
         return {
             "character_name": person["name"],
-            "character_info": self._dump(setting) or person["name"],
+            "character_self": character_self,
+            # 設定のうち、空の項目（null、0、テンプレートのまま）は送らない（サブの設定は、ほぼ全部が空）
+            "character_info": self._dump(_drop_empty(setting)) or character_self,
             "character_memory": self._dump(memory),
             "recent_log": self._recent_log(history),
             "story_summary": "\n".join(f"- {line}" for line in summary) or "（まだ無い）",

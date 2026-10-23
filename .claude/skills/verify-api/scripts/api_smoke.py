@@ -329,6 +329,10 @@ def main() -> int:
                 and "{character_memory}" not in attention_prompt, attention_prompt[-500:])
         sub_prompt = next((q for q in sent_prompts if f"あなたは {names[sub]} として" in q), "")
         t.check("  サブの返事のプロンプトに、話しかけられた一言と関係性が入る", "ね、いこ？" in sub_prompt and "関係性" in sub_prompt, sub_prompt[-400:])
+        sub_info = sub_prompt.split("#キャラクター情報")[-1].split("<|im_end|>")[0]
+        t.check("  返事のプロンプトに、話す人が誰か（名前・職業）が入り、設定の空の項目（null）は入らない",
+                f"あなた自身は {names[sub]}" in sub_prompt and "{character_self}" not in sub_prompt
+                and "null" not in sub_info and names[sub] in sub_info, sub_info[:300])
         # 同じ言葉を繰り返させないため、話しかけには返事を、向き直りには話しかけを「直前のあなたの発言」として渡す
         opener_prompt = next((q for q in sent_prompts if "今、あなたの意識は" in q and f"意識は {names_player} に" not in q), "")
         closing_prompt = next((q for q in sent_prompts if f"今、あなたの意識は {names_player} に" in q), "")
