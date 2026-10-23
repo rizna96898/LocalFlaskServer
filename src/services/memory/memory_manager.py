@@ -144,7 +144,7 @@ class MemoryManager:
             for no, person in enumerate(targets):
                 status_manager.mark_progress(session_id, 3 + no, total, f"{person['name']}: 記憶の更新")
                 try:
-                    self._update_character_memory(char_dir, person, conversation, participants)
+                    self._update_character_memory(char_dir, person, conversation, participants, present["player"]["name"])
                 except Exception as e:
                     log.info(f"[MEMORY UPDATE ERROR] {person['id']}: {type(e).__name__}: {e}")
                     failed.append(f"{person['name']}: {e}")
@@ -439,7 +439,7 @@ class MemoryManager:
             log.info(f"[{label}] 返事の形が違いました（{attempt}回目）")
         raise ValueError(f"{label}: 返事をYAMLとして読めませんでした（2回聞いた）")
 
-    def _update_character_memory(self, char_dir: Path, person: Dict, conversation: str, participants: str = "") -> None:
+    def _update_character_memory(self, char_dir: Path, person: Dict, conversation: str, participants: str = "", player_name: str = "プレイヤー") -> None:
         memory_path = char_dir / f"{person['id']}_memory.yaml"
         current = file_utils.load_yaml_file(memory_path)
 
@@ -449,6 +449,7 @@ class MemoryManager:
             "current_memory": yaml.safe_dump(current, allow_unicode=True, sort_keys=False).strip(),
             "conversation": conversation,
             "participants": participants,
+            "player_name": player_name,
         })
         prompt_messages = string_utils.build_messages(prompt_data)
         parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
