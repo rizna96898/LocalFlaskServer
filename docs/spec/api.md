@@ -351,9 +351,11 @@
 | `character_id` | 必須 | 半角英数字と `_` |
 | `character_name` | 必須 | |
 | `content` | 必須 | 設定の本文（YAMLの文字列。最上位は「項目: 内容」の形） |
+| `tags` | | 付けたタグの配列（タグ管理の一覧から選んだもの）。前後の空白を取り、重複は1つにする。送らなければ、ファイルにある今のタグを残す |
 
 - 返却: `{"ok": true, "message": "キャラクター設定を保存しました", "path": "保存先"}`
-- 失敗（400）: 必須項目が無い・空、IDの文字種が違う、YAMLとして読めない、最上位がオブジェクトでない
+- 失敗（400）: 必須項目が無い・空、IDの文字種が違う、YAMLとして読めない、最上位がオブジェクトでない、`tags` が配列でない
+- **タグは本文と別に受け渡す**: 設定YAMLの `タグ` に入れる。`content` に `タグ` が書いてあっても使わず、`tags` を正とする。空なら `タグ` の項目は書かない。
 - **名前欄は画面の入力で上書きする**: `content` に `名前` が書いてあっても、`名前` → `表示名` は `character_name`、
   `名前` → `識別子` は `character_id` で置き換える。`ふりがな` は、無ければ空として足す。
 
@@ -368,7 +370,7 @@
 | `base_chat_path` | 必須 | |
 | `character_id` | 必須 | |
 
-- 返却: `{"ok": true, "character_id": ..., "character_name": ..., "character_info": "設定YAML全体の文字列"}`
+- 返却: `{"ok": true, "character_id": ..., "character_name": ..., "character_info": "設定YAMLの文字列（タグを除く）", "tags": [付けたタグ]}`
 - 設定YAMLが無い場合は404（`ok: false`）。
 
 <a id="s6-3"></a>
@@ -378,7 +380,7 @@
 <div align="right"><a href="#top">▲ 目次へ</a></div>
 
 プレイヤー設定を `players/settings/{player_id}_setting.yaml` に保存する。
-項目は `player_id`、`player_name`、`content`、`base_chat_path`。動きはキャラクター設定の保存と同じ。
+項目は `player_id`、`player_name`、`content`、`base_chat_path`、`tags`。動きはキャラクター設定の保存と同じ。
 
 <a id="s6-4"></a>
 
@@ -391,7 +393,7 @@
 | `base_chat_path` | 必須 | |
 | `player_id` | 必須 | 半角英数字と `_` |
 
-- 返却: `{"ok": true, "player_id": ..., "player_name": ..., "player_info": "設定YAML全体の文字列"}`（キャラクターの読み込みと同じ形）
+- 返却: `{"ok": true, "player_id": ..., "player_name": ..., "player_info": "設定YAMLの文字列（タグを除く）", "tags": [付けたタグ]}`（キャラクターの読み込みと同じ形）
 - 失敗: `base_chat_path` が無い・IDの文字種が違う（400）、設定YAMLが無い（404）
 
 <a id="s6-5"></a>
@@ -415,7 +417,7 @@
 | `character` | `characters/settings/{ID}_setting.yaml` | `名前` → `表示名` |
 | `player` | `players/settings/{ID}_setting.yaml` | `名前` → `表示名` |
 
-- 返却: `{"ok": true, "kind": ..., "items": [{"id": ..., "name": ...}]}`。IDの順に並ぶ。
+- 返却: `{"ok": true, "kind": ..., "items": [{"id": ..., "name": ...}]}`。IDの順に並ぶ。キャラクター・プレイヤーは、付けたタグ（`tags`）も入る。
 - IDはファイル名から取る。IDに使えない文字（半角英数字と `_` 以外）のファイルは、一覧に出さない。名前が無ければIDを入れる。
 - 失敗: `base_chat_path` が無い・`kind` が違う（400）、`base_chat_path` のフォルダが無い（404）。
   `settings` フォルダが無いだけなら、空の一覧を返す。

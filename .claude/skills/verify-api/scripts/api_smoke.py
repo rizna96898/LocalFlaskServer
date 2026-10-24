@@ -212,6 +212,25 @@ def main() -> int:
     t.api(client, "一覧 world_id なし", "post", "/load_session_list", 400, False, json={})
     t.api(client, "一覧（空）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
     t.api(client, "world_start world_id なし", "post", "/world_start", 400, False, json={})
+    # キャラクターに付けたタグ（設定YAMLの「タグ」。本文の欄には出さず、別に受け渡す → docs/spec/api.md）
+    loaded = client.post("/settings/load_character_settings", json={"base_chat_path": web, "character_id": cid}).get_json() or {}
+    char_file = box.web / "characters" / "settings" / f"{cid}_setting.yaml"
+    t.api(client, "キャラクター設定の保存（タグ付き）", "post", "/settings/save_character_setting", 200, True, json={
+        "base_chat_path": web, "character_id": cid, "character_name": loaded.get("character_name"),
+        "content": loaded.get("character_info", "") + "タグ:\n- 本文に書いたタグ\n", "tags": ["医療", " 白井家 ", "医療"]})
+    t.check("  設定YAMLの「タグ」に、送ったタグが空白を取って重複なしで入る（本文に書いたタグは使わない）",
+            (yaml.safe_load(char_file.read_text(encoding="utf-8")) or {}).get("タグ") == ["医療", "白井家"])
+    loaded = t.api(client, "キャラクター設定の読み込み（タグ）", "post", "/settings/load_character_settings", 200, True, ["tags"],
+                   json={"base_chat_path": web, "character_id": cid})
+    t.check("  タグは別に返り、本文には出ない", loaded.get("tags") == ["医療", "白井家"] and "タグ" not in loaded.get("character_info", ""), loaded.get("tags"))
+    t.api(client, "キャラクター設定の保存（tags を送らない）", "post", "/settings/save_character_setting", 200, True, json={
+        "base_chat_path": web, "character_id": cid, "character_name": loaded.get("character_name"), "content": loaded.get("character_info", "")})
+    t.check("  tags を送らなければ、今のタグを残す", (yaml.safe_load(char_file.read_text(encoding="utf-8")) or {}).get("タグ") == ["医療", "白井家"])
+    listed_chars = (client.post("/settings/list_settings", json={"base_chat_path": web, "kind": "character"}).get_json() or {}).get("items") or []
+    t.check("  キャラクターの一覧にも、付けたタグが入る", next((i.get("tags") for i in listed_chars if i.get("id") == cid), None) == ["医療", "白井家"], listed_chars)
+    t.api(client, "キャラクター設定の保存（tags が配列でない）→ 400", "post", "/settings/save_character_setting", 400, False, json={
+        "base_chat_path": web, "character_id": cid, "character_name": "x", "content": loaded.get("character_info", ""), "tags": "医療"})
+
     t.api(client, "world_start world_name なし", "post", "/world_start", 400, False, json={"world_id": world_id})
     t.api(client, "world_start", "post", "/world_start", 200, True, ["world_id", "world_name", "sessions"],
           json={"world_id": world_id, "world_name": world_name})
@@ -223,6 +242,8 @@ def main() -> int:
     char_files = sorted(p.name for p in (box.sessions / sid / "character").glob("*.yaml"))
     t.check("  登場人物の設定は全員 {ID}_setting.yaml の名前でコピーされる（inline も）",
             bool(char_files) and all(n.endswith("_setting.yaml") for n in char_files), char_files)
+    copied = yaml.safe_load((box.sessions / sid / "character" / f"{cid}_setting.yaml").read_text(encoding="utf-8")) or {}
+    t.check("  セッションに写した設定には、タグが入らない（プロンプトに入れない）", "タグ" not in copied and bool(copied.get("名前")), list(copied)[:5])
     listed = t.api(client, "一覧（1件）", "post", "/load_session_list", 200, True, ["sessions"], json={"world_id": world_id})
     t.check("  作ったセッションが一覧にある", any(s.get("session_id") == sid for s in listed.get("sessions", [])))
     started = client.post("/world_start", json={"world_id": world_id, "world_name": world_name}).get_json() or {}
