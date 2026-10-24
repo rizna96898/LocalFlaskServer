@@ -116,6 +116,16 @@ def list_settings():
 def delete_setting():
     return orchestrator.delete_setting(request.get_json(silent=True))
 
+# タグの一覧（Web側フォルダの tags/tags.yaml）を返却
+@app.post("/settings/load_tags")
+def load_tags():
+    return orchestrator.load_tags(request.get_json(silent=True))
+
+# タグの一覧を丸ごと保存（登録・名前の変更・削除は、画面が一覧を直して送る）
+@app.post("/settings/save_tags")
+def save_tags():
+    return orchestrator.save_tags(request.get_json(silent=True))
+
 # キャラクター・プレイヤーの画像を読み込んで返却
 # owner_type は character(省略時) / player
 @app.get("/settings/load_image/<image_type>/<owner_id>")

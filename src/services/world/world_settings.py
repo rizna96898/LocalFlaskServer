@@ -16,6 +16,10 @@ LIST_SOURCES = {
     "player": ("players", "_setting.yaml"),
 }
 
+# タグの一覧。Web側フォルダの tags/tags.yaml に「タグ一覧: [名前, ...]」で持つ（画面の「タグ」で管理する）
+TAGS_FILE = Path("tags") / "tags.yaml"
+TAG_NAME_MAX = 30
+
 
 class WorldSettings:
     def __init__(self):
@@ -360,6 +364,46 @@ class WorldSettings:
     # kind: world / character / player
     # - 世界を消しても、その世界のセッションは残す（セッション側に世界のコピーがある）
     # - キャラクター・プレイヤーは、登場人物にしている世界があれば消さない（409）
+    # タグの一覧を返す。ファイルがまだ無ければ空
+    def load_tags(self, payload):
+        base_chat_path = ((payload or {}).get("base_chat_path") or "").strip()
+        if not base_chat_path:
+            return response_checker.response_error("base_chat_pathが未指定です", 400)
+        if not Path(base_chat_path).is_dir():
+            return response_checker.response_error(f"base_chat_pathのフォルダがありません: {base_chat_path}", 404)
+
+        data = file_utils.load_yaml_file(Path(base_chat_path) / TAGS_FILE) or {}
+        tags = [str(tag) for tag in (data.get("タグ一覧") or []) if tag not in (None, "")]
+        return response_checker.response_ok(message="", tags=tags)
+
+    # タグの一覧を、送られた並びで丸ごと保存する（登録・名前の変更・削除は、画面が一覧を直して送る）。
+    # 空の名前、長すぎる名前、同じ名前の重複は断る
+    def save_tags(self, payload):
+        payload = payload or {}
+        base_chat_path = (payload.get("base_chat_path") or "").strip()
+        tags = payload.get("tags")
+
+        if not base_chat_path:
+            return response_checker.response_error("base_chat_pathが未指定です", 400)
+        if not Path(base_chat_path).is_dir():
+            return response_checker.response_error(f"base_chat_pathのフォルダがありません: {base_chat_path}", 404)
+        if not isinstance(tags, list):
+            return response_checker.response_error("tags は、タグ名の配列にしてください", 400)
+
+        names = [str(tag).strip() if tag is not None else "" for tag in tags]
+        if any(not name for name in names):
+            return response_checker.response_error("タグ名が空です", 400)
+        too_long = [name for name in names if len(name) > TAG_NAME_MAX]
+        if too_long:
+            return response_checker.response_error(f"タグ名は{TAG_NAME_MAX}文字までです: {too_long[0]}", 400)
+        duplicated = sorted({name for name in names if names.count(name) > 1})
+        if duplicated:
+            return response_checker.response_error(f"同じ名前のタグがあります: {'、'.join(duplicated)}", 400)
+
+        if not file_utils.save_yaml_file(Path(base_chat_path) / TAGS_FILE, {"タグ一覧": names}):
+            return response_checker.response_error("タグの保存に失敗しました", 500)
+        return response_checker.response_ok(message="タグを保存しました", tags=names)
+
     def delete_setting(self, payload):
         payload = payload or {}
         base_chat_path = (payload.get("base_chat_path") or "").strip()

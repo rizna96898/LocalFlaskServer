@@ -63,11 +63,13 @@ LLM_CHAT_CONSOLE/
 │  ├─ icon/{ID}/{ID}.png
 │  ├─ standing/{ID}/{ID}_standing.png
 │  └─ template/character_setting_template.yaml
-└─ players/
-   ├─ settings/{プレイヤーID}_setting.yaml
-   ├─ icon/{ID}/{ID}.png
-   ├─ standing/{ID}/{ID}_standing.png
-   └─ template/player_setting_template.yaml
+├─ players/
+│  ├─ settings/{プレイヤーID}_setting.yaml
+│  ├─ icon/{ID}/{ID}.png
+│  ├─ standing/{ID}/{ID}_standing.png
+│  └─ template/player_setting_template.yaml
+└─ tags/
+   └─ tags.yaml                              タグの一覧。「タグ一覧: [名前, ...]」（画面の「タグ」で管理する）
 ```
 
 ファイル名の規則（`_world.yaml`、`_setting.yaml`、`_standing.png`）は、サーバーのコードが前提にしている。
