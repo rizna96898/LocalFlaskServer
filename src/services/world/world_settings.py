@@ -20,6 +20,31 @@ LIST_SOURCES = {
 TAGS_FILE = Path("tags") / "tags.yaml"
 TAG_NAME_MAX = 30
 
+# キャラクター・プレイヤーに付けたタグ。設定YAMLの「タグ: [名前, ...]」に持つ。
+# 画面の設定の本文の欄には出さない（読むときに分けて返し、保存するときに足す）。セッションへ写すときは外す（プロンプトに入れない）
+SETTING_TAG_KEY = "タグ"
+
+
+def _person_tags(tags):
+    """送られたタグを整える。(タグの配列 | None, エラーの文 | None)。None は「送られていない」（今のタグを残す）"""
+    if tags is None:
+        return None, None
+    if not isinstance(tags, list):
+        return None, "tags は、タグ名の配列にしてください"
+    names = []
+    for tag in tags:
+        name = str(tag).strip() if tag is not None else ""
+        if name and name not in names:
+            names.append(name)
+    return names, None
+
+
+def _split_setting_tags(data):
+    """設定YAMLの中身から、タグを取り出す。(タグを除いた中身, タグの配列)"""
+    data = dict(data or {})
+    tags = data.pop(SETTING_TAG_KEY, None)
+    return data, [str(tag) for tag in tags] if isinstance(tags, list) else []
+
 
 class WorldSettings:
     def __init__(self):
@@ -236,10 +261,21 @@ class WorldSettings:
 
         yaml_data["名前"] = name_block
 
+        # タグは、設定の本文とは別に受け取り、設定YAMLの「タグ」に入れる（本文に書かれていても、送られたタグを正とする）。
+        # tags が送られなければ、ファイルにある今のタグを残す
+        tags, error = _person_tags(payload.get("tags"))
+        if error:
+            return response_checker.response_error(error, 400)
+        yaml_data.pop(SETTING_TAG_KEY, None)
+
         save_dir = Path(base_chat_path) / "players" / "settings"
         save_dir.mkdir(parents=True, exist_ok=True)
 
         save_path = save_dir / f"{player_id}_setting.yaml"
+        if tags is None:
+            _, tags = _split_setting_tags(file_utils.load_yaml_file(save_path))
+        if tags:
+            yaml_data[SETTING_TAG_KEY] = tags
 
         try:
             with open(save_path, "w", encoding="utf-8", newline="\n") as f:
@@ -302,10 +338,21 @@ class WorldSettings:
 
         yaml_data["名前"] = name_block
 
+        # タグは、設定の本文とは別に受け取り、設定YAMLの「タグ」に入れる（本文に書かれていても、送られたタグを正とする）。
+        # tags が送られなければ、ファイルにある今のタグを残す
+        tags, error = _person_tags(payload.get("tags"))
+        if error:
+            return response_checker.response_error(error, 400)
+        yaml_data.pop(SETTING_TAG_KEY, None)
+
         save_dir = Path(base_chat_path) / "characters" / "settings"
         save_dir.mkdir(parents=True, exist_ok=True)
 
         save_path = save_dir / f"{character_id}_setting.yaml"
+        if tags is None:
+            _, tags = _split_setting_tags(file_utils.load_yaml_file(save_path))
+        if tags:
+            yaml_data[SETTING_TAG_KEY] = tags
 
         try:
             with open(save_path, "w", encoding="utf-8", newline="\n") as f:
@@ -351,12 +398,13 @@ class WorldSettings:
 
                 data = file_utils.load_yaml_file(path)
                 if kind == "world":
-                    name = data.get("世界名")
-                else:
-                    name_block = data.get("名前")
-                    name = name_block.get("表示名") if isinstance(name_block, dict) else None
+                    items.append({"id": item_id, "name": data.get("世界名") or item_id})
+                    continue
 
-                items.append({"id": item_id, "name": name or item_id})
+                name_block = data.get("名前")
+                name = name_block.get("表示名") if isinstance(name_block, dict) else None
+                # キャラクター・プレイヤーは、付けたタグも返す
+                items.append({"id": item_id, "name": name or item_id, "tags": _split_setting_tags(data)[1]})
 
         return response_checker.response_ok(message="", kind=kind, items=items)
 
@@ -482,7 +530,8 @@ class WorldSettings:
         if not player_setting_file.is_file():
             return response_checker.response_error(f"プレイヤー設定がありません: {player_id}", 404)
 
-        player_setting_data = file_utils.load_yaml_file(player_setting_file)
+        # タグは本文から外して、別に返す
+        player_setting_data, tags = _split_setting_tags(file_utils.load_yaml_file(player_setting_file))
         result = yaml.safe_dump(
             player_setting_data,
             allow_unicode=True,
@@ -498,6 +547,7 @@ class WorldSettings:
             player_id=name_block.get("識別子") or player_id,
             player_name=name_block.get("表示名") or player_id,
             player_info=result,
+            tags=tags,
         )
 
     def load_character_settings(self, payload):
@@ -510,7 +560,8 @@ class WorldSettings:
         if not character_setting_file.is_file():
             return response_checker.response_error(f"キャラクター設定がありません: {character_id}", 404)
 
-        character_setting_data = file_utils.load_yaml_file(character_setting_file)
+        # タグは本文から外して、別に返す
+        character_setting_data, tags = _split_setting_tags(file_utils.load_yaml_file(character_setting_file))
         result = yaml.safe_dump(
             character_setting_data,
             allow_unicode=True,
@@ -525,6 +576,7 @@ class WorldSettings:
             character_id=character_id,
             character_name=character_name,
             character_info=result,
+            tags=tags,
         )
 
     # 世界設定を保存

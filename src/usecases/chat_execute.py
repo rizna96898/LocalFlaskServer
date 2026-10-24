@@ -338,6 +338,15 @@ class ChatExecute:
 
     # アイコンと立ち絵を、あればセッションへ退避する。無くてもチャットは始められる
     # （チャット画面は、画像が無ければ名前の頭文字を出す）
+    # 設定YAMLをセッションへ写す。付けたタグ（「タグ」）は外す（チャットや記憶のプロンプトに入れないため。使い道は Q51）
+    def _copy_setting_without_tags(self, src: Path, dst_dir: Path):
+        data = file_utils.load_yaml_file(src)
+        if "タグ" not in data:
+            copy2(src, dst_dir)
+            return
+        data.pop("タグ", None)
+        file_utils.save_yaml_file(Path(dst_dir) / Path(src).name, data)
+
     def _copy_images_if_exist(self, owner_dir: Path, owner_id: str, dst_icon_dir: Path, dst_standing_dir: Path):
         for src, dst_dir in (
             (owner_dir / "icon" / owner_id / f"{owner_id}.png", dst_icon_dir),
@@ -391,13 +400,13 @@ class ChatExecute:
             if characters_info.get("参照種別") == "player":
                 log.info("プレイヤー用")
                 src = copy_source_players_dir / f"{character_id}_setting.yaml"
-                copy2(src, copy_dst_char_dir)
+                self._copy_setting_without_tags(src, copy_dst_char_dir)
                 self._copy_images_if_exist(Path(copy_source_dir) / "players", character_id, copy_dst_ico_dir, copy_dst_sta_dir)
 
             if characters_info.get("参照種別") == "character":
                 log.info("メインキャラ用")
                 src = copy_source_character_dir / f"{character_id}_setting.yaml"
-                copy2(src, copy_dst_char_dir)
+                self._copy_setting_without_tags(src, copy_dst_char_dir)
                 self._copy_images_if_exist(Path(copy_source_dir) / "characters", character_id, copy_dst_ico_dir, copy_dst_sta_dir)
             
             if characters_info.get("参照種別") == "inline":
