@@ -126,6 +126,31 @@ def main() -> int:
     t.api(client, "一覧 base_chat_path が無いフォルダ → 404", "post", "/settings/list_settings", 404, False,
           json={"base_chat_path": web + "_x", "kind": "world"})
 
+    # タグの一覧（Web側フォルダの tags/tags.yaml。→ docs/spec/api.md「/settings/load_tags」）
+    tags_file = box.web / "tags" / "tags.yaml"
+    tags_saved = tags_file.read_bytes() if tags_file.exists() else None
+    if tags_file.exists():
+        tags_file.unlink()
+    body = t.api(client, "タグ 読み込み（ファイルが無い）", "post", "/settings/load_tags", 200, True, ["tags"], json={"base_chat_path": web})
+    t.check("  ファイルが無ければ空", body.get("tags") == [], body)
+    t.api(client, "タグ 保存", "post", "/settings/save_tags", 200, True, ["tags"],
+          json={"base_chat_path": web, "tags": ["女子高生", " 医療 ", "白井家"]})
+    t.check("  tags/tags.yaml に「タグ一覧」で、前後の空白を取って保存される",
+            (yaml.safe_load(tags_file.read_text(encoding="utf-8")) or {}).get("タグ一覧") == ["女子高生", "医療", "白井家"])
+    body = t.api(client, "タグ 読み込み", "post", "/settings/load_tags", 200, True, ["tags"], json={"base_chat_path": web})
+    t.check("  保存した並びで返る", body.get("tags") == ["女子高生", "医療", "白井家"], body)
+    t.api(client, "タグ 保存（同じ名前が2つ）→ 400", "post", "/settings/save_tags", 400, False,
+          json={"base_chat_path": web, "tags": ["学生", "学生"]})
+    t.api(client, "タグ 保存（空の名前）→ 400", "post", "/settings/save_tags", 400, False, json={"base_chat_path": web, "tags": ["学生", " "]})
+    t.api(client, "タグ 保存（tags が配列でない）→ 400", "post", "/settings/save_tags", 400, False, json={"base_chat_path": web, "tags": "学生"})
+    t.check("  断ったときは、ファイルは前のまま",
+            (yaml.safe_load(tags_file.read_text(encoding="utf-8")) or {}).get("タグ一覧") == ["女子高生", "医療", "白井家"])
+    t.api(client, "タグ 読み込み base_chat_path なし → 400", "post", "/settings/load_tags", 400, False, json={})
+    if tags_saved is None:
+        tags_file.unlink()
+    else:
+        tags_file.write_bytes(tags_saved)
+
     body = t.api(client, "プレイヤー設定の読み込み", "post", "/settings/load_player_settings", 200, True,
                  ["player_id", "player_name", "player_info"], json={"base_chat_path": web, "player_id": pid})
     t.check("  ファイルの中身が返る", body.get("player_id") == pid and "名前" in (body.get("player_info") or ""), body.get("player_id"))

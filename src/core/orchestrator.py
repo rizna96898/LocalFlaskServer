@@ -118,6 +118,13 @@ class ChatOrchestrator:
     def delete_setting(self, payload):
         return self.chat_settings.delete_setting(payload)
 
+    # タグの一覧を返却・丸ごと保存
+    def load_tags(self, payload):
+        return self.chat_settings.load_tags(payload)
+
+    def save_tags(self, payload):
+        return self.chat_settings.save_tags(payload)
+
     # 画像ファイルの場所を決める。問題があれば (None, エラーレスポンス) を返す
     # owner_type: character(省略時) / player
     # 保存先: {base_chat_path}/characters|players/icon|standing/{owner_id}/
