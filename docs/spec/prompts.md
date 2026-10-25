@@ -127,6 +127,7 @@ files/prompts/
 | `00_..._middle_items.yaml` | キャラクター: 所持品 | 使用中 |
 | `00_..._middle_target.yaml` | キャラクター: 意識を向けている相手 | 使用中 |
 | `00_..._middle_currency.yaml` | キャラクター: 所持金 | 使用中 |
+| `00_..._middle_concerns.yaml` | キャラクター: 抱えている事情（悩み・目的・秘密・出来事・約束） | 使用中（2026-10-25 に新しく作った） |
 | `01_query_create_edit_summary.yaml` | 要約の編集 | 未使用 |
 
 （`00_..._middle_` は `00_query_create_character_memory_middle_` の略）
@@ -160,6 +161,7 @@ files/prompts/
 | `03_postprocess/01_query_update_world_memory.yaml` | 発言のあとの「その場の参加者」の更新（来た人・出て行った人、新しく現れた人） | **使用中**（2026-10-19 に書き直した） |
 | `03_postprocess/02_query_update_character_items.yaml` | キャラクターの所持品の更新 | 未使用 |
 | `03_postprocess/02_query_update_character_memory.yaml` | 発言のあとのキャラクターの記憶の更新（今の記憶＋今回の会話 → 更新した記憶） | **使用中**（2026-10-18 に今の記憶の形で書き直した） |
+| `03_postprocess/02_query_update_character_concerns.yaml` | 発言のあとの抱えている事情の更新（今の事情＋今回の会話 → 更新した事情） | **使用中**（2026-10-25 に新しく作った） |
 
 `chat/` のプロンプトのうち、`02_main/` の返事・判定・意識・掛け合いと、`03_postprocess/` のその場の参加者・あらすじ・キャラクターの記憶の更新は使っている。
 `03_postprocess/` のほかのYAMLは以前の作り（英語のキーなど）で、使うときに書き直しが要る（Q69）。`01_query_update_edit_summary.yaml` は、キャラクターの記憶を文章にまとめ直す別の用途のもので、あらすじの更新には使っていない。それ以外は文面だけ用意されていて、呼び出す処理がまだ無い（[`../status.md`](../status.md)）。

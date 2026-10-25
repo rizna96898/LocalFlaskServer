@@ -32,8 +32,29 @@ from constant import PromptsPostprocess, PromptsMain
 from logger import log
 
 # 初期記憶の進み具合。段階を始めるたびに step() を呼ぶと、状態ファイルに「何段目か」を書く。
-# 全段階 = 世界の記憶(1) + メインキャラクター1人につき7段階（要約・場所・分類・服装・所持品・意識・所持金）
-CHARACTER_STAGES = 7
+# 全段階 = 世界の記憶(1) + メインキャラクター1人につき8段階（要約・場所・分類・服装・所持品・意識・所持金・抱えている事情）
+CHARACTER_STAGES = 8
+
+# 抱えている事情。キャラクターの記憶の「抱えている事情」に、場面が変わっても残る情報を項目ごとに持つ（「現在の状態」は今この場面の様子）
+CONCERNS_KEY = "抱えている事情"
+CONCERN_ITEMS = ("悩み・事情", "目的・願い", "秘密", "大事な出来事", "約束・予定")
+CONCERN_LIMIT = 10   # 1つの項目の上限。超えたら古いもの・似たものをまとめるよう、モデルに頼む（ここでは念のため新しい方を残す）
+
+
+def _normalize_concerns(data) -> dict:
+    """モデルの返事から、抱えている事情を5つの項目の形に整える。項目が無ければ空、空の行は外す"""
+    data = data if isinstance(data, dict) else {}
+    result = {}
+    for item in CONCERN_ITEMS:
+        values = data.get(item)
+        values = values if isinstance(values, list) else ([values] if values else [])
+        lines = [str(v).strip() for v in values if v is not None and str(v).strip() not in ("", "null", "None")]
+        result[item] = lines[-CONCERN_LIMIT:]
+    return result
+
+
+def _is_valid_concerns(data) -> bool:
+    return isinstance(data, dict) and isinstance(data.get(CONCERNS_KEY), dict)
 
 
 class _Progress:
@@ -139,14 +160,22 @@ class MemoryManager:
                 c for c in (present.get("characters") or [])
                 if c.get("kind") == "character" and (char_dir / f"{c['id']}_memory.yaml").exists()
             ]
-            total = 3 + len(targets)
+            # 1人につき2段階（記憶の更新・抱えている事情）
+            total = 3 + 2 * len(targets)
 
             for no, person in enumerate(targets):
-                status_manager.mark_progress(session_id, 3 + no, total, f"{person['name']}: 記憶の更新")
+                status_manager.mark_progress(session_id, 3 + 2 * no, total, f"{person['name']}: 記憶の更新")
                 try:
                     self._update_character_memory(char_dir, person, conversation, participants, present["player"]["name"])
                 except Exception as e:
                     log.info(f"[MEMORY UPDATE ERROR] {person['id']}: {type(e).__name__}: {e}")
+                    failed.append(f"{person['name']}: {e}")
+
+                status_manager.mark_progress(session_id, 4 + 2 * no, total, f"{person['name']}: 抱えている事情")
+                try:
+                    self._update_character_concerns(char_dir, person, conversation, participants, present["player"]["name"])
+                except Exception as e:
+                    log.info(f"[CONCERNS UPDATE ERROR] {person['id']}: {type(e).__name__}: {e}")
                     failed.append(f"{person['name']}: {e}")
 
             if failed:
@@ -443,10 +472,11 @@ class MemoryManager:
         memory_path = char_dir / f"{person['id']}_memory.yaml"
         current = file_utils.load_yaml_file(memory_path)
 
+        # 渡すのは「現在の状態」だけ。抱えている事情は、別の問い合わせ（_update_character_concerns）で更新する
         prompt_data = file_utils.load_yaml_file(config.POSTPROCESS / PromptsPostprocess.CHARACTER_MEMORY)
         prompt_data = string_utils.fill_template(prompt_data, {
             "character_name": person["name"],
-            "current_memory": yaml.safe_dump(current, allow_unicode=True, sort_keys=False).strip(),
+            "current_memory": yaml.safe_dump({"現在の状態": current.get("現在の状態")}, allow_unicode=True, sort_keys=False).strip(),
             "conversation": conversation,
             "participants": participants,
             "player_name": player_name,
@@ -462,8 +492,37 @@ class MemoryManager:
         if "関係性" in old_state:
             updated["現在の状態"]["関係性"] = _merge_relations(old_state.get("関係性"), updated["現在の状態"].get("関係性"))
 
-        file_utils.save_yaml_file(memory_path, updated)
+        # 返事は「現在の状態」だけを使う。抱えている事情は今のまま残す
+        saved = {"現在の状態": updated["現在の状態"]}
+        if CONCERNS_KEY in current:
+            saved[CONCERNS_KEY] = current[CONCERNS_KEY]
+        file_utils.save_yaml_file(memory_path, saved)
         log.info(f"[MEMORY UPDATE] {person['id']} の記憶を更新しました")
+
+    # 抱えている事情（悩み・目的・秘密・出来事・約束）を、今回の会話に合わせて更新する。
+    # 記憶がまだこの項目を持っていなければ（以前のセッション）、空から始める
+    def _update_character_concerns(self, char_dir: Path, person: Dict, conversation: str, participants: str = "", player_name: str = "プレイヤー") -> None:
+        memory_path = char_dir / f"{person['id']}_memory.yaml"
+        current = file_utils.load_yaml_file(memory_path)
+        concerns = _normalize_concerns(current.get(CONCERNS_KEY))
+
+        prompt_data = file_utils.load_yaml_file(config.POSTPROCESS / PromptsPostprocess.CHARACTER_CONCERNS)
+        prompt_data = string_utils.fill_template(prompt_data, {
+            "character_name": person["name"],
+            "current_concerns": yaml.safe_dump(concerns, allow_unicode=True, sort_keys=False).strip(),
+            "conversation": conversation,
+            "participants": participants,
+            "player_name": player_name,
+        })
+        prompt_messages = string_utils.build_messages(prompt_data)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
+
+        # 読めなければ1回だけ聞き直す。2回とも読めなければ、今の事情を残したまま失敗にする
+        answer = self._ask_yaml(parameters, f"抱えている事情_{person['id']}", check=_is_valid_concerns)
+
+        current[CONCERNS_KEY] = _normalize_concerns(answer[CONCERNS_KEY])
+        file_utils.save_yaml_file(memory_path, current)
+        log.info(f"[CONCERNS UPDATE] {person['id']}", {k: len(v) for k, v in current[CONCERNS_KEY].items()})
 
     def create_initial_memory(self, session_id: str) -> str:
         log.info(f"[MEMORY] session_id={session_id} → 初期記憶作成を開始")
@@ -770,6 +829,10 @@ class MemoryManager:
                                                         start_message,)
                 log.info(f"[CHAR MEMORY CURRENCY] end: ")
 
+                # 抱えている事情（悩み・目的・秘密・出来事・約束。場面が変わっても残る情報）
+                if progress: progress.step(f"{character.get('表示名') or char_id}: 抱えている事情")
+                concerns = self.proc_middle_concerns(session_char_dir, char_id, scenario, start_message)
+
                 character_memory_obj = {}
                 character_memory_obj["現在の状態"] = {}
                 character_memory_obj["現在の状態"]["場所"] = location
@@ -781,6 +844,7 @@ class MemoryManager:
                 character_memory_obj["現在の状態"]["意識"] = target_list
                 character_memory_obj["現在の状態"]["所持品"] = item_data["所持品"]
                 character_memory_obj["現在の状態"]["金額"] = currency_data
+                character_memory_obj[CONCERNS_KEY] = concerns
 
                 log.info("character_memory_save start");
                 character_memory_path = config.SESSIONS_DIR / session_id / "character" / f"{char_id}_memory.yaml"
@@ -1032,6 +1096,25 @@ class MemoryManager:
 
         # 読めなければ1回だけ聞き直す
         return self._ask_yaml(parameters, f"所持金_{char_id}", check=lambda d: isinstance(d, dict))
+
+    # 抱えている事情の問い合わせ（キャラクター設定・シナリオ本文・開始メッセージから）
+    def proc_middle_concerns(self, session_char_dir: Path, char_id: str, scenario, start_message) -> dict:
+        character_data = file_utils.load_yaml_file(session_char_dir / f"{char_id}_setting.yaml") or {}
+        name_block = character_data.get("名前") if isinstance(character_data.get("名前"), dict) else {}
+
+        prompt_data = file_utils.load_yaml_file(config.BOOTSTRAP / Bootstrap.MEMORY_MIDDLE_CONCERNS)
+        prompt_data = string_utils.fill_template(prompt_data, {
+            "character_name": name_block.get("表示名") or char_id,
+            "character_data": yaml.safe_dump(character_data, allow_unicode=True, sort_keys=False).strip(),
+            "scenario": yaml.safe_dump(scenario, allow_unicode=True, sort_keys=False).strip() if isinstance(scenario, (dict, list)) else str(scenario or ""),
+            "start_message": str(start_message or ""),
+        })
+        prompt_messages = string_utils.build_messages(prompt_data)
+        parameters = generation_params.build_send_parameters("memory", messages=prompt_messages, prompt_data=prompt_data)
+
+        # 読めなければ1回だけ聞き直す
+        answer = self._ask_yaml(parameters, f"抱えている事情_{char_id}", check=_is_valid_concerns)
+        return _normalize_concerns(answer[CONCERNS_KEY])
 
     # TODO 変動パラメータの作成（未実装、予定）
     def convert_dynamic_params(self, data):

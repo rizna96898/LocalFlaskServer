@@ -22,7 +22,7 @@ local_model_path: "E:\\LocalFlaskServer\\models\\qween\\"
 local_model_name: "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf"
 # 一度に扱える文章の長さ（送る内容と返事の合計。トークン数）。モデルを読み込むときに使う。未設定なら 4096
 # 大きくすると長い会話や記憶を送れるが、VRAM を多く使う。変えたら「モデルロード」かモデルサーバーの再起動で反映
-local_model_n_ctx: 4096
+local_model_n_ctx: 8192
 
 # その他の設定（後で追加しやすい）
 log_level: "INFO"

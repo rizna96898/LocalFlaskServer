@@ -509,11 +509,11 @@ def main() -> int:
     scripted.post("/new_chat", json={"session_id": msid})
     t.check("裏の処理が終わる", box.wait_background(60))
 
-    # 進み具合（/session_status）。全段階 = 世界(1) + メインキャラクター1人につき7段階
+    # 進み具合（/session_status）。全段階 = 世界(1) + メインキャラクター1人につき8段階
     mains = sum(1 for c in world["登場人物"]["世界の登場人物"] if isinstance(c, dict) and c.get("参照種別") == "character")
-    total = 1 + 7 * mains
+    total = 1 + 8 * mains
     seen = watched["progress"]
-    t.check("作成中の進み具合: 全段階の数が 1 + 7 × メイン人数", bool(seen) and all(p[1] == total for p in seen), (total, seen[:3]))
+    t.check("作成中の進み具合: 全段階の数が 1 + 8 × メイン人数", bool(seen) and all(p[1] == total for p in seen), (total, seen[:3]))
     t.check("作成中の進み具合: 終わった数は 0 から増えていき、全段階に届かない",
             bool(seen) and seen[0][0] == 0 and all(a[0] <= b[0] for a, b in zip(seen, seen[1:])) and seen[-1][0] < total,
             [p[0] for p in seen])
@@ -551,9 +551,16 @@ def main() -> int:
 
     sent = box.llm_requests[before:]
     stages = ["状態と記憶を構造化", "情報抽出担当", "「居場所」を特定", "分類機", "「現在の服装」を特定",
-              "「現在の所持品」を特定", "「意識を向けている相手」を特定", "「所持金」を確定"]
+              "「現在の所持品」を特定", "「意識を向けている相手」を特定", "「所持金」を確定", "キャラクターが抱えている事情を整理するAI"]
     missing = [s for s in stages if not any(s in q.get("prompt", "") for q in sent)]
-    t.check("全段階（世界 ＋ キャラクター7段階）のプロンプトが送られる", not missing, f"送られていない段階: {missing}")
+    t.check("全段階（世界 ＋ キャラクター8段階）のプロンプトが送られる", not missing, f"送られていない段階: {missing}")
+    t.check("  キャラクターの記憶に「抱えている事情」が5つの項目で入る（現在の状態とは別）",
+            first_mem.get("抱えている事情") == {"悩み・事情": ["子どもができない"], "目的・願い": ["子どもがほしい"],
+                                                "秘密": [], "大事な出来事": [], "約束・予定": []}, first_mem.get("抱えている事情"))
+    concerns_prompt = next((q.get("prompt", "") for q in sent if "キャラクターが抱えている事情を整理するAI" in q.get("prompt", "")), "")
+    t.check("  抱えている事情の材料に、シナリオ本文と開始メッセージが入る",
+            "{scenario}" not in concerns_prompt and "{start_message}" not in concerns_prompt
+            and "シナリオ本文:" in concerns_prompt and str(world.get("開始メッセージ", ""))[:15] in concerns_prompt, concerns_prompt[-300:])
     # 組み立て方は全段階共通（header ＋ 本文 ＋ template ＋ tail_template）。要約の tail_template も送る
     summary = [q.get("prompt", "") for q in sent if "情報抽出担当" in q.get("prompt", "")]
     t.check("要約の段階に tail_template が入る", bool(summary) and all("要約結果のみを出力" in s for s in summary))
@@ -594,6 +601,10 @@ def main() -> int:
 
         summary_prompts = []
         party_prompts = []
+        concern_prompts = []
+        # 抱えている事情の更新: 約束が1つ増え、悩みはそのまま
+        concerns_yaml = ("抱えている事情:\n  悩み・事情:\n    - 子どもができない\n  目的・願い:\n    - 子どもがほしい\n"
+                         "  秘密: []\n  大事な出来事: []\n  約束・予定:\n    - 来週、検査の結果を聞きに来る\n")
         # パーティー: メイン・田中（名前だけで答える）・プレイヤーが組む。パーティーの更新はその場の参加者より先なので、
         # 1回目は田中がまだ登場人物にいなくて外れる。登場人物にいない人も外れ、1人だけの組は消える
         party_yaml = (f"パーティー一覧:\n  - 名前: 付き添い\n    メンバー一覧:\n      - キャラクターID: {main_ids[0]}\n"
@@ -615,6 +626,9 @@ def main() -> int:
             if "キャラクターの状態と記憶を更新するAI" in prompt:
                 update_prompts.append(prompt)
                 return updated_yaml
+            if "キャラクターが抱えている事情を管理するAI" in prompt:   # 抱えている事情の更新
+                concern_prompts.append(prompt)
+                return concerns_yaml
             if "誰に向けた物かを判別" in prompt or "意識を向けている相手" in prompt:
                 return "相手: null"
             return "（ほっとして）\nよろしくお願いします"
@@ -625,7 +639,15 @@ def main() -> int:
         t.check("  裏の記憶の更新が終わる", box.wait_background(30))
         st = yaml.safe_load((box.sessions / msid / "prepare_status.yaml").read_text(encoding="utf-8")) or {}
         t.check("  進行状態は after / ready、進み具合は「その場の参加者 ＋ パーティー ＋ あらすじ ＋ 全員分」", (st.get("complete_stage"), st.get("status")) == ("after", "ready")
-                and st.get("progress_done") == st.get("progress_total") == 3 + len(mem_files), st)
+                and st.get("progress_done") == st.get("progress_total") == 3 + 2 * len(mem_files), st)
+        after_mem = yaml.safe_load(mem_path.read_text(encoding="utf-8")) or {}
+        t.check("抱えている事情: 発言のあと、今回の会話に合わせて更新される（現在の状態も残る）",
+                (after_mem.get("抱えている事情") or {}).get("約束・予定") == ["来週、検査の結果を聞きに来る"]
+                and bool(after_mem.get("現在の状態")), after_mem.get("抱えている事情"))
+        t.check("  更新のプロンプトに、今の事情と今回の会話が入る", bool(concern_prompts) and "子どもができない" in concern_prompts[0]
+                and "診察室へどうぞ" in concern_prompts[0] and "{current_concerns}" not in concern_prompts[0], concern_prompts[:1])
+        t.check("  記憶の更新（現在の状態）のプロンプトには、抱えている事情を入れない（別に更新する）",
+                bool(update_prompts) and "抱えている事情" not in update_prompts[0].split("今の記憶:")[-1].split("今回の会話:")[0], update_prompts[:1])
 
         # パーティー一覧の更新（→ docs/spec/chat-flow.md「発言1回分の流れ」7）
         parties_now = ((yaml.safe_load((box.sessions / msid / "world_memory.yaml").read_text(encoding="utf-8")) or {})
