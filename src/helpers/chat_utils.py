@@ -73,13 +73,21 @@ class ChatUtils:
         # 2a. 相談の確認: 同じパーティーの人がいれば、返事の前に相談するかを決める。
         # 相談するなら「相談 → 相手の返事 → プレイヤーへの返事」の順。ここで失敗したら、相談せずに返事をする
         consult_lines = []
+        reply = None
         if is_main and mates:
             try:
                 mate = self.chat_manager.consult_check(session_id, responder, mates, cast["player"], message, log_before)
                 if mate:
                     ask = self.chat_manager.consult(session_id, responder, mate, cast["player"], message, log_before)
-                    answer = self.chat_manager.reply(session_id, mate, responder, ask, list(history or []))
-                    consult_lines = [(responder, ask), (mate, answer)]
+                    # 相談の一言が、相談の相手ではなくプレイヤーに向いていたら（「先生、〜」）、相談ではなく返事として使う。
+                    # そのまま相手に返させると、相手がプレイヤーの代わりに答えてしまうため
+                    addressed = self.chat_manager.addressed_to(responder, [mate, cast["player"]], message, ask)
+                    if addressed and addressed["id"] == cast["player"]["id"]:
+                        log.info("[CHAT] 相談の一言がプレイヤーに向いていたので、返事として使います")
+                        reply = ask
+                    else:
+                        answer = self.chat_manager.reply(session_id, mate, responder, ask, list(history or []))
+                        consult_lines = [(responder, ask), (mate, answer)]
             except Exception as e:
                 log.info(f"[CHAT] 相談を飛ばしました: {type(e).__name__}: {e}")
                 consult_lines = []
@@ -88,10 +96,15 @@ class ChatUtils:
         if consult_lines:
             log_consult = list(history or []) + [self._as_log(p, m) for p, m in consult_lines]
             reply = self.chat_manager.reply(session_id, responder, cast["player"], message, log_consult)
+            # 相談の一言とまったく同じ返事なら、出さない（同じ文が2回並ぶため）
+            if "".join(reply.split()) == "".join(consult_lines[0][1].split()):
+                log.info("[CHAT] プレイヤーへの返事が相談の一言と同じだったので、出しません")
+                return self._finish(session_id, consult_lines)
             # 相手と話したあとなので、意識の確認と掛け合いはしない
             return self._finish(session_id, consult_lines + [(responder, reply)])
 
-        reply = self.chat_manager.reply(session_id, responder, cast["player"], message, log_before)
+        if reply is None:
+            reply = self.chat_manager.reply(session_id, responder, cast["player"], message, log_before)
         lines = [(responder, reply)]
 
         # 3・4. 意識を確かめ、プレイヤー以外に向いていれば、掛け合いを1往復。

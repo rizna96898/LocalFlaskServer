@@ -75,8 +75,27 @@ class ChatManager:
             **context,
             "partner_name": partner["name"],
             "partner_message": partner_message,
+            # 同じ言葉を繰り返させないため、会話ログの中の、自分の最後の発言を渡す
+            "previous_line": self.last_line_of(speaker, history) or "（なし）",
         })
         return self._send("chat", prompt_messages, PromptsMain.CHAT, f"返事_{speaker['id']}")
+
+    # 会話ログの中の、その人の最後の発言。無ければ空
+    @staticmethod
+    def last_line_of(person, history) -> str:
+        for item in reversed(list(history or [])):
+            if (item.get("icon_data") or {}).get("character_id") == person["id"]:
+                return str(item.get("message") or "")
+        return ""
+
+    # speaker の発言（message）が、candidates のだれに向けたものかを判定する（「誰に向けた発言か」の判定と同じプロンプト）。
+    # 相談の一言が、本当に相談の相手に向いているかを確かめるのに使う。分からなければ None
+    def addressed_to(self, speaker, candidates, previous_message, message):
+        prompt_messages = self.prompt_builder.create_discrimination_prompt(candidates, previous_message, message)
+        result = self._send("judge", prompt_messages, PromptsMain.CHARACTER_IDENTIFICATION, f"相談の宛先_{speaker['id']}")
+        target = self._pick_target(result, candidates)
+        log.info("相談の宛先", speaker["id"], "→", target["id"] if target else None)
+        return target
 
     # 返事のあと、speaker の意識が今だれに向いているか。登場人物（プレイヤーを含む）から1人、見つからなければ None
     # history: 今の返事まで入った会話ログ
