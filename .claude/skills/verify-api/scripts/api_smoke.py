@@ -438,6 +438,37 @@ def main() -> int:
         t.check("  相談の確認に、相談できる相手とパーティーが入る",
                 f"{sub}（" in check_prompt.split("相談できる相手:")[-1] and "テストの組" in check_prompt and "{mates}" not in check_prompt, check_prompt[-500:])
         t.check("  プレイヤーへの返事のプロンプトに、相談のやり取りが入る", bool(final_prompt) and "どうしよう？" in final_prompt[0], final_prompt)
+        t.check("  プレイヤーへの返事のプロンプトに、自分の直前の発言（相談の一言）が入る（繰り返させない）",
+                bool(final_prompt) and "どうしよう？" in final_prompt[0].split("#直前のあなたの発言")[-1].split("の発言")[0]
+                and "{previous_line}" not in final_prompt[0], final_prompt[-1:][0][-300:] if final_prompt else "")
+        t.check("  相談の一言の宛先を判定で確かめる（候補は相談の相手とプレイヤー）",
+                any("誰に向けた物かを判別" in q and "どうしよう？" in q and f"{sub}（" in q for q in party_prompts))
+
+        # 相談の一言がプレイヤーに向いていたら（「先生、〜」）、相談ではなく返事として使う
+        def misaddressed_llm(prompt):
+            if "誰に向けた物かを判別" in prompt and "どうしよう？" in prompt:
+                return f"target_speakers: {pid}"
+            return party_llm(prompt, consult_to=sub)
+
+        party_prompts.clear()
+        body = t.api(box.client(llm=misaddressed_llm), "chat（相談の一言がプレイヤーに向いていた → 返事として使う）",
+                     "post", "/chat", 200, True, ["messages"], json={"session_id": sid, "message": "二つの方法がありますが、どうされますか？"})
+        got = [(m.get("icon_data", {}).get("character_id"), m.get("message")) for m in body.get("messages", [])]
+        t.check("  相談の一言が、そのまま返事の1行目になり、相手の返事や2回目の返事は作らない",
+                got[:1] == [(main, "（迷って）\nどうしよう？")] and (sub, "（うなずく）\nうん") not in got[:2]
+                and not any(f"あなたは {names[main]} として" in q and "に相談します。" not in q and "今、あなたの意識は" not in q for q in party_prompts), got)
+
+        # プレイヤーへの返事が、相談の一言とまったく同じなら出さない
+        def same_llm(prompt):
+            if f"あなたは {names[main]} として" in prompt and "に相談します。" not in prompt and "今、あなたの意識は" not in prompt:
+                return "（迷って）\nどうしよう？"
+            return party_llm(prompt, consult_to=sub)
+
+        body = t.api(box.client(llm=same_llm), "chat（返事が相談の一言と同じ → 出さない）",
+                     "post", "/chat", 200, True, ["messages"], json={"session_id": sid, "message": "二つの方法がありますが、どうされますか？"})
+        got = [(m.get("icon_data", {}).get("character_id"), m.get("message")) for m in body.get("messages", [])]
+        t.check("  相談 → 相手の返事 の2行だけ（同じ文を2回出さない）",
+                got == [(main, "（迷って）\nどうしよう？"), (sub, "（うなずく）\nうん")], got)
 
         party_prompts.clear()
         body = t.api(box.client(llm=party_llm), "chat（相談しない → 返事のあと、同じパーティーの人と掛け合い）",
