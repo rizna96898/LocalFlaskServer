@@ -44,7 +44,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 - モデルの切り替えは `open_router_use_flag` / `local_model_use_flag` と、`ModelHandlingService("local" | "openrouter")` の引数で決まる。現在の呼び出し側はすべて `"local"` 固定。
 - APサーバーのポートは `port`（未設定なら5000）。Web側の接続先の既定値は `http://127.0.0.1:5000` なので、変える場合は画面の「接続環境設定」も合わせる。
 - モデルサーバーが読み込むモデルは `local_model_path`（フォルダ）と `local_model_name`（ファイル名。古い綴り違いの `local_mode_name` も読む）で決まる。未設定やファイルが無い場合、`src/server.py` は起動時にエラーで止まる。設定を変えたら、設定画面の「モデルロード」（`/settings/load_model` → モデルサーバーの `/reload`）で再起動せずに読み直せる。VRAMに余裕が無いので、今のモデルを先に捨ててから読み込む（ファイルが無いときは捨てずに断る）。
-- 一度に扱える文章の長さ（`n_ctx`。送る内容と返事の合計）は `local_model_n_ctx`（未設定なら4096）。モデルを読み込むときに使う。
+- 一度に扱える文章の長さ（`n_ctx`。送る内容と返事の合計）は `local_model_n_ctx`（未設定なら4096。今の設定は8192）。モデルを読み込むときに使う。
 - モデルサーバーのポートは `local_model_server_port`（未設定なら5001）。`src/server.py` の待ち受けと、APサーバーからの送信先（`config.LOCALMODEL_SERVER_URL`）の両方がこれを使う。モデルサーバーはAPサーバーと同じPCで動かす前提（`127.0.0.1` 固定）。
 
 ## 構成
@@ -85,7 +85,7 @@ APIの返事は、必ず `helpers/response_checker.py` の `response_ok(...)` / 
    退避した画像は `files/sessions/{session_id}/picture/icon/{id}.png` と `picture/standing/{id}_standing.png` に入り、チャット画面は `/session_image/{session_id}/{icon|standing}/{id}` でこれを読む（Web側フォルダの最新の画像は読まない）。プレイヤーの画像も退避する。元に画像が無い人物は退避しない（無くてもチャットは始められる）。
 2. `/new_chat`: `prepare_status.yaml` を作り、初期記憶の生成を別スレッドで開始して、世界YAMLの `開始メッセージ` を返す。
 
-`prepare_status.yaml` の `status`（`processing` / `ready` / `error`）と `complete_stage`（`new_chat` → `prepare` → `main_chat` → `mob_chat` → `after`）が、非同期処理の進行と次に進めるかどうかの判定に使われる。初期記憶の進み具合は `progress_done` / `progress_total` / `progress_label` に書き、画面は `/session_status` を1秒ごとに問い合わせて、作成中は「発言」を止めプログレスバーを出す。発言のあとのキャラクターの記憶の更新も同じ仕組みで、`complete_stage` が `after` になる。発言1回分の流れ（呼ばれた人の確認 → 名前で呼ばれた人（いなければ判定） → 相談 → 返事 → 意識 → 掛け合い → パーティー・その場の参加者・あらすじ（`summary.yaml`）・記憶の更新）は `docs/spec/chat-flow.md`。相談と掛け合いは、同じパーティー（世界の記憶の `パーティー一覧`。プレイヤーも入る）の人どうしで行い、同じパーティーの人は一緒に出入りする（`session_cast.party_mates`）。
+`prepare_status.yaml` の `status`（`processing` / `ready` / `error`）と `complete_stage`（`new_chat` → `prepare` → `main_chat` → `mob_chat` → `after`）が、非同期処理の進行と次に進めるかどうかの判定に使われる。初期記憶の進み具合は `progress_done` / `progress_total` / `progress_label` に書き、画面は `/session_status` を1秒ごとに問い合わせて、作成中は「発言」を止めプログレスバーを出す。発言のあとのキャラクターの記憶の更新も同じ仕組みで、`complete_stage` が `after` になる。発言1回分の流れ（呼ばれた人の確認 → 名前で呼ばれた人（いなければ判定） → 相談 → 返事 → 意識 → 掛け合い → パーティー・その場の参加者・あらすじ（`summary.yaml`）・記憶と抱えている事情の更新）は `docs/spec/chat-flow.md`。キャラクターの記憶は、今この場面の様子（`現在の状態`）と、場面が変わっても残る情報（`抱えている事情`）に分けて持つ。相談と掛け合いは、同じパーティー（世界の記憶の `パーティー一覧`。プレイヤーも入る）の人どうしで行い、同じパーティーの人は一緒に出入りする（`session_cast.party_mates`）。
 
 ### ログ
 
