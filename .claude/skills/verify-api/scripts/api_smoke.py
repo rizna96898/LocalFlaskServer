@@ -484,6 +484,26 @@ def main() -> int:
         t.check("  返事だけの1行", len(body.get("messages", [])) == 1, body.get("messages"))
         t.check("  その場に同じパーティーの人がいなければ、相談の確認もしない", not any("だれかに相談するか" in q for q in party_prompts))
 
+        # サブが返事をするときも、同じパーティーの人に相談はする（意識の確認・掛け合いはしない）
+        def sub_consult_llm(prompt):
+            party_prompts.append(prompt)
+            if "誰に向けた物かを判別" in prompt:
+                return f"target_speakers: {main if 'どうしよう？' in prompt else sub}"
+            if "だれかに相談するか" in prompt:
+                return f"相談: {main}"
+            if "に相談します。" in prompt:
+                return "（迷って）\nどうしよう？"
+            return talk_llm(prompt)
+
+        set_party([main, sub])
+        party_prompts.clear()
+        body = t.api(box.client(llm=sub_consult_llm), "chat（サブが返事をするときも、同じパーティーの人に相談する）",
+                     "post", "/chat", 200, True, ["messages"], json={"session_id": sid, "message": "お二人で読んでおいてください"})
+        got = [(m.get("icon_data", {}).get("character_id"), m.get("message")) for m in body.get("messages", [])]
+        t.check("  サブの相談 → メインの返事 → サブのプレイヤーへの返事 の3行",
+                got == [(sub, "（迷って）\nどうしよう？"), (main, "（嬉しい）\nはーい"), (sub, "（うなずく）\nうん")], got)
+        t.check("  サブの返事では、意識の確認をしない", not any("意識を向けている相手」を特定" in q for q in party_prompts))
+
         if wm_saved is None:
             wm_path.unlink()
         else:
