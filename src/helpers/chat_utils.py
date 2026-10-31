@@ -61,11 +61,11 @@ class ChatUtils:
         else:
             _, responder = self.chat_manager.main_chat(body, session_id, message, cast, previous_message)
 
-        # 相談・意識の確認・掛け合いは、メインキャラクター（参照種別 character）が返事をするときだけ。
-        # サブや途中から来た人が返事をするときは、返事の1行で終わる。
+        # 意識の確認・掛け合いは、メインキャラクター（参照種別 character）が返事をするときだけ。
+        # サブや途中から来た人が返事をするときは、相談だけする（「お二人で読んでください」と頼まれたとき、連れと話してから答える）。
         is_main = responder.get("kind") == "character"
         if not is_main:
-            log.info(f"[CHAT] メイン以外の返事なので、相談・意識の確認・掛け合いはしません: {responder['id']}")
+            log.info(f"[CHAT] メイン以外の返事なので、意識の確認・掛け合いはしません: {responder['id']}")
 
         # 相談できる相手（同じパーティーで、その場にいる人）。パーティーに入っていなければ None（相手を絞らない）
         mates = session_cast.party_mates(session_id, responder["id"]) if session_cast.in_party(session_id, responder["id"]) else None
@@ -74,7 +74,7 @@ class ChatUtils:
         # 相談するなら「相談 → 相手の返事 → プレイヤーへの返事」の順。ここで失敗したら、相談せずに返事をする
         consult_lines = []
         reply = None
-        if is_main and mates:
+        if mates:
             try:
                 mate = self.chat_manager.consult_check(session_id, responder, mates, cast["player"], message, log_before)
                 if mate:
