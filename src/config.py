@@ -14,6 +14,11 @@ PROMPTS_DIR = FILES_DIR / "prompts"
 SETTINGS_DIR = FILES_DIR / "settings"
 TEMPLATES_DIR = FILES_DIR / "templates"
 TEMP_DIR = ROOT_DIR / "temp"   # 記憶生成の途中結果
+MODELS_DIR = ROOT_DIR / "models"   # ローカルモデル(.gguf)の置き場所。画面のモデルの一覧は、この下を探す
+
+# PCごとの設定。Git で管理しない。system_settings.yaml の上に重ねて読む（書いてある項目だけ上書き）。
+# 画面でモデルを切り替えると、ここに local_model_path / local_model_name を書く
+LOCAL_SETTINGS_FILE = SETTINGS_DIR / "local_settings.yaml"
 
 
 class Config:
@@ -30,6 +35,8 @@ class Config:
 
         self.TEMPLATES_DIR  = TEMPLATES_DIR
         self.TEMP_DIR       = TEMP_DIR
+        self.MODELS_DIR     = MODELS_DIR
+        self.LOCAL_SETTINGS_FILE = LOCAL_SETTINGS_FILE
 
         self.settings = self._load_system_settings()
 
@@ -79,8 +86,23 @@ class Config:
         # <think> を logit_bias で禁止する方法は使わない。禁止すると、モデルが第一手を失って空の返事を返す。
         self.LOCALMODEL_NO_THINK = bool(self.settings.get("local_model_no_think", True))
 
+    # system_settings.yaml に、PCごとの設定（local_settings.yaml）を重ねたもの
     def _load_system_settings(self) -> dict:
-        return self._load_yaml_file(self.SETTINGS_DIR / "system_settings.yaml", required=True)
+        settings = self._load_yaml_file(self.SETTINGS_DIR / "system_settings.yaml", required=True)
+        local = self._load_yaml_file(self.LOCAL_SETTINGS_FILE, required=False)
+        if settings and local:
+            settings.update(local)
+        return settings
+
+    # PCごとの設定（local_settings.yaml）に values を書き足し、設定を読み直す
+    def save_local_settings(self, values: dict):
+        local = self._load_yaml_file(self.LOCAL_SETTINGS_FILE, required=False)
+        local.update(values)
+        with open(self.LOCAL_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            f.write("# PCごとの設定。Git で管理しない。system_settings.yaml の同じ項目より優先する。\n")
+            f.write("# 画面でモデルを切り替えると書き換わる。\n")
+            yaml.safe_dump(local, f, allow_unicode=True, sort_keys=False)
+        self.reload()
 
     def _load_yaml_file(self, path: Path, required: bool) -> dict:
         if not path.exists():

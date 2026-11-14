@@ -16,6 +16,8 @@
   - [`POST /settings/select_base_path`](#s3-2)
   - [`POST /settings/open_system_yaml`](#s3-3)
   - [`POST /settings/load_model`](#s3-4)
+  - [`GET /settings/list_models`](#s3-5)
+  - [`POST /settings/switch_model`](#s3-6)
 - [テンプレート](#s4)
   - [`POST /settings/get_template_{名前}_yaml`](#s4-1)
 - [世界設定](#s5)
@@ -123,6 +125,8 @@
 | `POST /settings/select_base_path` | フォルダ選択ダイアログを開く | 設定 |
 | `POST /settings/open_system_yaml` | 設定YAMLをエディタで開く | 設定 |
 | `POST /settings/load_model` | モデルの読み込み | 設定 |
+| `GET /settings/list_models` | 選べるモデルの一覧 | メイン |
+| `POST /settings/switch_model` | モデルを切り替えて読み込む | メイン |
 | `POST /settings/get_template_*_yaml`（5種） | 入力欄の初期値になるテンプレートを返す | 世界、キャラクター、プレイヤー |
 | `POST /settings/save_world_setting` | 世界設定を保存 | 世界 |
 | `POST /settings/load_world_settings` | 世界設定を読み込む | 世界 |
@@ -235,6 +239,38 @@
 - 失敗: `base_path` が無い（400）、設定YAMLが無い（404）、モデルの名前が未設定（400）、モデルのファイルが無い（404）、
   読み込みに失敗（500）、モデルサーバーに接続できない（503）、読み込みが時間内に終わらない（504）
 - モデルサーバーの待ち受けポート（`local_model_server_port`）を変えたときは、読み直しでは足りない。両方のサーバーを再起動する。
+
+<a id="s3-5"></a>
+
+### `GET /settings/list_models`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+メイン画面上部の「使用モデル」のプルダウンに出す、選べるモデルの一覧。
+
+- LocalFlaskServer の `models/` の下にある `.gguf` を、サブフォルダも含めて探す。`mmproj` で始まるファイル（画像を読むための付属ファイル）は、モデルとしては読み込めないので出さない。
+- 返却: `{"ok": true, "models": ["qween/xxx.gguf", ...], "current": "qween/xxx.gguf"}`
+  - `models` は `models/` からの相対パス（`/` 区切り）で、名前の順。`models/` が無ければ空。
+  - `current` は設定にあるモデル。`models/` の外にあるときは空。読み込み中のモデルは `/health` の `model_name` で取る。
+
+<a id="s3-6"></a>
+
+### `POST /settings/switch_model`
+
+<div align="right"><a href="#top">▲ 目次へ</a></div>
+
+| 項目 | 必須 | 内容 |
+|---|---|---|
+| `model` | 必須 | `list_models` の `models` のどれか |
+
+選んだモデルを、PCごとの設定（`files/settings/local_settings.yaml`、→ [`data.md`](data.md)）の `local_model_path` / `local_model_name` に書き、
+`/settings/load_model` と同じように、モデルサーバーに読み直しを頼む（今のモデルを先に捨てる、発言の途中なら待つ、などは同じ）。
+
+- 選べるのは一覧にあるモデルだけ（画面から好きなパスを読ませない）。
+- 読み込めなかったときは、`local_settings.yaml` を元に戻す（次の起動で、読めないモデルを読もうとしないため）。
+  ただし時間切れ（504）のときは、モデルサーバーがまだ読み込みを続けていて成功することがあるので、戻さない。
+- 返却: `{"ok": true, "message": "ロード完了: モデルのファイル名", "model_name": ..., "model": "選んだモデル"}`
+- 失敗: `model` が無い（400）、一覧に無い（404）、そのほかは `/settings/load_model` と同じ（500、503、504）
 
 ---
 

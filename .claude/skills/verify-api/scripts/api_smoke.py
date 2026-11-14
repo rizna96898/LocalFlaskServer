@@ -14,6 +14,7 @@
 - モデルの実際の応答（偽物に差し替えている）
 """
 import io
+import shutil
 import sys
 from urllib.parse import quote
 
@@ -66,6 +67,39 @@ def main() -> int:
     body = t.api(box.client(llm="x"), "load_model", "post", "/settings/load_model", 200, True, ["model_name"],
                  json={"base_path": str(box.server)})
     t.check("  読み込んだモデルの名前が返る", body.get("model_name") == "fake.gguf", body)
+
+    # モデルの切り替え（画面上部のプルダウン）。models/ の下の .gguf から選び、local_settings.yaml に書いて読み直す
+    import yaml
+    server_config = sys.modules["config"].config
+    local_file = box.server / "files" / "settings" / "local_settings.yaml"
+    body = t.api(box.client(), "list_models models フォルダ無し", "get", "/settings/list_models", 200, True, ["models", "current"])
+    t.check("  一覧は空", body.get("models") == [], body)
+    models_dir = box.server / "models"
+    for name in ("qween/a.gguf", "qween/mmproj-a.gguf", "gemma/b.gguf"):
+        (models_dir / name).parent.mkdir(parents=True, exist_ok=True)
+        (models_dir / name).write_bytes(b"")
+    body = t.api(box.client(), "list_models", "get", "/settings/list_models", 200, True, ["models", "current"])
+    t.check("  サブフォルダも探し、mmproj は出さない", body.get("models") == ["gemma/b.gguf", "qween/a.gguf"], body)
+    t.api(box.client(), "switch_model 未指定", "post", "/settings/switch_model", 400, False, json={})
+    t.api(box.client(), "switch_model 一覧に無いモデル", "post", "/settings/switch_model", 404, False, json={"model": "../x.gguf"})
+    t.api(box.client(), "switch_model モデルサーバー停止中 → 503", "post", "/settings/switch_model", 503, False,
+          json={"model": "qween/a.gguf"})
+    t.check("  読み込めなかったので、local_settings.yaml は作らない", not local_file.exists())
+    body = t.api(box.client(llm="x"), "switch_model", "post", "/settings/switch_model", 200, True, ["model_name"],
+                 json={"model": "qween/a.gguf"})
+    local = yaml.safe_load(local_file.read_text(encoding="utf-8")) if local_file.exists() else {}
+    t.check("  local_settings.yaml に、選んだモデルが書かれる", local.get("local_model_name") == "a.gguf", local)
+    t.check("  設定に重ねて読まれる", server_config.LOCALMODEL_NAME == "a.gguf", server_config.LOCALMODEL_NAME)
+    body = t.api(box.client(), "list_models 切り替えたあと", "get", "/settings/list_models", 200, True, ["current"])
+    t.check("  current が選んだモデルになる", body.get("current") == "qween/a.gguf", body)
+    t.api(box.client(), "switch_model 失敗 → 前の設定に戻す", "post", "/settings/switch_model", 503, False,
+          json={"model": "gemma/b.gguf"})
+    local = yaml.safe_load(local_file.read_text(encoding="utf-8")) or {}
+    t.check("  local_settings.yaml は前のモデルのまま", local.get("local_model_name") == "a.gguf", local)
+    local_file.unlink()                                  # 以降の確認に影響しないよう、元に戻す
+    shutil.rmtree(models_dir)
+    server_config.reload()
+
     client = box.client()                                # 以降は、モデルに接続できない扱いに戻す
     t.api(client, "open_system_yaml パス未指定", "post", "/settings/open_system_yaml", 400, False, json={})
     t.api(client, "open_system_yaml 不正パス", "post", "/settings/open_system_yaml", 404, False,
