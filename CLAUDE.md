@@ -46,7 +46,7 @@ python src/server.py     # モデルサーバー（ポート5001、127.0.0.1）
 - モデルサーバーが読み込むモデルは `local_model_path`（フォルダ）と `local_model_name`（ファイル名。古い綴り違いの `local_mode_name` も読む）で決まる。未設定やファイルが無い場合、`src/server.py` は起動時にエラーで止まる。設定を変えたら、設定画面の「モデルロード」（`/settings/load_model` → モデルサーバーの `/reload`）で再起動せずに読み直せる。VRAMに余裕が無いので、今のモデルを先に捨ててから読み込む（ファイルが無いときは捨てずに断る）。
 - モデルの切り替えは、メイン画面上部の「使用モデル」のプルダウンで行う。`models/` の下の `.gguf` から選ぶと（`/settings/list_models`）、`local_settings.yaml` に `local_model_path` / `local_model_name` を書いて読み直す（`/settings/switch_model`）。`system_settings.yaml` は書き換えないので、モデルを替えても Git の変更にならない。
 - 一度に扱える文章の長さ（`n_ctx`。送る内容と返事の合計）は `local_model_n_ctx`（未設定なら4096。今の設定は8192）。モデルを読み込むときに使う。
-- その分の作業用領域（KV キャッシュ）の形式は `local_model_kv_cache_type`（未設定なら `f16`。今の設定は `q8_0` で、大きさが半分）。`f16` 以外は flash attention が要るので、モデルサーバーが自動で有効にする（`local_model_flash_attn` でも有効にできる。今の設定は `true`）。
+- その分の作業用領域（KV キャッシュ）の形式は `local_model_kv_cache_type`（未設定なら `f16`。今の設定は `q8_0` で、大きさが半分）。`f16` 以外は flash attention が要るので、モデルサーバーが自動で有効にする（`local_model_flash_attn` でも有効にできる。今の設定は `true`）。窓の分だけ覚える層（SWA。Gemma など）には、窓の分しか領域を取らない（`local_model_swa_full: false`。llama.cpp の既定とは逆）。
 - モデルサーバーのポートは `local_model_server_port`（未設定なら5001）。`src/server.py` の待ち受けと、APサーバーからの送信先（`config.LOCALMODEL_SERVER_URL`）の両方がこれを使う。モデルサーバーはAPサーバーと同じPCで動かす前提（`127.0.0.1` 固定）。
 
 ## 構成
@@ -74,7 +74,7 @@ APIの返事は、必ず `helpers/response_checker.py` の `response_ok(...)` / 
 - `chat/01_preprocess/`、`chat/02_main/`、`chat/03_postprocess/`: 発言ごとの前処理・本処理・後処理
 - ファイル名は `src/constant.py` の `Bootstrap` / `PromptsPreprocess` / `PromptsMain` / `PromptsPostprocess` に定数として持つ。YAMLを追加・改名したらここも直す。
 - YAMLのキーは `system`、`header`、`template`、`tail_template`。組み立ては全プロンプト共通の `string_utils.build_messages` で、`header` + 動的部分 + `template` + `tail_template` をuserメッセージに連結する（各段階で個別に文字列をつながない）。差し込み口は先に `string_utils.fill_template` などで埋める。
-- ローカルモデルへは `messages_to_prompt` が1本の文字列に変換して送る。形式は設定 `local_model_prompt_format` で決まり、既定は `chatml`（`<|im_start|>` で区切る形。返事の出だしに空の思考ブロックを置く）。**形式はモデルに合わせる。`<think>` を `logit_bias` で禁止しない**（空の返事の原因になる。経緯は `docs/spec/prompts.md`）。
+- ローカルモデルへは `messages_to_prompt` が1本の文字列に変換して送る。形式は設定 `local_model_prompt_format` で決まる。既定の `auto` は、モデルサーバーが読み込んだモデルのファイルに入っている形式から決める（Qwen 系は `chatml`。`<|im_start|>` で区切る形。Gemma 4 は `gemma4`。`<|turn>` で区切る形。どちらも返事の出だしに空の思考を置く）。**形式はモデルに合わせる。`<think>` を `logit_bias` で禁止しない**（空の返事の原因になる。経緯は `docs/spec/prompts.md`）。
 - `files/prompts/backups/` は使っていない古いプロンプトの置き場で、Git管理外。
 
 ### セッションのデータ

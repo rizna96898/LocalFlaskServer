@@ -29,6 +29,12 @@ local_model_n_ctx: 8192
 local_model_kv_cache_type: q8_0
 # flash attention を使うか。計算用の領域も小さくなる。未設定なら false（kv_cache_type が f16 以外なら、この値に関係なく使う）
 local_model_flash_attn: true
+# 窓の分だけ覚える層（SWA。Gemma など）にも、n_ctx の分の作業用領域を取るか。未設定なら false（取らない）
+# llama.cpp の既定は true だが、取ると Gemma 4 31B は 8192 で VRAM に載らない。Qwen など SWA を使わないモデルには関係ない
+local_model_swa_full: false
+# ローカルモデルへ送る会話の形式。未設定なら auto
+#   auto : 読み込んだモデルに入っている形式から決める / chatml : Qwen 系など / gemma4 : Gemma 4 / alpaca : mythomax など
+local_model_prompt_format: auto
 
 # その他の設定（後で追加しやすい）
 log_level: "INFO"

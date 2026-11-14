@@ -106,12 +106,13 @@ class Sandbox:
         """設定を書き換える。client() より前に呼ぶこと（config は import 時に読まれる）。"""
         self.settings_file.write_text(text, encoding="utf-8")
 
-    def client(self, llm=None):
+    def client(self, llm=None, prompt_format=""):
         """Flask の test_client を返す。
 
         llm: None      -> モデルサーバーに接続できない扱い（既定）
              str       -> その文字列をモデルの返事として返す
              callable  -> llm(prompt) の戻り値を返事として返す
+        prompt_format: モデルサーバーの /health が返す、読み込み中のモデルの会話の形式（既定は空 = 判定できず）
         """
         if self._app is None:
             os.chdir(self.server)
@@ -173,7 +174,8 @@ class Sandbox:
         def fake_get(url, *args, **kwargs):
             # モデルサーバーの様子（/health）。llm が None なら接続できない扱い、それ以外は fake.gguf を読み込み済みの扱い
             if str(url).endswith("/health") and llm is not None:
-                return _JsonResponse(200, {"status": "ok", "model_loaded": True, "model_name": "fake.gguf"})
+                return _JsonResponse(200, {"status": "ok", "model_loaded": True, "model_name": "fake.gguf",
+                                           "prompt_format": prompt_format})
             raise requests.exceptions.ConnectionError("検証中のためモデルサーバーには接続しません")
 
         requests.post = fake_post

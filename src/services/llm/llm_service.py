@@ -88,8 +88,9 @@ class LocalModelService:
         started_at = time.time()
 
         log.info(payload_messages)
-        prompt = messages_to_prompt(payload_messages)
-        stop = build_stop(stop)
+        prompt_format = resolve_prompt_format()
+        prompt = messages_to_prompt(payload_messages, prompt_format)
+        stop = build_stop(stop, prompt_format)
 
         log.info("=== LOCAL PROMPT TAIL ===")
         log.info("[LOCALMODEL] 送信予定文", prompt)
@@ -108,6 +109,7 @@ class LocalModelService:
                     "max_tokens": max_tokens,
                     "stop": stop,
                     "logit_bias": logit_bias,
+                    "prompt_format": prompt_format,   # 記録だけ（モデルサーバーには送らない）
                 }
             )
             # log.info(f"[OPENROUTER] requests.post start: elapsed={time.time() - started_at:.2f}s")
@@ -360,19 +362,48 @@ class OpenRouterService:
 # 空の思考ブロック。返事の出だしに置くと、モデルは「もう考え終わった」ものとして本文から書き始める
 EMPTY_THINK_BLOCK = "<think>\n\n</think>\n\n"
 
+# Gemma 4 の空の思考。返事の出だしに置くと、思考を書かずに本文から始める（Gemma 4 の公式の形式で、思考を切るときに置くもの）
+GEMMA4_EMPTY_THOUGHT = "<|channel>thought\n<channel|>"
+
 # 形式ごとの、生成を打ち切る文字列
 FORMAT_STOP = {
     "chatml": ["<|im_end|>"],
+    "gemma4": ["<turn|>", "<|turn>"],
     "alpaca": ["### Instruction:"],
 }
 
 
+# 送る形式を決める。設定 local_model_prompt_format が auto なら、読み込み中のモデルの形式をモデルサーバーに聞く。
+# 聞けない・判定できないときは chatml（以前の既定）。モデルの切り替えに追いつくよう、送るたびに聞く（同じPC内で、すぐ返る）
+def resolve_prompt_format() -> str:
+    fmt = config.LOCALMODEL_PROMPT_FORMAT
+    if fmt != "auto":
+        return fmt
+
+    health_url = config.LOCALMODEL_SERVER_URL.rsplit("/", 1)[0] + "/health"
+    try:
+        detected = requests.get(health_url, timeout=(2, 5)).json().get("prompt_format") or ""
+    except Exception as exc:
+        log.info(f"[LOCALMODEL] 会話の形式をモデルサーバーに聞けませんでした（chatml で送ります）: {type(exc).__name__}: {exc}")
+        return "chatml"
+
+    if detected not in FORMAT_STOP:
+        log.info(f"[LOCALMODEL] 会話の形式を判定できませんでした（chatml で送ります）: {detected or '空'}")
+        return "chatml"
+    return detected
+
+
 # OpenRouterとLocalModelで渡す状態を変えるのが辛いので一旦ここで吸収
 # ローカルモデルは system / user の区別を受け取らないので、1本の文章にまとめて送る。
-# 形式は設定 local_model_prompt_format で決まる（→ docs/spec/prompts.md）
-def messages_to_prompt(payload_messages):
-    if config.LOCALMODEL_PROMPT_FORMAT == "alpaca":
+# 形式は設定 local_model_prompt_format で決まる（→ docs/spec/prompts.md）。prompt_format を省くと、ここで決める
+def messages_to_prompt(payload_messages, prompt_format=None):
+    prompt_format = prompt_format or resolve_prompt_format()
+
+    if prompt_format == "alpaca":
         return _messages_to_alpaca(payload_messages)
+
+    if prompt_format == "gemma4":
+        return _messages_to_gemma4(payload_messages, no_think=config.LOCALMODEL_NO_THINK)
 
     return _messages_to_chatml(payload_messages, no_think=config.LOCALMODEL_NO_THINK)
 
@@ -401,6 +432,33 @@ def _messages_to_chatml(payload_messages, no_think: bool = True):
     return "".join(parts)
 
 
+# Gemma 4 の形式。役割は system / user / model（assistant は model と書く）
+def _messages_to_gemma4(payload_messages, no_think: bool = True):
+    parts = []
+
+    for m in payload_messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+
+        if role == "assistant":
+            role = "model"
+        elif role not in ("system", "user"):
+            role = "user"
+
+        # 中身の無い system は送らない
+        if role == "system" and not str(content).strip():
+            continue
+
+        parts.append(f"<|turn>{role}\n{content}<turn|>\n")
+
+    parts.append("<|turn>model\n")
+
+    if no_think:
+        parts.append(GEMMA4_EMPTY_THOUGHT)
+
+    return "".join(parts)
+
+
 def _messages_to_alpaca(payload_messages):
     lines = []
 
@@ -421,8 +479,9 @@ def _messages_to_alpaca(payload_messages):
 
 
 # 生成を打ち切る文字列。形式ごとの区切りに、呼び出し側が足したいものを加える
-def build_stop(extra_stop=None):
-    stop = list(FORMAT_STOP.get(config.LOCALMODEL_PROMPT_FORMAT, FORMAT_STOP["chatml"]))
+def build_stop(extra_stop=None, prompt_format=None):
+    prompt_format = prompt_format or resolve_prompt_format()
+    stop = list(FORMAT_STOP.get(prompt_format, FORMAT_STOP["chatml"]))
 
     for s in extra_stop or []:
         if s and s not in stop:

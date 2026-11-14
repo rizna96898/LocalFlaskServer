@@ -199,8 +199,15 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
 
 | 値 | 形式 | 使うモデル |
 |---|---|---|
-| `chatml`（既定） | `<\|im_start\|>役割 … <\|im_end\|>` で区切る | Qwen 系など |
+| `auto`（既定） | 読み込み中のモデルに合わせて、下のどれかを選ぶ | |
+| `chatml` | `<\|im_start\|>役割 … <\|im_end\|>` で区切る | Qwen 系など |
+| `gemma4` | `<\|turn>役割 … <turn\|>` で区切る | Gemma 4 |
 | `alpaca` | `### Instruction:` / `### Response:` | mythomax など |
+
+- `auto` のときは、送るたびにモデルサーバーの `/health` に、読み込み中のモデルの形式（`prompt_format`）を聞く。
+  モデルサーバーは、モデルを読み込んだときに、モデルのファイルに入っている形式（`tokenizer.chat_template`）を見て決める。
+  `<|turn>` があれば `gemma4`、`<|im_start|>` があれば `chatml`。画面でモデルを切り替えても、形式の設定を書き換えなくてよい。
+- 聞けない・判定できないときは `chatml` で送る（以前の既定）。ログ（`logs/` の「生成の設定」）の `prompt_format` に、使った形式が残る。
 
 `chatml` のとき、送る文章は次の形になる。
 
@@ -223,6 +230,21 @@ user    ←  header ＋ その場で作った本文 ＋ template ＋ tail_templa
 - **`<think>` を禁止する方法（`logit_bias`）は使わない。** 思考するように学習したモデルは、返事を `<think>` から書き始めようとする。
   そこを禁止すると、モデルは代わりに改行だけを出して、そのまま終わってしまう（空の返事）。
 - 形式が合っていないと、プロンプトに「思考過程は出力しない」と書いてあっても、その指示が指示として伝わらない。
+
+`gemma4` のとき、送る文章は次の形になる（Gemma 4 のファイルに入っている形式から作った。`assistant` は `model` と書く）。
+
+```
+<|turn>system
+（system の内容）<turn|>
+<|turn>user
+（user の内容）<turn|>
+<|turn>model
+<|channel>thought
+<channel|>
+```
+
+- 最後の `<|channel>thought` 〜 `<channel|>` は、空の思考。Gemma 4 の形式でも、思考を切るときにはこれを置く。`local_model_no_think` を `false` にすると置かない。
+- 先頭の `<bos>` は書かない（モデルサーバーが文字を番号に変えるときに付ける）。
 
 <a id="s5-2"></a>
 
@@ -361,7 +383,7 @@ parameters = generation_params.build_send_parameters(
 response_text = self.model_handling_service.send_message(parameters)
 ```
 
-- 生成を打ち切る文字列は、形式に応じて `llm_service.py` の `build_stop` が付ける（`chatml` なら `<|im_end|>`、`alpaca` なら `### Instruction:`）。
+- 生成を打ち切る文字列は、形式に応じて `llm_service.py` の `build_stop` が付ける（`chatml` なら `<|im_end|>`、`gemma4` なら `<turn|>`、`alpaca` なら `### Instruction:`）。
   モデルがそこまで書いたら生成を止める指定で、答えのあとに次の質問まで勝手に書き続けるのを防ぐ。
 - `logit_bias` は使わない（上の「ローカルモデルへ送る形」）。
 - 以前は、用途ごとに関数を分け（`use_memory_constant.py` の8つと `use_chat_constant.py` の1つ）、`<think>` の禁止の強さや
