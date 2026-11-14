@@ -30,6 +30,7 @@ def _model_path() -> Path:
 # 読み込んだモデル。モデルロード(/reload)で入れ替えるので、使う間は _llm_lock で守る
 llm = None
 llm_name = ""
+llm_format = ""   # 読み込んだモデルの会話の形式（_detect_format）。APサーバーが /health で受け取る
 _llm_lock = threading.Lock()
 
 
@@ -51,11 +52,22 @@ def _load_options() -> dict:
         "type_k": KV_CACHE_TYPES[kv_type],
         "type_v": KV_CACHE_TYPES[kv_type],
         "flash_attn": flash_attn,
+        "swa_full": config.LOCALMODEL_SWA_FULL,
     }
 
 
+# 読み込んだモデルに入っている会話の形式（chat_template）から、送る形式を決める。分からなければ空
+def _detect_format(model) -> str:
+    template = (getattr(model, "metadata", None) or {}).get("tokenizer.chat_template", "")
+    if "<|turn>" in template:
+        return "gemma4"
+    if "<|im_start|>" in template:
+        return "chatml"
+    return ""
+
+
 def _load(model_path: Path, options: dict):
-    global llm, llm_name
+    global llm, llm_name, llm_format
 
     log.info(
         f"[MODEL_SERVER] モデル読み込み開始: {model_path}（n_ctx={config.LOCALMODEL_N_CTX}、"
@@ -71,13 +83,14 @@ def _load(model_path: Path, options: dict):
         **options,
     )
     llm_name = model_path.name
+    llm_format = _detect_format(llm)
 
-    log.info("[MODEL_SERVER] モデル読み込み完了")
+    log.info(f"[MODEL_SERVER] モデル読み込み完了（会話の形式: {llm_format or '判定できず'}）")
 
 
 # 今のモデルを捨てて、メモリ(VRAM)を空ける
 def _unload():
-    global llm, llm_name
+    global llm, llm_name, llm_format
 
     if llm is not None:
         close = getattr(llm, "close", None)
@@ -86,6 +99,7 @@ def _unload():
 
     llm = None
     llm_name = ""
+    llm_format = ""
     gc.collect()
 
 
@@ -103,6 +117,7 @@ def health():
         "status": "ok",
         "model_loaded": llm is not None,
         "model_name": llm_name,
+        "prompt_format": llm_format,
     })
 
 

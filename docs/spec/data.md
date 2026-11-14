@@ -334,8 +334,9 @@ sessions:
 | `local_model_kv_cache_type` | 作業用領域（KV キャッシュ。`n_ctx` の分の会話を覚えておく所）の形式。`f16`／`q8_0`（大きさが半分）／`q4_0`（4分の1）。今の設定は `q8_0` | `f16` |
 | `local_model_flash_attn` | flash attention を使うか。`local_model_kv_cache_type` が `f16` 以外なら、この値に関係なく使う。今の設定は `true` | `false` |
 | `local_model_server_port` | モデルサーバーのポート | 5001 |
-| `local_model_prompt_format` | ローカルモデルへ送る会話の形式。`chatml`／`alpaca`（→ [`prompts.md`](prompts.md)） | `chatml` |
-| `local_model_no_think` | `true` なら、返事の出だしに空の思考ブロックを置いて、思考を書かせない（`chatml` のときだけ効く） | `true` |
+| `local_model_prompt_format` | ローカルモデルへ送る会話の形式。`auto`（読み込み中のモデルから決める）／`chatml`／`gemma4`／`alpaca`（→ [`prompts.md`](prompts.md)） | `auto` |
+| `local_model_no_think` | `true` なら、返事の出だしに空の思考ブロックを置いて、思考を書かせない（`chatml`・`gemma4` のときだけ効く） | `true` |
+| `local_model_swa_full` | 窓の分だけ覚える層（SWA。Gemma など）にも、`n_ctx` の分の作業用領域を取るか。llama.cpp の既定は取る | `false` |
 | `open_router_use_flag`、`openrouter_site_url`、`openrouter_site_name`、`openrouter_max_tokens` | OpenRouter を使う場合の設定（APIキーは `secrets.yaml`） | |
 | `default_model`、`temperature`、`max_tokens` | 既定のモデル名と生成の設定 | `grok-4`、0.85、2048 |
 | `characters_dir` | | |
@@ -362,6 +363,9 @@ sessions:
   Gemma のような作りでは、すべての層が覚えるので、`n_ctx` 8192 だと数GB になり、重みと合わせて VRAM に載らないことがある。
   `local_model_kv_cache_type: q8_0` にすると半分になる（質はほとんど落ちない）。f16 以外の形式は、llama.cpp の決まりで flash attention が要るので、自動で有効にする。
   値が違うときは、モデルロードは今のモデルを捨てる前に断り、起動時はエラーで止まる。
+- Gemma は、ほとんどの層が直近の一定量（窓）だけを覚える作り（SWA）。`local_model_swa_full: false` なら、その層は窓の分しか領域を取らない。
+  Gemma 4 31B（Q4_K_M）は、これで `n_ctx` 8192 でも RTX 3090（24GB）に載る（`true` だと 2048 までしか載らなかった）。
+  取らないと、前の問い合わせの続きを使い回せなくなるが、モデルサーバーは返事のたびに作業用領域を空にする（`llm.reset()`）ので困らない。
 - OpenRouter の呼び出し（`OpenRouterService`）と、読まれていない設定項目は、使う予定に備えて残す。
   `OpenRouterService` の送信内容に直書きされていた `logit_bias: {"248068": -100}` は外した（ローカルの Qwen の `<think>` の番号で、
   OpenRouter のモデルでは別の語を禁止してしまうため。コメントとして残してある）。

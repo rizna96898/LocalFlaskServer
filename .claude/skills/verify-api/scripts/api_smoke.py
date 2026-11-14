@@ -309,6 +309,23 @@ def main() -> int:
         t.check("  打ち切りの文字列は <|im_end|>", sent.get("stop") == ["<|im_end|>"], sent.get("stop"))
         t.check("  <think> を logit_bias で禁止していない", not sent.get("logit_bias"), sent.get("logit_bias"))
 
+    # 会話の形式は、設定が auto（既定）なら、読み込み中のモデルの形式をモデルサーバーに聞いて決める
+    llm_service = sys.modules["services.llm.llm_service"]
+    sample = [{"role": "system", "content": "指示"}, {"role": "user", "content": "本文"}]
+    box.client(llm="x", prompt_format="gemma4")
+    t.check("  モデルサーバーが gemma4 と答えたら gemma4", llm_service.resolve_prompt_format() == "gemma4")
+    prompt = llm_service.messages_to_prompt(sample, "gemma4")
+    t.check("  gemma4 の形（<|turn>役割 … <turn|>、出だしに空の思考）",
+            prompt == "<|turn>system\n指示<turn|>\n<|turn>user\n本文<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+            repr(prompt))
+    t.check("  gemma4 の打ち切りの文字列は <turn|>", llm_service.build_stop(None, "gemma4")[0] == "<turn|>")
+    box.client(llm="x", prompt_format="chatml")
+    t.check("  chatml と答えたら chatml", llm_service.resolve_prompt_format() == "chatml")
+    box.client(llm="x")
+    t.check("  判定できなければ chatml", llm_service.resolve_prompt_format() == "chatml")
+    box.client()
+    t.check("  モデルサーバーに聞けなければ chatml", llm_service.resolve_prompt_format() == "chatml")
+
     def history():
         body = client.post("/selected_session", json={"session_id": sid}).get_json() or {}
         return [(m.get("line_id"), m.get("icon_data", {}).get("character_id"), m.get("message"))

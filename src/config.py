@@ -76,18 +76,24 @@ class Config:
         self.LOCALMODEL_KV_CACHE_TYPE = str(self.settings.get("local_model_kv_cache_type") or "f16").lower()
         # flash attention を使うか。計算用の領域も小さくなる（llama-cpp-python の既定は使わない）
         self.LOCALMODEL_FLASH_ATTN = bool(self.settings.get("local_model_flash_attn", False))
+        # 窓の分だけ覚える層（SWA。Gemma など）にも、n_ctx の分の作業用領域を取るか。
+        # llama.cpp の既定は取る（true）だが、取ると Gemma 4 31B は 8192 で VRAM に載らない。
+        # モデルサーバーは返事のたびに作業用領域を空にする（llm.reset()）ので、取らなくても困らない
+        self.LOCALMODEL_SWA_FULL = bool(self.settings.get("local_model_swa_full", False))
 
         # モデルサーバー(src/server.py)。APサーバーと同じPCで動かす前提
         self.LOCALMODEL_SERVER_PORT = self.settings.get("local_model_server_port", 5001)
         self.LOCALMODEL_SERVER_URL = f"http://127.0.0.1:{self.LOCALMODEL_SERVER_PORT}/generate"
 
         # ローカルモデルへ送る会話の形式。モデルが学習した形式に合わせる。
+        #   auto   : 読み込んだモデルに入っている形式（chat_template）から、モデルサーバーが決める（既定）
         #   chatml : <|im_start|>role ... <|im_end|> で区切る形。Qwen 系など
+        #   gemma4 : <|turn>role ... <turn|> で区切る形。Gemma 4
         #   alpaca : ### Instruction: / ### Response: の形。mythomax など
         # 形式がモデルと合っていないと、返事が空になったり、延々と思考を書き続けたりする。
-        self.LOCALMODEL_PROMPT_FORMAT = str(self.settings.get("local_model_prompt_format", "chatml")).lower()
+        self.LOCALMODEL_PROMPT_FORMAT = str(self.settings.get("local_model_prompt_format") or "auto").lower()
 
-        # true なら、返事の出だしに空の思考ブロックを置き、モデルに思考を書かせない（chatml のときだけ効く）。
+        # true なら、返事の出だしに空の思考ブロックを置き、モデルに思考を書かせない（chatml・gemma4 のときだけ効く）。
         # <think> を logit_bias で禁止する方法は使わない。禁止すると、モデルが第一手を失って空の返事を返す。
         self.LOCALMODEL_NO_THINK = bool(self.settings.get("local_model_no_think", True))
 

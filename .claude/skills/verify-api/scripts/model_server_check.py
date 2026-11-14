@@ -54,6 +54,9 @@ def main() -> int:
     events = []
     n_ctx_seen = []
     options_seen = []   # 読み込むときの作業用領域と flash attention の指定
+    swa_full_seen = []
+    # モデルに入っている会話の形式（chat_template）。モデルサーバーはこれを見て形式を決める
+    templates = {"a.gguf": "{{ '<|im_start|>' + message['role'] }}", "b.gguf": "{{ '<|turn>' + role }}"}
 
     class TestLlama(llama_cpp.Llama):
         def __init__(self, model_path=None, **kwargs):
@@ -65,6 +68,8 @@ def main() -> int:
             self.name = name
             n_ctx_seen.append(kwargs.get("n_ctx"))
             options_seen.append({k: kwargs.get(k) for k in ("type_k", "type_v", "flash_attn")})
+            swa_full_seen.append(kwargs.get("swa_full"))
+            self.metadata = {"tokenizer.chat_template": templates.get(name, "")}
             events.append(f"読込 {name}")
 
         def close(self):
@@ -81,7 +86,10 @@ def main() -> int:
         return client.post("/generate", json={"prompt": "x", "max_tokens": 1}).status_code
 
     print("# 起動")
-    t.check("起動時に設定のモデルを読み込む", health() == {"status": "ok", "model_loaded": True, "model_name": "a.gguf"}, health())
+    t.check("起動時に設定のモデルを読み込む",
+            health() == {"status": "ok", "model_loaded": True, "model_name": "a.gguf", "prompt_format": "chatml"}, health())
+    t.check("  会話の形式を、モデルに入っている形式から決める（<|im_start|> なら chatml）", health().get("prompt_format") == "chatml")
+    t.check("  窓の分だけ覚える層に、n_ctx の分の作業用領域を取らない（swa_full=False）", swa_full_seen[-1:] == [False], swa_full_seen)
     t.check("  local_model_n_ctx が未設定なら、n_ctx は 4096", n_ctx_seen[-1:] == [4096], n_ctx_seen)
     t.check("  作業用領域の設定が無ければ、f16・flash attention なし（今までどおり）",
             options_seen[-1:] == [{"type_k": 1, "type_v": 1, "flash_attn": False}], options_seen)
@@ -93,6 +101,7 @@ def main() -> int:
     r = client.post("/reload")
     t.check("別のモデルに替える → 200", r.status_code == 200 and (r.get_json() or {}).get("model_name") == "b.gguf", r.get_json())
     t.check("  今のモデルを捨ててから、新しいモデルを読み込む", events == ["破棄 a.gguf", "読込 b.gguf"], events)
+    t.check("  会話の形式も替わる（<|turn> なら gemma4）", health().get("prompt_format") == "gemma4", health())
     t.check("  発言できる", generate() == 200)
 
     use_model("c.gguf")
@@ -113,6 +122,7 @@ def main() -> int:
     t.check("読み込みに失敗 → 500", r.status_code == 500, r.get_json())
     t.check("  今のモデルは捨てたあと", events == ["破棄 b.gguf", "失敗 bad.gguf"], events)
     t.check("  モデルが無い状態になる", health().get("model_loaded") is False, health())
+    t.check("  会話の形式も空になる", health().get("prompt_format") == "", health())
     t.check("  発言は 503", generate() == 503)
 
     use_model("a.gguf")
