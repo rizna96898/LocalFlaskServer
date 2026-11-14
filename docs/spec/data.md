@@ -206,6 +206,7 @@ LocalFlaskServer/
 │  ├─ templates/sub_character.yaml
 │  ├─ settings/
 │  │  ├─ system_settings.yaml   サーバーの設定。Git管理
+│  │  ├─ local_settings.yaml    PCごとの設定（画面で切り替えたモデル）。system_settings.yaml の上に重ねて読む。**Git管理外**
 │  │  ├─ generation.yaml        生成の設定（温度、最大トークン数）。Git管理
 │  │  ├─ secrets.yaml           秘密の値（APIキー）。**Git管理外**
 │  │  └─ secrets.example.yaml   secrets.yaml の書き方の見本。Git管理
@@ -348,6 +349,10 @@ sessions:
   設定にはあるが、コードのどこからも読まれていない。OpenRouter は使わない方向に寄せる予定だが、
   今はローカルモデルの作り込みを優先するので、これらはそのまま置いておく。
 
+- 同じフォルダの `local_settings.yaml`（PCごとの設定。Git管理外）を、この上に重ねて読む。そちらに書いてある項目が優先する。
+  メイン画面上部の「使用モデル」でモデルを切り替えると、`local_model_path` / `local_model_name` がそちらに書かれる（`/settings/switch_model`）。
+  そのため、モデルを替えても `system_settings.yaml` は変わらない。ここに書いたモデルを使いたいときは、`local_settings.yaml` から2行を消す。
+- 画面のモデルの一覧は、LocalFlaskServer の `models/` の下を探す（`.gguf` は Git管理外）。
 - 読み込むのは起動時と、読み直し（`config.reload()`。設定画面の「モデルロード」など）のとき。読み直すと、`config` の各値も決め直す。
   ただしポート（`port`、`local_model_server_port`）は、読み直しても待ち受け中のサーバーには効かない。変えたら両方のサーバーを再起動する。
 - モデルのファイル名の設定項目は `local_model_name`。以前の綴り違いの名前 `local_mode_name` も、しばらくは読む（`local_model_name` が優先）。

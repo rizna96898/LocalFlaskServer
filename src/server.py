@@ -12,6 +12,7 @@ app = Flask(__name__)
 
 
 # 読み込むモデルは system_settings.yaml の local_model_path / local_model_name で決める
+# （PCごとの設定 local_settings.yaml に書いてあれば、そちらが優先。画面でモデルを切り替えるとそこに書かれる）
 # （local_model_name の古い名前 local_mode_name も、しばらくは読む）
 def _model_path() -> Path:
     model_dir = config.LOCALMODEL_PATH

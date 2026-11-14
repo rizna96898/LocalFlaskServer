@@ -192,6 +192,14 @@ class ChatOrchestrator:
     def load_model(self, payload):
         return llm_service.load_model(payload)
 
+    # 画面で選べるモデルの一覧
+    def list_models(self):
+        return llm_service.list_models()
+
+    # 画面で選んだモデルに切り替える
+    def switch_model(self, payload):
+        return llm_service.switch_model(payload)
+
     # StabilityMatrix起動確認受け口
     def check_stability(self, payload):
         return llm_service.check_stability(payload)

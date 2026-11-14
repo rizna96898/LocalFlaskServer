@@ -213,6 +213,8 @@ files/sessions/
 # 秘密の値(APIキーなど)は secrets.yaml にだけ書き、Git では管理しない。
 # それ以外の設定(system_settings.yaml, generation.yaml)は管理する。
 files/settings/secrets.yaml
+# PCごとの設定(画面で切り替えたモデルなど)。system_settings.yaml の上に重ねて読む
+files/settings/local_settings.yaml
 temp/
 *.txt
 *.gguf

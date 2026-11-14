@@ -447,7 +447,12 @@ def load_model(payload):
     # global loaded_model
     # loaded_model = load_model_from_yaml(full_path)
     # → モデルはモデルサーバー(src/server.py)が持っているので、そこへ読み直しを頼む形にした
+    return _reload_model_server(full_path=str(full_path))
 
+
+# モデルサーバーに、設定のモデルを読み直してもらう。成功なら読み込んだモデル名を返す。
+# extra はレスポンスに足す項目
+def _reload_model_server(**extra):
     # モデルサーバーの送り先は、起動時に決まったもの（/generate と同じ所）
     reload_url = config.LOCALMODEL_SERVER_URL.rsplit("/", 1)[0] + "/reload"
 
@@ -461,7 +466,7 @@ def load_model(payload):
         return response_checker.response_error(
             "モデルの読み込みが時間内に終わりませんでした。モデルサーバーのログを確認してください。", status=504)
     except Exception as exc:
-        return response_checker.response_error(f"モデルロード失敗しました。{exc}", status=500, full_path=str(full_path))
+        return response_checker.response_error(f"モデルロード失敗しました。{exc}", status=500, **extra)
 
     try:
         data = response.json()
@@ -473,7 +478,67 @@ def load_model(payload):
         return response_checker.response_error(message, status=response.status_code if response.status_code >= 400 else 500)
 
     model_name = data.get("model_name") or ""
-    return response_checker.response_ok(message=f"ロード完了: {model_name}", model_name=model_name, full_path=str(full_path))
+    return response_checker.response_ok(message=f"ロード完了: {model_name}", model_name=model_name, **extra)
+
+
+# モデルの置き場所（models/）の下にある .gguf の一覧。model は models/ からの相対パス（qween/xxx.gguf）。
+# mmproj（画像を読むための付属ファイル）は、モデルとしては読み込めないので出さない
+def _find_models() -> List[str]:
+    root = config.MODELS_DIR
+    if not root.is_dir():
+        return []
+    return sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*.gguf")
+        if path.is_file() and not path.name.lower().startswith("mmproj")
+    )
+
+
+# 設定にあるモデルの、models/ からの相対パス。models/ の外にあるときは空
+def _current_model() -> str:
+    if not config.LOCALMODEL_PATH or not config.LOCALMODEL_NAME:
+        return ""
+    try:
+        return (Path(config.LOCALMODEL_PATH) / config.LOCALMODEL_NAME).resolve().relative_to(config.MODELS_DIR.resolve()).as_posix()
+    except ValueError:
+        return ""
+
+
+# 画面のモデルの選択肢。current は設定にあるモデル（読み込み中のモデルは /health の model_name）
+def list_models():
+    return response_checker.response_ok(models=_find_models(), current=_current_model())
+
+
+# 画面で選んだモデルに切り替える。PCごとの設定（local_settings.yaml）に書き、モデルサーバーに読み直してもらう。
+# 選べるのは一覧にあるモデルだけ（画面から好きなパスを読ませない）。
+# 読み込みに失敗したら、設定は元に戻す（次の起動で、読めないモデルを読もうとしないように）。
+# 時間切れ（504）のときは、モデルサーバーがまだ読み込みを続けていて成功することがあるので、戻さない
+def switch_model(payload):
+    model = (payload or {}).get("model") or ""
+
+    if not model:
+        return response_checker.response_error("モデルが指定されていません。", status=400)
+    if model not in _find_models():
+        return response_checker.response_error(f"モデルが見つかりません: {model}", status=404)
+
+    model_path = config.MODELS_DIR / model
+    local_file = config.LOCAL_SETTINGS_FILE
+    before = local_file.read_text(encoding="utf-8") if local_file.exists() else None
+
+    log.info(f"[MODEL] モデルを切り替えます: {model}")
+    config.save_local_settings({"local_model_path": str(model_path.parent), "local_model_name": model_path.name})
+
+    response = _reload_model_server(model=model)
+    # 失敗は response_error の (レスポンス, ステータス) の形で返ってくる
+    if isinstance(response, tuple) and response[1] != 504:
+        if before is None:
+            local_file.unlink(missing_ok=True)
+        else:
+            local_file.write_text(before, encoding="utf-8")
+        config.reload()
+        log.info(f"[MODEL] 読み込めなかったので、設定を元に戻しました: {model}")
+
+    return response
 
 # モデルサーバーの様子（読み込み中のモデル名）。/health で画面に渡す。
 # 応答が無いときも例外にせず、model_server: ng で返す（APサーバー自体の起動確認は別に行う）

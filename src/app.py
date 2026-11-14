@@ -150,6 +150,16 @@ def save_image():
 def load_model():
     return orchestrator.load_model(request.get_json())
 
+# 画面で選べるモデル（models/ の下の .gguf）の一覧
+@app.get("/settings/list_models")
+def list_models():
+    return orchestrator.list_models()
+
+# 画面で選んだモデルに切り替える（PCごとの設定に書いて、読み直す）
+@app.post("/settings/switch_model")
+def switch_model():
+    return orchestrator.switch_model(request.get_json(silent=True))
+
 # セッションリスト一覧を取得して返却
 @app.post("/load_session_list")
 def load_session_list():
