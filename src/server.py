@@ -32,10 +32,34 @@ llm_name = ""
 _llm_lock = threading.Lock()
 
 
-def _load(model_path: Path):
+# 作業用領域（KV キャッシュ）の形式の名前と、llama.cpp の型の番号（ggml_type。llama_cpp.GGML_TYPE_* と同じ値）
+KV_CACHE_TYPES = {"f16": 1, "q8_0": 8, "q4_0": 2}
+
+
+# モデルを読み込むときの、作業用領域と flash attention の指定。設定の値が間違っていたら RuntimeError
+def _load_options() -> dict:
+    kv_type = config.LOCALMODEL_KV_CACHE_TYPE
+    if kv_type not in KV_CACHE_TYPES:
+        raise RuntimeError(
+            f"local_model_kv_cache_type の値が違います: {kv_type}（{' / '.join(KV_CACHE_TYPES)} のどれか）"
+        )
+
+    # f16 以外の形式は、flash attention を使わないと llama.cpp が扱えない
+    flash_attn = config.LOCALMODEL_FLASH_ATTN or kv_type != "f16"
+    return {
+        "type_k": KV_CACHE_TYPES[kv_type],
+        "type_v": KV_CACHE_TYPES[kv_type],
+        "flash_attn": flash_attn,
+    }
+
+
+def _load(model_path: Path, options: dict):
     global llm, llm_name
 
-    log.info(f"[MODEL_SERVER] モデル読み込み開始: {model_path}（n_ctx={config.LOCALMODEL_N_CTX}）")
+    log.info(
+        f"[MODEL_SERVER] モデル読み込み開始: {model_path}（n_ctx={config.LOCALMODEL_N_CTX}、"
+        f"作業用領域={config.LOCALMODEL_KV_CACHE_TYPE}、flash attention={'あり' if options['flash_attn'] else 'なし'}）"
+    )
 
     llm = Llama(
         model_path=str(model_path),
@@ -43,6 +67,7 @@ def _load(model_path: Path):
         n_gpu_layers=-1,
         verbose=False,
         reasoning=False,
+        **options,
     )
     llm_name = model_path.name
 
@@ -68,7 +93,7 @@ MODEL_PATH = _model_path()
 if not MODEL_PATH.is_file():
     raise RuntimeError(f"モデルファイルが見つかりません: {MODEL_PATH}")
 
-_load(MODEL_PATH)
+_load(MODEL_PATH, _load_options())
 
 
 @app.get("/health")
@@ -89,8 +114,10 @@ def health():
 def reload_model():
     config.reload()
 
+    # 設定の値が間違っていたら、今のモデルを捨てる前に断る
     try:
         model_path = _model_path()
+        options = _load_options()
     except RuntimeError as e:
         return jsonify({"ok": False, "message": str(e)}), 400
 
@@ -104,7 +131,7 @@ def reload_model():
     with _llm_lock:
         _unload()
         try:
-            _load(model_path)
+            _load(model_path, options)
         except Exception as e:
             log.info(f"[MODEL_SERVER] モデル読み込み失敗: {e}")
             _unload()

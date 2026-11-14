@@ -64,6 +64,11 @@ class Config:
         self.LOCALMODEL_NAME = self.settings.get("local_model_name") or self.settings.get("local_mode_name")
         # 一度に扱える文章の長さ（送る内容と返事の合計）。モデルを読み込むときに使う
         self.LOCALMODEL_N_CTX = int(self.settings.get("local_model_n_ctx") or 4096)
+        # 作業用領域（KV キャッシュ。n_ctx の分の会話を覚えておく所）の形式。f16（既定）/ q8_0（大きさが半分。質はほとんど落ちない）/ q4_0。
+        # f16 以外は flash attention が要るので、モデルサーバーが flash attention も有効にする
+        self.LOCALMODEL_KV_CACHE_TYPE = str(self.settings.get("local_model_kv_cache_type") or "f16").lower()
+        # flash attention を使うか。計算用の領域も小さくなる（llama-cpp-python の既定は使わない）
+        self.LOCALMODEL_FLASH_ATTN = bool(self.settings.get("local_model_flash_attn", False))
 
         # モデルサーバー(src/server.py)。APサーバーと同じPCで動かす前提
         self.LOCALMODEL_SERVER_PORT = self.settings.get("local_model_server_port", 5001)

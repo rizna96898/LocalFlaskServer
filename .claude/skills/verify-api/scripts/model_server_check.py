@@ -32,12 +32,13 @@ def main() -> int:
     for name in ("a.gguf", "b.gguf", "bad.gguf"):
         (models / name).write_bytes(b"fake")
 
-    def use_model(name, key="local_model_name", n_ctx=None):
+    def use_model(name, key="local_model_name", n_ctx=None, extra=()):
         lines = [sandbox.DEFAULT_SETTINGS.rstrip("\n"), f"local_model_path: {models.as_posix()}"]
         if name:
             lines.append(f"{key}: {name}")
         if n_ctx:
             lines.append(f"local_model_n_ctx: {n_ctx}")
+        lines.extend(extra)
         box.settings_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     use_model("a.gguf")
@@ -52,6 +53,7 @@ def main() -> int:
     import llama_cpp
     events = []
     n_ctx_seen = []
+    options_seen = []   # 読み込むときの作業用領域と flash attention の指定
 
     class TestLlama(llama_cpp.Llama):
         def __init__(self, model_path=None, **kwargs):
@@ -62,6 +64,7 @@ def main() -> int:
             super().__init__(model_path=model_path, **kwargs)
             self.name = name
             n_ctx_seen.append(kwargs.get("n_ctx"))
+            options_seen.append({k: kwargs.get(k) for k in ("type_k", "type_v", "flash_attn")})
             events.append(f"読込 {name}")
 
         def close(self):
@@ -80,6 +83,8 @@ def main() -> int:
     print("# 起動")
     t.check("起動時に設定のモデルを読み込む", health() == {"status": "ok", "model_loaded": True, "model_name": "a.gguf"}, health())
     t.check("  local_model_n_ctx が未設定なら、n_ctx は 4096", n_ctx_seen[-1:] == [4096], n_ctx_seen)
+    t.check("  作業用領域の設定が無ければ、f16・flash attention なし（今までどおり）",
+            options_seen[-1:] == [{"type_k": 1, "type_v": 1, "flash_attn": False}], options_seen)
     t.check("発言できる", generate() == 200)
 
     print("\n# モデルロード")
@@ -124,6 +129,22 @@ def main() -> int:
     use_model("b.gguf", key="local_mode_name")
     r = client.post("/reload")
     t.check("古い設定項目名 local_mode_name でも読み直せる", r.status_code == 200 and health().get("model_name") == "b.gguf", health())
+    use_model("a.gguf")
+    client.post("/reload")
+
+    print("\n# 作業用領域（KV キャッシュ）")
+    use_model("b.gguf", extra=["local_model_kv_cache_type: q8_0"])
+    r = client.post("/reload")
+    t.check("q8_0 にすると、8bit で読み込み、flash attention も有効にする",
+            r.status_code == 200 and options_seen[-1:] == [{"type_k": 8, "type_v": 8, "flash_attn": True}], options_seen)
+    use_model("a.gguf", extra=["local_model_flash_attn: true"])
+    client.post("/reload")
+    t.check("flash attention だけ有効にもできる", options_seen[-1:] == [{"type_k": 1, "type_v": 1, "flash_attn": True}], options_seen)
+    use_model("b.gguf", extra=["local_model_kv_cache_type: q2"])
+    events.clear()
+    r = client.post("/reload")
+    t.check("値が違う → 400", r.status_code == 400, r.get_json())
+    t.check("  捨てずに、今のモデルのまま", events == [] and health().get("model_name") == "a.gguf", (events, health()))
     use_model("a.gguf")
     client.post("/reload")
 

@@ -23,6 +23,12 @@ local_model_name: "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf"
 # 一度に扱える文章の長さ（送る内容と返事の合計。トークン数）。モデルを読み込むときに使う。未設定なら 4096
 # 大きくすると長い会話や記憶を送れるが、VRAM を多く使う。変えたら「モデルロード」かモデルサーバーの再起動で反映
 local_model_n_ctx: 8192
+# 作業用領域（KV キャッシュ。n_ctx の分の会話を覚えておく所）の形式。未設定なら f16
+#   f16 : そのまま / q8_0 : 大きさが半分（質はほとんど落ちない）/ q4_0 : 4分の1（質が落ちやすい）
+# f16 以外にすると、flash attention も自動で有効になる。変えたら「モデルロード」かモデルサーバーの再起動で反映
+local_model_kv_cache_type: q8_0
+# flash attention を使うか。計算用の領域も小さくなる。未設定なら false（kv_cache_type が f16 以外なら、この値に関係なく使う）
+local_model_flash_attn: true
 
 # その他の設定（後で追加しやすい）
 log_level: "INFO"
